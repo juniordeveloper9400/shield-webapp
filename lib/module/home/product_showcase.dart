@@ -311,6 +311,13 @@ class Product {
   /// `app.product.stock_quantity <= 0` — the card still renders, ADD is off.
   final bool outOfStock;
 
+  /// Home-feed placement the admin set in the console (migration 0005). When
+  /// no product carries a flag [CatalogueService] falls back to deriving the
+  /// row, so these being all-false is the normal, seeded state.
+  final bool isPopular;
+  final bool isDeal;
+  final bool isOfferOfDay;
+
   const Product({
     required this.name,
     required this.pack,
@@ -326,6 +333,9 @@ class Product {
     this.subcategoryLabel,
     this.prescriptionOnly = false,
     this.outOfStock = false,
+    this.isPopular = false,
+    this.isDeal = false,
+    this.isOfferOfDay = false,
   });
 
   /// One `app.product` row (joined to `app.product_category`) from Neon's HTTP
@@ -365,6 +375,9 @@ class Product {
       image: orNull(str(row['image'])),
       prescriptionOnly: flag(row['is_prescription_only']),
       outOfStock: dec(row['stock_quantity']) <= 0,
+      isPopular: flag(row['is_popular']),
+      isDeal: flag(row['is_deal']),
+      isOfferOfDay: flag(row['is_offer_of_day']),
     );
   }
 }
@@ -398,13 +411,17 @@ IconData iconForCategorySlug(String? slug) {
 class ProductCatalogue {
   const ProductCatalogue._();
 
-  /// Most recently added products.
+  /// Admin-picked "Popular Items", or the newest products as a fallback.
   static List<Product> get popularItems =>
       CatalogueService.instance.popularPicks;
 
-  /// Steepest discounts.
+  /// Admin-picked "Deals You Love", or the steepest discounts as a fallback.
   static List<Product> get dealsYouLove =>
       CatalogueService.instance.dealsYouLove;
+
+  /// Admin-picked "Offer of the Day" — empty until the admin ticks products.
+  static List<Product> get offerOfTheDay =>
+      CatalogueService.instance.offerOfTheDay;
 
   /// The "Vitamins & Supplements" category.
   static List<Product> get wellnessAndSupplements =>

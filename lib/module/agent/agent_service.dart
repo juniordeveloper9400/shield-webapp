@@ -70,6 +70,36 @@ class AgentService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The phone of the agent row applied from Neon by `PersonaService` (a member
+  /// the Super Admin converted), held so it can be swapped cleanly.
+  String? _remoteAgentPhone;
+
+  /// Applies — or, with null, removes — the `app.agent` row the console created
+  /// for the signed-in member. Keyed on phone, so [agentForPhone] and every
+  /// tree getter pick it up with nothing else to change.
+  void applyRemoteAgent(Agent? agent) {
+    var changed = false;
+    final prev = _remoteAgentPhone;
+    if (prev != null && (agent == null || agent.phone != prev)) {
+      _agents.removeWhere((a) => a.phone == prev);
+      _remoteAgentPhone = null;
+      changed = true;
+    }
+    if (agent != null) {
+      final index = _agents.indexWhere((a) => a.phone == agent.phone);
+      if (index >= 0) {
+        _agents[index] = agent;
+      } else {
+        _agents.add(agent);
+      }
+      _remoteAgentPhone = agent.phone;
+      changed = true;
+    }
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
   /// The agent for [phone], or null when the number is not an agent's. Only
   /// the seed national agent carries a real number.
   Agent? agentForPhone(String? phone) {

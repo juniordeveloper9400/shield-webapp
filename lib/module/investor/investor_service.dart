@@ -28,13 +28,30 @@ class InvestorService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The investor for [phone], or null when the number is not one. Only the
-  /// seed persona carries a real number in this demo.
+  /// The investor row applied from Neon by `PersonaService` — a member the
+  /// Super Admin converted. Checked before the seed directory.
+  Investor? _remote;
+
+  /// Applies — or, with null, clears — the `app.investor` row the console
+  /// created for the signed-in member.
+  void applyRemoteInvestor(Investor? investor) {
+    if (_remote?.phone == investor?.phone && _remote == investor) {
+      return;
+    }
+    _remote = investor;
+    notifyListeners();
+  }
+
+  /// The investor for [phone], or null when the number is not one. Prefers the
+  /// admin-applied row, then the seed persona.
   Investor? investorForPhone(String? phone) {
     if (phone == null) {
       return null;
     }
     final clean = phone.trim();
+    if (_remote != null && _remote!.phone == clean) {
+      return _remote;
+    }
     for (final investor in InvestorDirectory.seed) {
       if (investor.phone == clean) {
         return investor;

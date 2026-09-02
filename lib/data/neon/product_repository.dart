@@ -43,7 +43,10 @@ class ProductRepository {
                p.discount_label,
                p.is_prescription_only,
                p.stock_quantity,
-               p.image
+               p.image,
+               p.is_popular,
+               p.is_deal,
+               p.is_offer_of_day
         FROM app.product p
         LEFT JOIN app.product_category    c ON c.id = p.category_id
         LEFT JOIN app.product_subcategory s ON s.id = p.subcategory_id

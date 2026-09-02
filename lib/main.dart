@@ -7,6 +7,7 @@ import 'data/neon/neon_http.dart';
 import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/catalogue/catalogue_service.dart';
+import 'module/persona/persona_service.dart';
 import 'screens/root_screen.dart';
 import 'theme/app_colors.dart';
 import 'widgets/app_messenger.dart';
@@ -37,6 +38,11 @@ Future<void> main() async {
   } catch (error) {
     debugPrint('restoreSession failed — starting signed out: $error');
   }
+
+  // Follow the session for an admin-granted persona: a member converted to an
+  // agent / investor gets their portal card on the web build, and is sent to
+  // the web console on the APK. Reloads on sign-in, sign-out and app resume.
+  PersonaService.instance.attach();
 
   // Warm the storefront catalogue so the home rows have products on first
   // paint rather than popping in a beat later. Fire-and-forget — the home,

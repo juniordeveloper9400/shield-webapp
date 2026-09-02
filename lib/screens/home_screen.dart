@@ -56,14 +56,20 @@ class HomeScreen extends StatelessWidget {
                     // once a known agent number is signed in.
                     ValueListenableBuilder<AuthUser?>(
                       valueListenable: AuthService.instance.currentUser,
-                      builder: (context, user, _) {
-                        final agent = AgentService.instance.agentForPhone(
-                          user?.phone,
-                        );
-                        return agent == null
-                            ? const ReferEarnCard()
-                            : AgentPortalCard(agent: agent);
-                      },
+                      builder: (context, user, _) => ListenableBuilder(
+                        // Also rebuild when PersonaService applies the
+                        // admin-granted agent row, which arrives a beat after
+                        // sign-in.
+                        listenable: AgentService.instance,
+                        builder: (context, _) {
+                          final agent = AgentService.instance.agentForPhone(
+                            user?.phone,
+                          );
+                          return agent == null
+                              ? const ReferEarnCard()
+                              : AgentPortalCard(agent: agent);
+                        },
+                      ),
                     ),
                     // Alongside whichever of those just showed, never in its
                     // place — an investor number is its own thing, not a
@@ -72,13 +78,16 @@ class HomeScreen extends StatelessWidget {
                     // only ever for the one recognised investor number.
                     ValueListenableBuilder<AuthUser?>(
                       valueListenable: AuthService.instance.currentUser,
-                      builder: (context, user, _) {
-                        final investor = InvestorService.instance
-                            .investorForPhone(user?.phone);
-                        return investor == null
-                            ? const SizedBox.shrink()
-                            : InvestorAccessCard(investor: investor);
-                      },
+                      builder: (context, user, _) => ListenableBuilder(
+                        listenable: InvestorService.instance,
+                        builder: (context, _) {
+                          final investor = InvestorService.instance
+                              .investorForPhone(user?.phone);
+                          return investor == null
+                              ? const SizedBox.shrink()
+                              : InvestorAccessCard(investor: investor);
+                        },
+                      ),
                     ),
 
                     // Directly under Refer & Earn, with no banner between them.
@@ -324,6 +333,12 @@ class _HomeProductRowsState extends State<_HomeProductRows> {
 
         return Column(
           children: [
+            if (catalogue.offerOfTheDay.isNotEmpty)
+              ProductShowcase(
+                title: 'Offer of the Day',
+                subtitle: 'Handpicked by the pharmacy today',
+                products: catalogue.offerOfTheDay,
+              ),
             if (catalogue.popularPicks.isNotEmpty)
               ProductShowcase(
                 title: 'Popular Items',

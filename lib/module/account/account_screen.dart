@@ -157,14 +157,46 @@ class AccountScreen extends StatelessWidget {
                 icon: Icons.logout_rounded,
                 label: 'Log out',
                 isDestructive: true,
-                // The gate swaps back to the login screen on sign-out.
-                onTap: AuthService.instance.logOut,
+                // Confirm first — the gate swaps back to the login screen on
+                // sign-out and there is no undo.
+                onTap: () => _confirmLogOut(context),
               ),
             ],
           ),
         ],
       ),
     );
+  }
+}
+
+/// Asks for a yes/no before ending the session. Returning early on "Cancel"
+/// leaves the user exactly where they were.
+Future<void> _confirmLogOut(BuildContext context) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Log out?'),
+      content: const Text(
+        'You will need to sign in again to use your account on this device.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(false),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.of(dialogContext).pop(true),
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFB4322F),
+          ),
+          child: const Text('Log out'),
+        ),
+      ],
+    ),
+  );
+
+  if (confirmed == true) {
+    await AuthService.instance.logOut();
   }
 }
 

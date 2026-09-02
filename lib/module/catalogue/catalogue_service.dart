@@ -114,16 +114,29 @@ class CatalogueService extends ChangeNotifier {
   /// How many products a home row shows before "View all".
   static const int rowLimit = 12;
 
-  /// Most recently added — the row keeps its "Popular Items" title but the
-  /// catalogue has no popularity signal, so newest is the honest proxy.
-  List<Product> get popularPicks => _all.take(rowLimit).toList();
+  /// "Popular Items". The products the admin ticked as popular, or — when none
+  /// are ticked — the most recently added as an honest proxy.
+  List<Product> get popularPicks {
+    final flagged = _all.where((p) => p.isPopular).toList();
+    return (flagged.isNotEmpty ? flagged : _all).take(rowLimit).toList();
+  }
 
-  /// Products with a discount, steepest first.
+  /// "Deals You Love". The products the admin ticked as a deal, or — when none
+  /// are ticked — everything with a discount, steepest first.
   List<Product> get dealsYouLove {
+    final flagged = _all.where((p) => p.isDeal).toList();
+    if (flagged.isNotEmpty) {
+      return flagged.take(rowLimit).toList();
+    }
     final withDeal = _all.where((p) => _discountPercent(p) > 0).toList()
       ..sort((a, b) => _discountPercent(b).compareTo(_discountPercent(a)));
     return withDeal.take(rowLimit).toList();
   }
+
+  /// "Offer of the Day" — only the products the admin ticked for it. Empty
+  /// (and the row is hidden) when the admin has not chosen any.
+  List<Product> get offerOfTheDay =>
+      _all.where((p) => p.isOfferOfDay).take(rowLimit).toList();
 
   /// The "Vitamins & Supplements" storefront category.
   List<Product> get wellness =>
