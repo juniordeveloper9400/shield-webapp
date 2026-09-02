@@ -77,7 +77,12 @@ class NeonHttp {
         .post(
           _sqlEndpoint,
           headers: const {
-            'Content-Type': 'application/json',
+            // text/plain, not application/json: it is a CORS-safelisted
+            // content type, so a browser (Flutter web) skips the preflight —
+            // Neon's /sql endpoint does not allow `content-type` on the
+            // preflight, which otherwise blocks every call from the web build.
+            // The endpoint parses the JSON body regardless of this header.
+            'Content-Type': 'text/plain;charset=UTF-8',
             'Neon-Connection-String': _databaseUrl,
             'Neon-Raw-Text-Output': 'true',
             'Neon-Array-Mode': 'false',
