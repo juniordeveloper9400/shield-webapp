@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../module/account/account_screen.dart';
 import '../module/appointment/clinics_screen.dart';
+import '../data/neon/patient_repository.dart';
 import '../module/auth/auth_service.dart';
 import '../module/health/health_section.dart';
 import '../module/menu/menu_drawer.dart';
 import '../module/orders/orders_screen.dart';
+import '../module/patients/patient_book.dart';
 import '../module/registration/register_bar.dart';
 import '../widgets/app_messenger.dart';
 import '../widgets/bottom_nav.dart';
@@ -40,6 +42,19 @@ class _AppShellState extends State<AppShell> {
           celebratory: true,
           icon: Icons.check_circle_outline,
         );
+      });
+    }
+
+    // Pull the account's saved patients from `app.patient` — this runs on both
+    // a fresh sign-in and a session restored at launch, so a reinstall or a
+    // second device shows the people already on the account. A transient
+    // failure returns null and leaves whatever is in memory untouched.
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone != null && phone.isNotEmpty) {
+      PatientRepository.instance.listForMember(phone).then((remote) {
+        if (remote != null && mounted) {
+          PatientBook.instance.replaceRemote(remote);
+        }
       });
     }
   }

@@ -212,6 +212,42 @@ class PatientBook extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Swaps in the account's patients as read back from `app.patient` on Neon,
+  /// so a fresh install (or a second device) shows the people already on the
+  /// account. Called after sign-in and at launch.
+  ///
+  /// Exact-duplicate remote rows (same name, number and date of birth — the
+  /// result of a double insert from an earlier build) are collapsed to one.
+  /// Any patient added on this device that has not synced yet (no
+  /// [Patient.remoteId]) is kept, unless [remote] already has the same person —
+  /// then the remote copy wins so there is no duplicate.
+  void replaceRemote(List<Patient> remote) {
+    String digits(String s) => s.replaceAll(RegExp(r'\D'), '');
+    bool samePerson(Patient a, Patient b) =>
+        a.name.trim().toLowerCase() == b.name.trim().toLowerCase() &&
+        digits(a.phone) == digits(b.phone) &&
+        a.dob == b.dob;
+
+    final deduped = <Patient>[];
+    for (final r in remote) {
+      if (!deduped.any((seen) => samePerson(seen, r))) {
+        deduped.add(r);
+      }
+    }
+
+    final keptLocal = _patients
+        .where((local) =>
+            local.remoteId == null &&
+            !deduped.any((r) => samePerson(local, r)))
+        .toList();
+
+    _patients
+      ..clear()
+      ..addAll(deduped)
+      ..addAll(keptLocal);
+    notifyListeners();
+  }
+
   @visibleForTesting
   void reset() {
     _patients.clear();

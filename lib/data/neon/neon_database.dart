@@ -1,3 +1,5 @@
+import 'dart:io' show Platform;
+
 import 'package:postgres/postgres.dart';
 
 import 'neon_secret.dart';
@@ -29,10 +31,14 @@ class NeonDatabase {
 
   static final NeonDatabase instance = NeonDatabase._();
 
-  /// Whether the app was built with a `DATABASE_URL`. False in tests and in any
-  /// build that left it out, so callers can degrade gracefully instead of
-  /// throwing.
-  static bool get isConfigured => _databaseUrl.isNotEmpty;
+  /// `true` under `flutter test` — the connection string is a compiled-in const
+  /// now, so this keeps the socket from being opened during a test run.
+  static final bool _underTest =
+      Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// Whether a real connection should be opened: a string is compiled in and we
+  /// are not inside a test.
+  static bool get isConfigured => _databaseUrl.isNotEmpty && !_underTest;
 
   Connection? _connection;
   Future<Connection>? _pending;

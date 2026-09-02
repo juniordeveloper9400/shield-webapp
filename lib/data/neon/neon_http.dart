@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
+import 'dart:io' show Platform;
 
 import 'package:http/http.dart' as http;
 
@@ -40,10 +41,15 @@ class NeonHttp {
   /// without leaking the credentials.
   static String get rawUrl => _databaseUrl;
 
-  /// Whether the app was built with a `DATABASE_URL`. False in tests and in any
-  /// build that left the `--dart-define` off, so callers degrade to a no-op
-  /// instead of throwing.
-  static bool get isConfigured => _databaseUrl.isNotEmpty;
+  /// `true` when `flutter test` is running — the connection string is now a
+  /// compiled-in const, so without this check every repository would fire real
+  /// HTTP at Neon during the test run.
+  static final bool _underTest =
+      Platform.environment.containsKey('FLUTTER_TEST');
+
+  /// Whether a real database write/read should happen: a connection string is
+  /// compiled in and we are not inside a test.
+  static bool get isConfigured => _databaseUrl.isNotEmpty && !_underTest;
 
   final http.Client _client = http.Client();
   Uri? _endpoint;
