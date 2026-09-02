@@ -91,6 +91,27 @@ files above are present.
 
 ---
 
+## Web (Vercel deploy)
+
+Phone Auth in a browser runs a **reCAPTCHA** check before any SMS is sent, and
+Firebase only runs it on origins it trusts. A fresh Vercel deployment is not on
+that list, so `verifyPhoneNumber` / `signInWithPhoneNumber` never completes and
+the app shows *"Verification timed out before the code was sent."*
+
+1. Firebase console → **Authentication → Settings → Authorized domains → Add
+   domain**. Add every origin the app is actually served from:
+   - the production domain (e.g. `shield-webapp.vercel.app` or a custom domain);
+   - any preview domain you test on (`shield-webapp-git-<branch>-<team>.vercel.app`,
+     `shield-webapp-<hash>.vercel.app`). Wildcards are **not** supported — add
+     each exact host, or pin testing to one stable alias.
+   `localhost` is authorized by default for `flutter run -d chrome`.
+2. If the **web API key** (`firebase_options.dart` → `web.apiKey`) has
+   *Application restrictions → HTTP referrers* set in Google Cloud console, add
+   the same domains there (`https://shield-webapp.vercel.app/*`).
+3. Phone provider must be enabled and, for real numbers, the project on
+   **Blaze** — same as Android. Test numbers under *Phone numbers for testing*
+   skip both reCAPTCHA and SMS and are the quickest way to confirm the wiring.
+
 ## Verify
 
 ```bash
@@ -111,3 +132,4 @@ flutter run
 | `This app is not authorized to use Firebase Authentication` / error 17028 | SHA-1/SHA-256 not added, or `google-services.json` not re-downloaded after adding them. |
 | Real device build ignores Firebase | `google-services.json` not in `android/app/` — the Gradle plugin only applies when that file exists. |
 | SMS never arrives, no error | Phone provider not enabled, or Spark SMS quota hit, or number needs to be a test number on an emulator. |
+| Web: "Verification timed out before the code was sent" + a broken reCAPTCHA image | The deploy origin is not in **Authentication → Settings → Authorized domains** (or the web API key's HTTP-referrer list). Add the exact Vercel host. |
