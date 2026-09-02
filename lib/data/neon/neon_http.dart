@@ -1,9 +1,10 @@
 import 'dart:convert';
 import 'dart:developer' as developer;
-import 'dart:io' show Platform;
 
 import 'package:http/http.dart' as http;
 
+import '_flutter_test_env.dart'
+    if (dart.library.io) '_flutter_test_env_io.dart';
 import 'neon_secret.dart';
 
 /// Talks to Neon over its HTTP SQL endpoint (`https://<host>/sql`) rather than a
@@ -44,8 +45,7 @@ class NeonHttp {
   /// `true` when `flutter test` is running — the connection string is now a
   /// compiled-in const, so without this check every repository would fire real
   /// HTTP at Neon during the test run.
-  static final bool _underTest =
-      Platform.environment.containsKey('FLUTTER_TEST');
+  static final bool _underTest = isUnderFlutterTest;
 
   /// Whether a real database write/read should happen: a connection string is
   /// compiled in and we are not inside a test.

@@ -1,7 +1,4 @@
-import 'package:flutter/foundation.dart';
-import 'package:postgres/postgres.dart';
-
-import 'neon_database.dart';
+import 'neon_http.dart';
 
 /// The four kinds of appointment a member can book — mirrors
 /// `app.appointment_kind`.
@@ -10,20 +7,21 @@ enum AppointmentKind { clinic, tele, dental, dietitian }
 /// Writes a member's appointment booking to the `app.appointment` table on
 /// Neon.
 ///
-/// Mirrors [PatientRepository]: every method is best-effort. When the app was
-/// built without a `DATABASE_URL` (tests, a public release, Flutter web) or the
-/// database is unreachable, the call no-ops and returns null rather than
-/// throwing. Booking is an offer, not a gate — the confirmation the member
-/// sees must not depend on the database being up.
+/// Best-effort, the same contract as the other repositories: no `DATABASE_URL`
+/// (tests, a build without `--dart-define-from-file=.env`) or an unreachable
+/// endpoint → the call no-ops. Booking is an offer, not a gate.
 ///
-/// `app.appointment.member_id` is `NOT NULL`, so [book] resolves the owning
-/// `app.users` row from the signed-in mobile number first, inserting a minimal
-/// user if sign-in has not already written one. `clinic_id` / `dietitian_id`
-/// are resolved by name and left null when there is no match.
+/// Goes over [NeonHttp] (HTTPS on 443), so it works from a `flutter build web`
+/// bundle as well as the APK. `app.appointment.member_id` is `NOT NULL`, so
+/// [book] upserts the owning `app.users` row (by phone) in the same CTE
+/// statement; `clinic_id` / `dietitian_id` are resolved by name and left null
+/// when there is no match.
 class AppointmentRepository {
   const AppointmentRepository._();
 
   static const AppointmentRepository instance = AppointmentRepository._();
+
+  bool get isAvailable => NeonHttp.isConfigured;
 
   /// Records a `REQUESTED` appointment (the `status` column default).
   ///
@@ -43,13 +41,16 @@ class AppointmentRepository {
     num? fee,
     DateTime? scheduledFor,
     String remarks = '',
-  }) {
-    return _run('book', (conn) async {
-      final rows = await conn.execute(
-        Sql.named('''
+  }) async {
+    if (!NeonHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows = await NeonHttp.instance.query(
+        '''
           WITH owner AS (
             INSERT INTO app.users (phone, name)
-            VALUES (@phone, @name)
+            VALUES (\$1, \$2)
             ON CONFLICT (phone) DO UPDATE SET updated_at = now()
             RETURNING id
           )
@@ -57,44 +58,28 @@ class AppointmentRepository {
             (member_id, kind, clinic_id, dietitian_id, doctor_name, fee,
              scheduled_for, remarks)
           SELECT owner.id,
-                 @kind::app.appointment_kind,
-                 (SELECT id FROM app.clinic    WHERE name = @clinic_name),
-                 (SELECT id FROM app.dietitian WHERE name = @dietitian_name),
-                 @doctor_name, @fee, @scheduled_for, @remarks
+                 \$3::app.appointment_kind,
+                 (SELECT id FROM app.clinic    WHERE name = \$4),
+                 (SELECT id FROM app.dietitian WHERE name = \$5),
+                 \$6, \$7, \$8, \$9
           FROM owner
           RETURNING uuid
-        '''),
-        parameters: {
-          'phone': memberPhone,
-          'name': memberName,
-          'kind': kind.name.toUpperCase(),
-          'clinic_name': clinicName,
-          'dietitian_name': dietitianName,
-          'doctor_name': doctorName,
-          'fee': fee,
-          'scheduled_for': scheduledFor?.toUtc().toIso8601String(),
-          'remarks': remarks,
-        },
+        ''',
+        [
+          memberPhone,
+          memberName,
+          kind.name.toUpperCase(),
+          clinicName,
+          dietitianName,
+          doctorName,
+          fee,
+          scheduledFor?.toUtc().toIso8601String(),
+          remarks,
+        ],
       );
-      return rows.isEmpty ? null : rows.first.first?.toString();
-    });
-  }
-
-  /// Runs [action] against the shared connection, swallowing everything: a
-  /// missing `DATABASE_URL`, a socket error, a SQL error. Returns null on any
-  /// of them.
-  Future<T?> _run<T>(
-    String label,
-    Future<T?> Function(Connection conn) action,
-  ) async {
-    if (!NeonDatabase.isConfigured) {
-      return null;
-    }
-    try {
-      final conn = await NeonDatabase.instance.connection();
-      return await action(conn);
+      return rows.isEmpty ? null : rows.first['uuid']?.toString();
     } catch (error) {
-      debugPrint('AppointmentRepository.$label: $error');
+      NeonHttp.log('AppointmentRepository.book failed', error: error);
       return null;
     }
   }

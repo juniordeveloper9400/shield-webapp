@@ -22,10 +22,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'FirebaseOptions have not been configured for web — '
-        'run `flutterfire configure --project=shield-zabnix`.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -62,6 +59,17 @@ class DefaultFirebaseOptions {
     appId: '1:1086152719549:android:b63fc70829f7da89da0bd4',
     messagingSenderId: '1086152719549',
     projectId: 'shield-zabnix',
+    storageBucket: 'shield-zabnix.firebasestorage.app',
+  );
+
+  // SHIELD web app (project shield-zabnix). The same values the admin console
+  // uses (shieldweb/.env.example). Not secret — they ship in every web client.
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAjXbkhrPPgq9hwlhdKB21dG2VfvatAXTI',
+    appId: '1:1086152719549:web:199b8c17ac57081cda0bd4',
+    messagingSenderId: '1086152719549',
+    projectId: 'shield-zabnix',
+    authDomain: 'shield-zabnix.firebaseapp.com',
     storageBucket: 'shield-zabnix.firebasestorage.app',
   );
 }

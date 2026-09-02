@@ -1,7 +1,7 @@
-import 'dart:io' show Platform;
-
 import 'package:postgres/postgres.dart';
 
+import '_flutter_test_env.dart'
+    if (dart.library.io) '_flutter_test_env_io.dart';
 import 'neon_secret.dart';
 
 /// The Neon Postgres connection string. Comes from the git-ignored
@@ -33,8 +33,7 @@ class NeonDatabase {
 
   /// `true` under `flutter test` — the connection string is a compiled-in const
   /// now, so this keeps the socket from being opened during a test run.
-  static final bool _underTest =
-      Platform.environment.containsKey('FLUTTER_TEST');
+  static final bool _underTest = isUnderFlutterTest;
 
   /// Whether a real connection should be opened: a string is compiled in and we
   /// are not inside a test.
