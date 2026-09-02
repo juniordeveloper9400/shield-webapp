@@ -83,6 +83,7 @@ Future<void> main(List<String> args) async {
     await _seedReferralLevels(tx);
     await _seedPaymentMethods(tx);
     await _seedCategories(tx);
+    await _seedSubcategories(tx);
     await _seedLabPackages(tx);
     await _seedClinics(tx);
     await _seedDietitians(tx);
@@ -218,6 +219,65 @@ Future<void> _seedCategories(TxSession tx) async {
           'values (@sl,@t,@tl,@o,@s)'),
       parameters: {'sl': r[0], 't': r[1], 'tl': r[2], 'o': r[3], 's': i},
     );
+  }
+}
+
+// --- product_subcategory --------------------------------------------
+// Word-for-word the sub-categories in the app's category browser
+// (lib/module/categories/category_catalogue.dart) — the app matches on label.
+// Migration 0004 seeds the same set onto an already-populated database.
+Future<void> _seedSubcategories(TxSession tx) async {
+  const rows = <List<String>>[
+    ['personal-care', 'Skin Care'],
+    ['personal-care', 'Hair Care'],
+    ['personal-care', 'Oral Care'],
+    ['personal-care', 'Bath & Body'],
+    ['personal-care', 'Men Grooming'],
+    ['personal-care', 'Feminine Care'],
+    ['health-conditions', 'Bone and Joint Care'],
+    ['health-conditions', 'Digestive Care'],
+    ['health-conditions', 'Eye Care'],
+    ['health-conditions', 'Pain Relief'],
+    ['health-conditions', 'Smoking Cessation'],
+    ['health-conditions', 'Liver Care'],
+    ['vitamins-supplements', 'Multivitamins'],
+    ['vitamins-supplements', 'Vitamin D'],
+    ['vitamins-supplements', 'Protein Powder'],
+    ['vitamins-supplements', 'Omega & Fish Oil'],
+    ['vitamins-supplements', 'Calcium'],
+    ['vitamins-supplements', 'Immunity'],
+    ['diabetes-care', 'Glucometers'],
+    ['diabetes-care', 'Test Strips'],
+    ['diabetes-care', 'Sugar Substitutes'],
+    ['diabetes-care', 'Diabetic Food'],
+    ['diabetes-care', 'Foot Care'],
+    ['diabetes-care', 'Insulin Support'],
+    ['surgicals', 'Gloves & Masks'],
+    ['surgicals', 'Bandages & Dressings'],
+    ['surgicals', 'Syringes & Needles'],
+    ['surgicals', 'Supports & Braces'],
+    ['surgicals', 'First Aid Kits'],
+    ['surgicals', 'Mobility Aids'],
+    ['lab-tests', 'Full Body Checkup'],
+    ['lab-tests', 'Blood Tests'],
+    ['lab-tests', 'Thyroid Profile'],
+    ['lab-tests', 'Vitamin Tests'],
+  ];
+  var sort = 0;
+  String? prevCat;
+  for (final r in rows) {
+    if (r[0] != prevCat) {
+      sort = 0;
+      prevCat = r[0];
+    }
+    await tx.execute(
+      Sql.named(
+        'insert into app.product_subcategory (category_id,label,sort) '
+        'select id, @label, @sort from app.product_category where slug = @slug',
+      ),
+      parameters: {'slug': r[0], 'label': r[1], 'sort': sort},
+    );
+    sort++;
   }
 }
 

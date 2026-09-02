@@ -9,9 +9,10 @@ import 'category_catalogue.dart';
 /// each group now come from `app.product` on Neon, matched to the group by its
 /// category title.
 ///
-/// The admin console does not record which sub-category a product belongs to,
-/// so a sub-category chip narrows the group's products by a keyword match on
-/// the product name; the group's "All" chip shows everything filed under it.
+/// When a product carries a `subcategoryLabel` — the admin filed it under one
+/// of [group]'s sub-categories (see migration 0004) — the chip filters on that
+/// exactly. Rows with no sub-category set (older products) fall back to a
+/// keyword match on the product name so they are not lost.
 class ListingCatalogue {
   const ListingCatalogue._();
 
@@ -19,30 +20,38 @@ class ListingCatalogue {
   static List<Product> forGroup(CategoryGroup group) =>
       CatalogueService.instance.byCategoryTitle(group.title);
 
-  /// [group]'s products narrowed to one sub-category chip. Matches the chip
-  /// label's significant words against the product name; falls back to the
-  /// whole group when the label has no usable keyword.
+  /// [group]'s products narrowed to one sub-category chip.
+  ///
+  /// A product whose `subcategoryLabel` matches [item] is always included. A
+  /// product with no sub-category on record is included when its name contains
+  /// one of the chip label's keywords, so a catalogue that pre-dates
+  /// sub-categories still populates the chips.
   static List<Product> forSubCategoryIn(CategoryGroup group, SubCategory item) {
+    final label = item.label.toLowerCase();
     final words = _keywords(item.label);
-    final base = forGroup(group);
-    if (words.isEmpty) {
-      return base;
-    }
-    return base
-        .where((p) => words.any((w) => p.name.toLowerCase().contains(w)))
-        .toList();
+    return forGroup(group).where((p) {
+      final sub = p.subcategoryLabel?.trim().toLowerCase() ?? '';
+      if (sub.isNotEmpty) {
+        return sub == label;
+      }
+      return words.any((w) => p.name.toLowerCase().contains(w));
+    }).toList();
   }
 
-  /// Keyword search across the whole catalogue for callers that hold only a
-  /// [SubCategory] and not its group.
+  /// Whole-catalogue lookup for callers that hold only a [SubCategory] and not
+  /// its group: an exact `subcategoryLabel` match, or a name keyword match for
+  /// products with none.
   static List<Product> forSubCategory(SubCategory item) {
+    final label = item.label.toLowerCase();
     final words = _keywords(item.label);
-    if (words.isEmpty) {
-      return const [];
-    }
-    return CatalogueService.instance.all
-        .where((p) => words.any((w) => p.name.toLowerCase().contains(w)))
-        .toList();
+    return CatalogueService.instance.all.where((p) {
+      final sub = p.subcategoryLabel?.trim().toLowerCase() ?? '';
+      if (sub.isNotEmpty) {
+        return sub == label;
+      }
+      return words.isNotEmpty &&
+          words.any((w) => p.name.toLowerCase().contains(w));
+    }).toList();
   }
 
   /// The steepest discounts in [products] — the listing's deals strip.

@@ -37,6 +37,7 @@ class ProductRepository {
                p.brand,
                c.slug  AS category_slug,
                c.title AS category_title,
+               s.label AS subcategory_label,
                p.price,
                p.mrp,
                p.discount_label,
@@ -44,7 +45,8 @@ class ProductRepository {
                p.stock_quantity,
                p.image
         FROM app.product p
-        LEFT JOIN app.product_category c ON c.id = p.category_id
+        LEFT JOIN app.product_category    c ON c.id = p.category_id
+        LEFT JOIN app.product_subcategory s ON s.id = p.subcategory_id
         WHERE upper(p.status) = 'ACTIVE'
         ORDER BY p.created_at DESC, p.name
       ''');

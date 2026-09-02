@@ -299,6 +299,12 @@ class Product {
   final String? categorySlug;
   final String? categoryTitle;
 
+  /// The sub-category label the admin filed this under —
+  /// `app.product_subcategory.label`, e.g. `Skin Care`. Null when the admin
+  /// left it unset (older rows). Matches a `SubCategory.label` in the app's
+  /// `CategoryCatalogue` verbatim.
+  final String? subcategoryLabel;
+
   /// `app.product.is_prescription_only`.
   final bool prescriptionOnly;
 
@@ -317,6 +323,7 @@ class Product {
     this.brand,
     this.categorySlug,
     this.categoryTitle,
+    this.subcategoryLabel,
     this.prescriptionOnly = false,
     this.outOfStock = false,
   });
@@ -350,6 +357,7 @@ class Product {
       brand: orNull(str(row['brand'])),
       categorySlug: orNull(slug),
       categoryTitle: orNull(str(row['category_title'])),
+      subcategoryLabel: orNull(str(row['subcategory_label'])),
       price: formatRupees(price.round()),
       mrp: formatRupees(mrp.round()),
       discountLabel: orNull(discount),
