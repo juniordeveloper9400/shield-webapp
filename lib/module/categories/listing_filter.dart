@@ -48,10 +48,10 @@ class ListingFilter {
       base = [
         for (final item in group.items)
           if (subCategories.contains(item.label))
-            ...ListingCatalogue.forSubCategory(item),
+            ...ListingCatalogue.forSubCategoryIn(group, item),
       ];
     } else if (chip != null) {
-      base = ListingCatalogue.forSubCategory(chip);
+      base = ListingCatalogue.forSubCategoryIn(group, chip);
     } else {
       base = ListingCatalogue.forGroup(group);
     }

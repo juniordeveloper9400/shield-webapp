@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
+import '../catalogue/catalogue_service.dart';
 import '../cart/cart_control.dart';
 import '../product/product_detail_screen.dart';
 import 'product_collection_screen.dart';
@@ -270,6 +272,12 @@ class _ProductCard extends StatelessWidget {
   }
 }
 
+/// A catalogue product as shown on a card, tile or detail page.
+///
+/// Cards need only the first handful of fields — name, pack, pricing, artwork.
+/// The rest ([id], [brand], [categorySlug], [prescriptionOnly], [outOfStock])
+/// come from `app.product` on Neon via [Product.fromRow] and are optional, so
+/// the widget tests that build a [Product] by hand keep compiling.
 class Product {
   final String name;
   final String pack;
@@ -279,6 +287,24 @@ class Product {
   final IconData icon;
   final String? image;
 
+  /// `app.product.uuid`. Null for a hand-built fixture.
+  final String? id;
+
+  /// Manufacturer / brand (`app.product.brand`). `ListingCatalogue.brandOf`
+  /// falls back to the house brand when this is absent.
+  final String? brand;
+
+  /// The storefront category the admin filed this under —
+  /// `app.product_category.slug` / `.title`.
+  final String? categorySlug;
+  final String? categoryTitle;
+
+  /// `app.product.is_prescription_only`.
+  final bool prescriptionOnly;
+
+  /// `app.product.stock_quantity <= 0` — the card still renders, ADD is off.
+  final bool outOfStock;
+
   const Product({
     required this.name,
     required this.pack,
@@ -287,184 +313,94 @@ class Product {
     required this.icon,
     this.image,
     this.discountLabel,
+    this.id,
+    this.brand,
+    this.categorySlug,
+    this.categoryTitle,
+    this.prescriptionOnly = false,
+    this.outOfStock = false,
   });
+
+  /// One `app.product` row (joined to `app.product_category`) from Neon's HTTP
+  /// endpoint, where every column comes back as text.
+  factory Product.fromRow(Map<String, dynamic> row) {
+    String str(Object? v) => (v ?? '').toString().trim();
+    double dec(Object? v) => double.tryParse(str(v)) ?? 0;
+    bool flag(Object? v) {
+      final s = str(v).toLowerCase();
+      return s == 't' || s == 'true' || s == '1';
+    }
+
+    String? orNull(String v) => v.isEmpty ? null : v;
+
+    final price = dec(row['price']);
+    final rawMrp = dec(row['mrp']);
+    final mrp = rawMrp <= 0 ? price : rawMrp;
+    final slug = str(row['category_slug']);
+
+    var discount = str(row['discount_label']);
+    if (discount.isEmpty && mrp > price && price > 0) {
+      discount = '${(((mrp - price) / mrp) * 100).round()}% OFF';
+    }
+
+    return Product(
+      id: orNull(str(row['uuid'])),
+      name: str(row['name']),
+      pack: str(row['pack']),
+      brand: orNull(str(row['brand'])),
+      categorySlug: orNull(slug),
+      categoryTitle: orNull(str(row['category_title'])),
+      price: formatRupees(price.round()),
+      mrp: formatRupees(mrp.round()),
+      discountLabel: orNull(discount),
+      icon: iconForCategorySlug(slug),
+      image: orNull(str(row['image'])),
+      prescriptionOnly: flag(row['is_prescription_only']),
+      outOfStock: dec(row['stock_quantity']) <= 0,
+    );
+  }
 }
 
-/// Product catalogues backing the home showcases.
+/// A stand-in icon for a product with no artwork of its own — the admin
+/// console does not capture product images yet, so every catalogue product
+/// falls back to its category's icon.
+IconData iconForCategorySlug(String? slug) {
+  switch (slug) {
+    case 'personal-care':
+      return Icons.spa_outlined;
+    case 'health-conditions':
+      return Icons.monitor_heart_outlined;
+    case 'vitamins-supplements':
+      return Icons.medication_outlined;
+    case 'diabetes-care':
+      return Icons.bloodtype_outlined;
+    case 'surgicals':
+      return Icons.medical_services_outlined;
+    case 'lab-tests':
+      return Icons.biotech_outlined;
+    default:
+      return Icons.medication_outlined;
+  }
+}
+
+/// The home showcases, now backed by the live catalogue ([CatalogueService])
+/// instead of a hand-written list. Each getter is a snapshot of the current
+/// catalogue; the home screen listens to [CatalogueService] and rebuilds these
+/// rows as products load in from Neon.
 class ProductCatalogue {
   const ProductCatalogue._();
 
-  static const List<Product> popularItems = [
-    Product(
-      name: 'Dolo 650mg Tablet',
-      pack: 'Strip of 15 tablets',
-      price: '32',
-      mrp: '35',
-      discountLabel: '10% OFF',
-      icon: Icons.medication_outlined,
-      image: 'assets/products/dolo_650.png',
-    ),
-    Product(
-      name: 'Shelcal 500 Calcium',
-      pack: 'Strip of 15 tablets',
-      price: '118',
-      mrp: '145',
-      discountLabel: '19% OFF',
-      icon: Icons.emoji_food_beverage_outlined,
-      image: 'assets/products/shelcal_500.png',
-    ),
-    Product(
-      name: 'Volini Pain Relief Gel',
-      pack: 'Tube of 30g',
-      price: '148',
-      mrp: '195',
-      discountLabel: '24% OFF',
-      icon: Icons.healing_outlined,
-      image: 'assets/products/volini_gel.png',
-    ),
-    Product(
-      name: 'Accu-Chek Test Strips',
-      pack: 'Box of 50 strips',
-      price: '899',
-      mrp: '1,399',
-      discountLabel: '36% OFF',
-      icon: Icons.receipt_long_outlined,
-      image: 'assets/products/accuchek_strips.png',
-    ),
-    Product(
-      name: 'Digital BP Monitor',
-      pack: '1 device',
-      price: '1,749',
-      mrp: '2,499',
-      discountLabel: '30% OFF',
-      icon: Icons.monitor_heart_outlined,
-      image: 'assets/products/bp_monitor.png',
-    ),
-    Product(
-      name: 'Cetaphil Pro Oil Control',
-      pack: 'Bottle of 125ml',
-      price: '890',
-      mrp: '1,099',
-      discountLabel: '19% OFF',
-      icon: Icons.clean_hands_outlined,
-      image: 'assets/products/cetaphil_pro_oil.png',
-    ),
-  ];
+  /// Most recently added products.
+  static List<Product> get popularItems =>
+      CatalogueService.instance.popularPicks;
 
-  static const List<Product> dealsYouLove = [
-    Product(
-      name: 'Protein Powder Chocolate',
-      pack: 'Jar of 1kg',
-      price: '1,999',
-      mrp: '3,200',
-      discountLabel: '38% OFF',
-      icon: Icons.fitness_center_rounded,
-      image: 'assets/products/protein_powder.png',
-    ),
-    Product(
-      name: 'Accu-Chek Test Strips',
-      pack: 'Box of 50 strips',
-      price: '899',
-      mrp: '1,399',
-      discountLabel: '36% OFF',
-      icon: Icons.receipt_long_outlined,
-      image: 'assets/products/accuchek_strips.png',
-    ),
-    Product(
-      name: 'SHIELD Immunity Plus',
-      pack: 'Bottle of 60 tablets',
-      price: '449',
-      mrp: '649',
-      discountLabel: '31% OFF',
-      icon: Icons.shield_outlined,
-      image: 'assets/products/shield_immunity.png',
-    ),
-    Product(
-      name: 'Digital BP Monitor',
-      pack: '1 device',
-      price: '1,749',
-      mrp: '2,499',
-      discountLabel: '30% OFF',
-      icon: Icons.monitor_heart_outlined,
-      image: 'assets/products/bp_monitor.png',
-    ),
-    Product(
-      name: 'SunShade Matte Gel',
-      pack: 'Tube of 50g',
-      price: '420',
-      mrp: '550',
-      discountLabel: '24% OFF',
-      icon: Icons.wb_sunny_outlined,
-      image: 'assets/products/sunshade_matte.png',
-    ),
-    Product(
-      name: 'Soft Soles Foot Cream',
-      pack: 'Tube of 50g',
-      price: '165',
-      mrp: '220',
-      discountLabel: '25% OFF',
-      icon: Icons.spa_outlined,
-      image: 'assets/products/soft_soles_cream.png',
-    ),
-  ];
+  /// Steepest discounts.
+  static List<Product> get dealsYouLove =>
+      CatalogueService.instance.dealsYouLove;
 
-  static const List<Product> wellnessAndSupplements = [
-    // The own brand leads the row.
-    Product(
-      name: 'SHIELD Immunity Plus',
-      pack: 'Bottle of 60 tablets',
-      price: '449',
-      mrp: '649',
-      discountLabel: '31% OFF',
-      icon: Icons.shield_outlined,
-      image: 'assets/products/shield_immunity.png',
-    ),
-    Product(
-      name: 'Zincovit Multivitamin',
-      pack: 'Strip of 15 tablets',
-      price: '106',
-      mrp: '132',
-      discountLabel: '20% OFF',
-      icon: Icons.medication_liquid_outlined,
-      image: 'assets/products/zincovit.png',
-    ),
-    Product(
-      name: 'Vitamin D3 60K',
-      pack: 'Strip of 4 sachets',
-      price: '128',
-      mrp: '175',
-      discountLabel: '27% OFF',
-      icon: Icons.wb_sunny_outlined,
-      image: 'assets/products/vitamin_d3.png',
-    ),
-    Product(
-      name: 'Omega-3 Fish Oil',
-      pack: 'Bottle of 30 capsules',
-      price: '389',
-      mrp: '520',
-      discountLabel: '25% OFF',
-      icon: Icons.set_meal_outlined,
-      image: 'assets/products/omega3_fish_oil.png',
-    ),
-    Product(
-      name: 'Shelcal 500 Calcium',
-      pack: 'Strip of 15 tablets',
-      price: '118',
-      mrp: '145',
-      discountLabel: '19% OFF',
-      icon: Icons.emoji_food_beverage_outlined,
-      image: 'assets/products/shelcal_500.png',
-    ),
-    Product(
-      name: 'Protein Powder Chocolate',
-      pack: 'Jar of 1kg',
-      price: '1,999',
-      mrp: '3,200',
-      discountLabel: '38% OFF',
-      icon: Icons.fitness_center_rounded,
-      image: 'assets/products/protein_powder.png',
-    ),
-  ];
+  /// The "Vitamins & Supplements" category.
+  static List<Product> get wellnessAndSupplements =>
+      CatalogueService.instance.wellness;
 
-  static const List<Product> wellness = wellnessAndSupplements;
+  static List<Product> get wellness => wellnessAndSupplements;
 }

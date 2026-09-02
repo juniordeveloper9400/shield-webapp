@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../cart/cart_bar.dart';
+import '../catalogue/catalogue_service.dart';
 import '../categories/category_listing_screen.dart' show ProductTile;
 import '../home/product_showcase.dart';
 import 'search_catalogue.dart';
@@ -31,6 +32,7 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   void initState() {
     super.initState();
+    CatalogueService.instance.ensureLoaded();
     _controller.addListener(() {
       if (_controller.text != _query) {
         setState(() => _query = _controller.text);
@@ -53,8 +55,16 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: CatalogueService.instance,
+      builder: (context, _) => _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     final trimmed = _query.trim();
     final results = SearchCatalogue.search(trimmed);
+    final loading = !CatalogueService.instance.isSettled;
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -78,6 +88,17 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           if (trimmed.isEmpty)
             _Suggestions(onPick: _setQuery)
+          else if (results.isEmpty && loading)
+            const Center(
+              child: SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.4,
+                  color: AppColors.brandBlue,
+                ),
+              ),
+            )
           else if (results.isEmpty)
             _NoResults(query: trimmed)
           else

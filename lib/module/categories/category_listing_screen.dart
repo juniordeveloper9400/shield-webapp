@@ -6,6 +6,7 @@ import '../cart/cart_bar.dart';
 import '../cart/cart_control.dart';
 import '../cart/cart_screen.dart';
 import '../cart/cart_service.dart';
+import '../catalogue/catalogue_service.dart';
 import '../home/product_showcase.dart';
 import '../product/product_detail_screen.dart';
 import '../search/search_screen.dart';
@@ -38,6 +39,7 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
   void initState() {
     super.initState();
     _selected = widget.initial;
+    CatalogueService.instance.ensureLoaded();
   }
 
   /// What the grid shows: the chip rail's selection with the filter sheet's
@@ -64,8 +66,17 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: CatalogueService.instance,
+      builder: (context, _) => _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     final products = _products;
     final deals = ListingCatalogue.topDeals(products);
+    final catalogue = CatalogueService.instance;
+    final loadingFirst = products.isEmpty && !catalogue.isSettled;
 
     return Scaffold(
       backgroundColor: AppColors.white,
@@ -134,9 +145,12 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
                   ),
                 ),
               ),
-              if (products.isEmpty)
+              if (loadingFirst)
+                const SliverToBoxAdapter(child: _ListingLoading())
+              else if (products.isEmpty)
                 SliverToBoxAdapter(
                   child: _NoMatches(
+                    catalogueEmpty: !catalogue.hasProducts,
                     onClear: () => setState(() => _filter = ListingFilter.none),
                   ),
                 )
@@ -1005,10 +1019,36 @@ class _FilterPill extends StatelessWidget {
 }
 
 /// Shown in place of the grid when the filter leaves nothing to list.
+/// Fills the grid area while the catalogue is loading for the first time.
+class _ListingLoading extends StatelessWidget {
+  const _ListingLoading();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(32, 72, 32, 72),
+      child: Center(
+        child: SizedBox(
+          width: 30,
+          height: 30,
+          child: CircularProgressIndicator(
+            strokeWidth: 2.4,
+            color: AppColors.brandBlue,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NoMatches extends StatelessWidget {
   final VoidCallback onClear;
 
-  const _NoMatches({required this.onClear});
+  /// True when the whole catalogue is empty or unreachable — not just that the
+  /// current filters exclude everything. The copy and the action differ.
+  final bool catalogueEmpty;
+
+  const _NoMatches({required this.onClear, this.catalogueEmpty = false});
 
   @override
   Widget build(BuildContext context) {
@@ -1016,39 +1056,47 @@ class _NoMatches extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(32, 64, 32, 64),
       child: Column(
         children: [
-          const Icon(
-            Icons.filter_alt_off_outlined,
+          Icon(
+            catalogueEmpty
+                ? Icons.inventory_2_outlined
+                : Icons.filter_alt_off_outlined,
             size: 44,
             color: AppColors.textMuted,
           ),
           const SizedBox(height: 14),
-          const Text(
-            'No products match your filters',
+          Text(
+            catalogueEmpty
+                ? 'No products in this category yet'
+                : 'No products match your filters',
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 15,
               fontWeight: FontWeight.w700,
               color: AppColors.textDark,
             ),
           ),
           const SizedBox(height: 6),
-          const Text(
-            'Try removing a sub-category or brand.',
+          Text(
+            catalogueEmpty
+                ? 'Check back once the pharmacy has stocked this shelf.'
+                : 'Try removing a sub-category or brand.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+            style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
           ),
-          const SizedBox(height: 18),
-          OutlinedButton(
-            onPressed: onClear,
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.brandBlue,
-              side: const BorderSide(color: AppColors.brandBlue),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
+          if (!catalogueEmpty) ...[
+            const SizedBox(height: 18),
+            OutlinedButton(
+              onPressed: onClear,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brandBlue,
+                side: const BorderSide(color: AppColors.brandBlue),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
+              child: const Text('Clear filters'),
             ),
-            child: const Text('Clear filters'),
-          ),
+          ],
         ],
       ),
     );

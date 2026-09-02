@@ -16,6 +16,7 @@ import '../module/home/health_articles.dart';
 import '../module/home/home_header.dart';
 import '../module/home/home_hero_banner.dart';
 import '../module/home/prescription_card.dart';
+import '../module/catalogue/catalogue_service.dart';
 import '../module/home/product_showcase.dart';
 import '../module/home/refer_earn_card.dart';
 import '../module/investor/investor_access_card.dart';
@@ -100,21 +101,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const CustomerReviews(),
                     const CategorySection(),
-                    const ProductShowcase(
-                      title: 'Popular Items',
-                      subtitle: 'Frequently ordered by customers',
-                      products: ProductCatalogue.popularItems,
-                    ),
-                    const ProductShowcase(
-                      title: 'Deals You Love',
-                      subtitle: 'Big savings & special discounts',
-                      products: ProductCatalogue.dealsYouLove,
-                    ),
-                    const ProductShowcase(
-                      title: 'Wellness & Supplements',
-                      subtitle: 'Supplements and daily nutrition',
-                      products: ProductCatalogue.wellnessAndSupplements,
-                    ),
+                    const _HomeProductRows(),
                     const HealthArticlesSection(),
                     const CustomerTestimonials(),
                     const BrandQuote(),
@@ -301,4 +288,107 @@ class _CollapsingTopChrome extends SliverPersistentHeaderDelegate {
 
   @override
   bool shouldRebuild(covariant _CollapsingTopChrome oldDelegate) => false;
+}
+
+/// The three product rows on the feed — "Popular Items", "Deals You Love" and
+/// "Wellness & Supplements" — built from the live catalogue ([CatalogueService])
+/// rather than a fixed list. While the first load is in flight a light
+/// placeholder holds the space; if the catalogue is empty or unreachable the
+/// rows drop out of the feed entirely rather than showing a broken shelf.
+class _HomeProductRows extends StatefulWidget {
+  const _HomeProductRows();
+
+  @override
+  State<_HomeProductRows> createState() => _HomeProductRowsState();
+}
+
+class _HomeProductRowsState extends State<_HomeProductRows> {
+  @override
+  void initState() {
+    super.initState();
+    CatalogueService.instance.ensureLoaded();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: CatalogueService.instance,
+      builder: (context, _) {
+        final catalogue = CatalogueService.instance;
+
+        if (!catalogue.hasProducts) {
+          return catalogue.isLoading
+              ? const _ProductRowsPlaceholder()
+              : const SizedBox.shrink();
+        }
+
+        return Column(
+          children: [
+            if (catalogue.popularPicks.isNotEmpty)
+              ProductShowcase(
+                title: 'Popular Items',
+                subtitle: 'Freshly added at the pharmacy',
+                products: catalogue.popularPicks,
+              ),
+            if (catalogue.dealsYouLove.isNotEmpty)
+              ProductShowcase(
+                title: 'Deals You Love',
+                subtitle: 'Big savings & special discounts',
+                products: catalogue.dealsYouLove,
+              ),
+            if (catalogue.wellness.isNotEmpty)
+              ProductShowcase(
+                title: 'Wellness & Supplements',
+                subtitle: 'Supplements and daily nutrition',
+                products: catalogue.wellness,
+              ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+/// A single greyed-out row that holds the feed's shape while the catalogue
+/// loads, so the sections below it do not jump up and then back down.
+class _ProductRowsPlaceholder extends StatelessWidget {
+  const _ProductRowsPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 160,
+            height: 20,
+            decoration: BoxDecoration(
+              color: AppColors.pageTint,
+              borderRadius: BorderRadius.circular(6),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            height: 210,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: 3,
+              separatorBuilder: (_, _) => const SizedBox(width: 12),
+              itemBuilder: (_, _) => Container(
+                width: 162,
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.border),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
