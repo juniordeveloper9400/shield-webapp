@@ -30,7 +30,6 @@ build/
 pubspec.lock
 
 # Web
-lib/generated_plugin_registrant.dart
 
 # Symbolication / obfuscation
 app.*.symbols
@@ -62,3 +61,5 @@ lib/data/neon/neon_secret.dart
 
 # The admin web console is its own repository now — github.com/juniordeveloper9400/shield-web
 /shieldweb/
+
+_flutter/
