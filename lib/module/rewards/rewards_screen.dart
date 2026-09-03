@@ -5,7 +5,7 @@ import '../../theme/app_colors.dart';
 import '../categories/categories_screen.dart';
 import '../home/points_badge.dart' show RewardCoin;
 import '../refer/refer_earn_screen.dart';
-import '../registration/registration_service.dart';
+import 'rewards_service.dart';
 
 /// The reward-points home, opened from the coin in the header.
 ///
@@ -55,13 +55,19 @@ class _RewardsScreenState extends State<RewardsScreen> {
   bool _notifyDismissed = false;
 
   @override
+  void initState() {
+    super.initState();
+    RewardsService.instance.ensureLoaded();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.pageTint,
       body: ListenableBuilder(
-        listenable: RegistrationService.instance,
+        listenable: RewardsService.instance,
         builder: (context, _) {
-          final points = RegistrationService.instance.points;
+          final points = RewardsService.instance.balance;
 
           return ListView(
             padding: EdgeInsets.zero,

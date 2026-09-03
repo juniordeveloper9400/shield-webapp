@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../rewards/rewards_service.dart';
 
 /// Where an order has got to.
 enum OrderStatus {
@@ -172,6 +175,16 @@ class PurchaseService extends ChangeNotifier {
     );
     _purchases.insert(0, purchase);
     notifyListeners();
+
+    // Reward points for what was actually paid (₹100 → 10 pts). Best-effort
+    // and signed-in only; a prescription order still awaiting pricing has
+    // paidTotal 0 and earns nothing until it is paid.
+    if (purchase.status.counts && paidTotal > 0) {
+      unawaited(
+        RewardsService.instance.awardForOrder(code: id, paidRupees: paidTotal),
+      );
+    }
+
     return purchase;
   }
 

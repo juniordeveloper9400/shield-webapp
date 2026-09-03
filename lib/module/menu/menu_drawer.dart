@@ -15,7 +15,7 @@ import '../labtest/lab_cart_screen.dart';
 import '../labtest/lab_cart_service.dart';
 import '../prescription/prescription_cart_screen.dart';
 import '../prescription/prescription_cart_service.dart';
-import '../registration/registration_service.dart';
+import '../rewards/rewards_service.dart';
 import '../refer/refer_earn_screen.dart';
 import '../rewards/rewards_screen.dart';
 import '../wallet/wallet_screen.dart';
@@ -528,7 +528,7 @@ class _DashboardPanel extends StatelessWidget {
                       label: 'Reward points',
                       // The live balance: registering credits it, and a
                       // promise the dashboard contradicted would not be one.
-                      value: formatRupees(RegistrationService.instance.points),
+                      value: formatRupees(RewardsService.instance.balance),
                       accent: AppColors.brandGreenDeep,
                       onTap: onOpenRewards,
                     ),

@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../dates.dart' as dates;
+import '../rewards/rewards_service.dart';
 import 'member_repository.dart';
 import 'shield_store.dart';
 
@@ -111,12 +112,10 @@ class RegistrationService extends ChangeNotifier {
 
   static final RegistrationService instance = RegistrationService._();
 
-  /// Credited once, on the first completed registration.
-  static const int rewardPoints = 500;
-
-  /// The balance a member starts with, matching the figure the menu dashboard
-  /// has always shown.
-  static const int openingPoints = 1240;
+  /// Credited once, on the first completed registration — the figure the
+  /// registration screens quote. The real credit is a ledger row written by
+  /// [RewardsService.awardRegistrationBonus]; this constant is only the copy.
+  static const int rewardPoints = RewardsService.registrationBonus;
 
   /// The states and union territories the address form offers.
   static const List<String> states = [
@@ -159,17 +158,11 @@ class RegistrationService extends ChangeNotifier {
   ];
 
   Registration? _profile;
-  int _points = openingPoints;
   bool _promptDismissed = false;
 
   Registration? get profile => _profile;
 
   bool get isRegistered => _profile != null;
-
-  /// Reward points on the account. Registration is the only thing that moves
-  /// this today, which is the point — the banner promises a number, so the
-  /// number has to actually change.
-  int get points => _points;
 
   /// True once the member has closed or skipped the form. Hides the home
   /// prompt for the session; the account entry stays, so it is never lost.
@@ -178,22 +171,29 @@ class RegistrationService extends ChangeNotifier {
   /// Whether the home and checkout prompts should still be offered.
   bool get shouldPrompt => !isRegistered && !_promptDismissed;
 
-  /// Saves the profile, crediting [rewardPoints] the first time only — a later
-  /// edit is not a second reward.
+  /// Saves the profile and, the first time only, credits the registration
+  /// bonus — a later edit is not a second reward.
   ///
-  /// The in-memory update happens synchronously so the UI and the reward land
-  /// immediately; the profile is then written through to `app.users` in the
-  /// background. A failed or unconfigured database write is logged, never
-  /// thrown — registration is an offer, not a gate, and must not break here.
+  /// The profile update is synchronous so the UI reacts at once; the write to
+  /// `app.users` and the reward-points ledger row both go in the background.
+  /// A failed or unconfigured database write is logged, never thrown —
+  /// registration is an offer, not a gate, and must not break here. The
+  /// [RewardsService] credit is guarded server-side, so re-saving cannot
+  /// double it.
   void save(Registration registration) {
     final isFirst = _profile == null;
     _profile = registration;
     _promptDismissed = false;
-    if (isFirst) {
-      _points += rewardPoints;
-    }
     notifyListeners();
     unawaited(_persist(registration));
+    if (isFirst) {
+      unawaited(
+        RewardsService.instance.awardRegistrationBonus(
+          phone: registration.phone,
+          name: registration.name,
+        ),
+      );
+    }
   }
 
   /// Write-through to Neon (`app.users`). Best-effort: see [save].
@@ -202,8 +202,7 @@ class RegistrationService extends ChangeNotifier {
       return;
     }
     try {
-      await MemberRepository.instance
-          .upsertRegistration(registration, rewardPoints: _points);
+      await MemberRepository.instance.upsertRegistration(registration);
     } catch (error, stack) {
       debugPrint('registration: could not save profile to database — $error');
       debugPrintStack(stackTrace: stack);
@@ -222,7 +221,6 @@ class RegistrationService extends ChangeNotifier {
   @visibleForTesting
   void reset() {
     _profile = null;
-    _points = openingPoints;
     _promptDismissed = false;
     notifyListeners();
   }

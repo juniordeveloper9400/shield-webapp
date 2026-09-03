@@ -22,14 +22,14 @@ class MemberRepository {
   /// Identity is the 10-digit mobile number (`app.users.phone` is unique and
   /// carries no `+91`). The assigned branch is resolved from
   /// [Registration.storeId] — the app's stable store code — to the
-  /// `app.shield_store` primary key. [rewardPoints] is the member's current
-  /// balance so the row reflects the points the registration just credited.
+  /// `app.shield_store` primary key.
+  ///
+  /// `reward_points` is not written here — the reward-points ledger
+  /// (`app.reward_point_transaction`, via `RewardsRepository`) owns that column
+  /// and moves it on the registration bonus.
   ///
   /// Throws if the write fails; callers decide whether that is fatal.
-  Future<void> upsertRegistration(
-    Registration registration, {
-    required int rewardPoints,
-  }) async {
+  Future<void> upsertRegistration(Registration registration) async {
     if (!isAvailable) {
       return;
     }
@@ -39,13 +39,13 @@ class MemberRepository {
         INSERT INTO app.users (
           phone, name, email, gender, dob,
           address, place, pincode, state,
-          home_store_id, reward_points, registration_completed_at
+          home_store_id, registration_completed_at
         )
         VALUES (
           \$1, \$2, \$3, \$4::app.gender, \$5::date,
           \$6, \$7, \$8, \$9,
           (SELECT id FROM app.shield_store WHERE code = \$10),
-          \$11, now()
+          now()
         )
         ON CONFLICT (phone) DO UPDATE SET
           name                      = EXCLUDED.name,
@@ -57,7 +57,6 @@ class MemberRepository {
           pincode                   = EXCLUDED.pincode,
           state                     = EXCLUDED.state,
           home_store_id             = EXCLUDED.home_store_id,
-          reward_points             = EXCLUDED.reward_points,
           registration_completed_at = COALESCE(
             app.users.registration_completed_at,
             EXCLUDED.registration_completed_at
@@ -74,7 +73,6 @@ class MemberRepository {
         registration.pincode,
         registration.state,
         registration.storeId,
-        rewardPoints,
       ],
     );
     NeonHttp.log('upsertRegistration: saved ${registration.phone}');

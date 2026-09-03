@@ -7,6 +7,7 @@ import '../../dates.dart';
 import '../../money.dart';
 import '../privilege/privilege_tier.dart';
 import '../registration/shield_store.dart';
+import '../rewards/rewards_service.dart';
 
 /// One line in the wallet ledger.
 @immutable
@@ -248,15 +249,11 @@ class WalletService extends ChangeNotifier {
   /// account rather than from here.
   static const int openingBalance = 0;
 
-  /// Opening reward / redeem points. Nothing, for the same reason.
-  static const int openingRewardPoints = 0;
-
   /// The ledger a wallet opens with. Empty: every line in the wallet is put
   /// there by something the member did.
   static const List<WalletEntry> _seed = [];
 
   int _balance = openingBalance;
-  int _rewardPoints = openingRewardPoints;
   int _redeemed = 0;
   final List<WalletEntry> _entries = List.of(_seed);
 
@@ -271,7 +268,10 @@ class WalletService extends ChangeNotifier {
   final List<PendingWalletCard> _pending = [];
 
   int get balance => _balance;
-  int get rewardPoints => _rewardPoints;
+
+  /// The reward-points balance — read straight from the ledger-backed
+  /// [RewardsService], so the wallet and the header coin can never disagree.
+  int get rewardPoints => RewardsService.instance.balance;
 
   /// Every card on the account, oldest first. What the back of the wallet
   /// card lists: an account may hold more than one, and each carries its own
@@ -644,16 +644,25 @@ class WalletService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Converts [points] into wallet balance and records a ledger credit.
-  bool redeemPoints({int? points, String date = 'Today'}) {
-    final toRedeem = points ?? _rewardPoints;
-    // Points become wallet balance, so they cannot be redeemed into a wallet
-    // that is not open yet.
-    if (!isActivated || toRedeem <= 0 || toRedeem > _rewardPoints) {
+  /// Spends reward points and moves their value into the wallet balance.
+  ///
+  /// The points side is a negative `REDEMPTION` row on the reward-points
+  /// ledger ([RewardsService.redeem]); the wallet side is a credit line here.
+  /// Points become wallet balance, so they cannot be redeemed into a wallet
+  /// that is not open yet.
+  Future<bool> redeemPoints({int? points, String date = 'Today'}) async {
+    final toRedeem = points ?? RewardsService.instance.balance;
+    if (!isActivated ||
+        toRedeem <= 0 ||
+        toRedeem > RewardsService.instance.balance) {
       return false;
     }
 
-    _rewardPoints -= toRedeem;
+    final spent = await RewardsService.instance.redeem(toRedeem);
+    if (!spent) {
+      return false;
+    }
+
     _entries.insert(
       0,
       WalletEntry(
@@ -672,7 +681,6 @@ class WalletService extends ChangeNotifier {
     _cards.clear();
     _pending.clear();
     _balance = openingBalance;
-    _rewardPoints = openingRewardPoints;
     _redeemed = 0;
     _entries
       ..clear()

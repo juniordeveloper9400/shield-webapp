@@ -5,8 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../../money.dart';
 import '../../theme/app_colors.dart';
-import '../registration/registration_service.dart';
 import '../rewards/rewards_screen.dart';
+import '../rewards/rewards_service.dart';
 
 /// The reward points balance, on a coin, in the home header beside the wallet.
 ///
@@ -42,12 +42,13 @@ class PointsBadge extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // The live balance, not a figure printed once: registering credits it,
-    // and the coin has to be seen to move when it does.
+    // The live balance from the reward-points ledger, not a figure printed
+    // once: registering and every paid order credit it, and the coin has to be
+    // seen to move when they do.
     return ListenableBuilder(
-      listenable: RegistrationService.instance,
+      listenable: RewardsService.instance,
       builder: (context, _) {
-        final points = RegistrationService.instance.points;
+        final points = RewardsService.instance.balance;
         final label = formatRupees(points);
 
         return Tooltip(
