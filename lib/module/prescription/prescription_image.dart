@@ -17,8 +17,8 @@ import 'package:image/image.dart' as img;
 /// upload screen.
 Future<String?> prescriptionImageDataUrl(
   Uint8List bytes, {
-  int maxEdge = 1400,
-  int quality = 70,
+  int maxEdge = 1200,
+  int quality = 62,
 }) {
   return compute(
     _encode,

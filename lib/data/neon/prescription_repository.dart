@@ -156,14 +156,14 @@ class PrescriptionRepository {
       final inserted = await NeonHttp.instance.query(
         '''
           INSERT INTO app.prescription
-            (member_id, patient_id, store_id, code, file_name, image, doctor,
+            (member_id, patient_id, store_id, code, file_name, doctor,
              duration, custom_days, recurring_from, recurring_until)
           VALUES
             (\$1, \$2,
              (SELECT id FROM app.shield_store WHERE code = \$3),
-             \$4, \$5, \$6, \$7,
-             \$8::app.medicine_duration, \$9,
-             \$10::date, \$11::date)
+             \$4, \$5, \$6,
+             \$7::app.medicine_duration, \$8,
+             \$9::date, \$10::date)
           RETURNING id, uuid
         ''',
         [
@@ -172,7 +172,6 @@ class PrescriptionRepository {
           storeCode,
           code,
           fileName,
-          image,
           doctor,
           _durationName(duration),
           customDays,
@@ -187,6 +186,24 @@ class PrescriptionRepository {
       final prescriptionUuid = inserted.first['uuid']?.toString();
       if (prescriptionId == null) {
         return null;
+      }
+
+      // 3b · The script image, as its own statement. A photo that is too large
+      // for one request must not take the whole prescription down with it, so
+      // this is attempted separately and its failure is swallowed.
+      if (image != null && image.isNotEmpty) {
+        try {
+          await NeonHttp.instance.query(
+            'UPDATE app.prescription SET image = \$1 WHERE id = \$2',
+            [image, prescriptionId],
+          );
+        } catch (error) {
+          NeonHttp.log(
+            'PrescriptionRepository: script image failed to save '
+            '(${image.length} chars) — prescription $prescriptionId kept',
+            error: error,
+          );
+        }
       }
 
       // 4 · Any medicine lines already keyed in (usually none at upload — the
