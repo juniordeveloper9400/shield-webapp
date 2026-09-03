@@ -213,7 +213,16 @@ class _StoreMapPickerState extends State<StoreMapPicker>
     final p = _loc!.position!;
     final me = LatLng(p.latitude, p.longitude);
     final ranked = _loc!.ranked;
-    final visible = _expanded ? ranked : ranked.take(4).toList();
+    // The chosen branch always sits at the top of the list, so collapsing
+    // it back to four never hides the one the member actually picked.
+    final sel = widget.selectedId;
+    final ordered = sel == null
+        ? ranked
+        : [
+            for (final s in ranked) if (s.id == sel) s,
+            for (final s in ranked) if (s.id != sel) s,
+          ];
+    final visible = _expanded ? ordered : ordered.take(4).toList();
 
     void select(ShieldStore s) {
       widget.onSelected(s);
@@ -308,7 +317,7 @@ class _StoreMapPickerState extends State<StoreMapPicker>
           ),
           const SizedBox(height: 10),
         ],
-        if (ranked.length > visible.length || _expanded)
+        if (ordered.length > visible.length || _expanded)
           Align(
             alignment: Alignment.centerLeft,
             child: TextButton(
@@ -322,7 +331,7 @@ class _StoreMapPickerState extends State<StoreMapPicker>
               child: Text(
                 _expanded
                     ? 'Show fewer branches'
-                    : 'Show all ${ranked.length} branches',
+                    : 'Show all ${ordered.length} branches',
                 style: const TextStyle(
                     fontSize: 14, fontWeight: FontWeight.w700),
               ),
