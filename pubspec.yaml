@@ -30,6 +30,10 @@ dependencies:
   # privilege-plan activation. Works on Android/iOS and, on the web build,
   # through the browser's geolocation API. See registration/store_locator.dart.
   geolocator: ^13.0.4
+  # The branch picker is a map (OpenStreetMap tiles — no API key, no billing),
+  # rendered the same on the APK and the web build. See store_map_picker.dart.
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
   # Resizes an uploaded prescription photo to a small JPEG data URI before it
   # is written to app.prescription.image, so the pharmacy console can view it.
   # Also used by tool/whiten_product_backgrounds.dart.

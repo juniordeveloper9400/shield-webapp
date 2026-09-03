@@ -7,8 +7,7 @@ import '../../widgets/labelled_field.dart';
 import '../auth/auth_service.dart';
 import 'registration_celebration.dart';
 import 'registration_service.dart';
-import 'shield_store.dart';
-import 'store_locator.dart';
+import 'store_map_picker.dart';
 
 /// The registration form: profile, address, and the branch that will serve it.
 ///
@@ -44,11 +43,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   String? _state;
   String? _storeId;
 
-  /// Once the member picks a branch themselves, a later pincode edit re-ranks
-  /// the list but must not quietly move their choice.
+  /// Once the member picks a branch themselves, the map must not quietly move
+  /// their choice when a fresh location fix lands.
   bool _storePickedByHand = false;
 
-  bool _showAllStores = false;
+  /// The branch map needs a location fix before a branch can be chosen — the
+  /// form cannot be submitted until this is true.
+  bool _locationReady = false;
+
   bool _submitted = false;
 
   RegistrationService get _service => RegistrationService.instance;
@@ -75,13 +77,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _storeId = profile?.storeId;
     _storePickedByHand = profile != null;
 
-    _pincode.addListener(_onPincodeChanged);
-    _syncSuggestedStore();
   }
 
   @override
   void dispose() {
-    _pincode.removeListener(_onPincodeChanged);
     _name.dispose();
     _phone.dispose();
     _email.dispose();
@@ -90,66 +89,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _pincode.dispose();
     _dobText.dispose();
     super.dispose();
-  }
-
-  // ---- Stores ----
-
-  /// Set once the member shares their location — then the branches are ranked
-  /// by real distance instead of by pincode.
-  StoreLocationResult? _location;
-  bool _locating = false;
-
-  bool get _locatedOk => _location?.ok ?? false;
-
-  List<ShieldStore> get _ranked => _locatedOk
-      ? _location!.ranked
-      : StoreDirectory.nearest(_pincode.text);
-
-  ShieldStore? get _suggested =>
-      _locatedOk ? _location!.nearest : StoreDirectory.suggestFor(_pincode.text);
-
-  void _onPincodeChanged() {
-    if (!mounted) {
-      return;
-    }
-    setState(_syncSuggestedStore);
-  }
-
-  /// Assigns the nearest branch as the pincode completes (or as soon as a
-  /// location fix lands), unless the member has already chosen one.
-  void _syncSuggestedStore() {
-    if (_storePickedByHand) {
-      return;
-    }
-    _storeId = _suggested?.id;
-  }
-
-  Future<void> _useMyLocation() async {
-    FocusManager.instance.primaryFocus?.unfocus();
-    setState(() => _locating = true);
-    final result = await StoreLocator.locate();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _locating = false;
-      if (result.ok) {
-        _location = result;
-        _syncSuggestedStore();
-      }
-    });
-    if (!result.ok) {
-      final message = switch (result.outcome) {
-        LocationOutcome.serviceOff =>
-          'Turn on location on your device, then try again.',
-        LocationOutcome.denied =>
-          'Location permission is off. You can still pick a branch below.',
-        _ => "Couldn't get your location. Pick a branch below.",
-      };
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message)));
-    }
   }
 
   // ---- Pickers ----
@@ -214,7 +153,11 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(() => _submitted = true);
 
     final formOk = _formKey.currentState?.validate() ?? false;
-    if (!formOk || _gender == null || _dob == null || _storeId == null) {
+    if (!formOk ||
+        _gender == null ||
+        _dob == null ||
+        !_locationReady ||
+        _storeId == null) {
       return;
     }
 
@@ -467,91 +410,28 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   }
 
   Widget _buildStorePicker() {
-    final ranked = _ranked;
-    final suggested = _suggested;
-    final visible = _showAllStores ? ranked : ranked.take(4).toList();
-
-    final String subtitle;
-    if (_locatedOk) {
-      subtitle = 'Ranked by distance from you. The nearest is pre-selected — '
-          'change it if another branch suits you better.';
-    } else if (suggested == null) {
-      subtitle = 'Share your location, or enter your pincode above, and we will '
-          'put the nearest branch first.';
-    } else {
-      subtitle = 'Nearest to ${_pincode.text} is pre-selected. Change it if '
-          'another branch suits you better.';
-    }
-
     return _Section(
       title: 'Your SHIELD store',
-      subtitle: subtitle,
+      subtitle: 'Allow location and pick your branch on the map. The nearest '
+          'one is chosen for you — tap another pin or row to change it.',
       children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: _locating ? null : _useMyLocation,
-            icon: _locating
-                ? const SizedBox(
-                    width: 16,
-                    height: 16,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.my_location_rounded, size: 18),
-            label: Text(
-              _locating
-                  ? 'Finding you…'
-                  : _locatedOk
-                      ? 'Location updated · use again'
-                      : 'Use my location',
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.brandBlue,
-              side: const BorderSide(color: AppColors.brandBlue),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            ),
-          ),
+        StoreMapPicker(
+          selectedId: _storeId,
+          autoPickNearest: !_storePickedByHand,
+          onLocationReady: (ready) {
+            if (mounted && ready != _locationReady) {
+              setState(() => _locationReady = ready);
+            }
+          },
+          onSelected: (store) => setState(() {
+            _storeId = store.id;
+            _storePickedByHand = true;
+          }),
         ),
-        const SizedBox(height: 12),
-        for (final store in visible) ...[
-          _StoreCard(
-            store: store,
-            selected: store.id == _storeId,
-            isNearest: suggested != null && store.id == suggested.id,
-            distanceLabel: _locatedOk && store.hasLocation
-                ? StoreLocator.label(_location!.kmTo(store)!)
-                : null,
-            onTap: () => setState(() {
-              _storeId = store.id;
-              _storePickedByHand = true;
-            }),
-          ),
-          const SizedBox(height: 10),
-        ],
-        if (ranked.length > visible.length || _showAllStores)
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => setState(() => _showAllStores = !_showAllStores),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.brandBlue,
-                minimumSize: Size.zero,
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 6),
-                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-              ),
-              child: Text(
-                _showAllStores
-                    ? 'Show fewer stores'
-                    : 'Show all ${ranked.length} stores',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        if (_submitted && _storeId == null)
-          const _FieldError('Choose the store you want to be served by'),
+        if (_submitted && !_locationReady)
+          const _FieldError('Enable location to choose your SHIELD branch'),
+        if (_submitted && _locationReady && _storeId == null)
+          const _FieldError('Choose the branch you want to be served by'),
       ],
     );
   }
@@ -807,137 +687,6 @@ class _ChoicePill extends StatelessWidget {
 }
 
 /// One selectable branch.
-class _StoreCard extends StatelessWidget {
-  final ShieldStore store;
-  final bool selected;
-  final bool isNearest;
-  final VoidCallback onTap;
-
-  /// "2.3 km" from the member, when a location fix is in hand.
-  final String? distanceLabel;
-
-  const _StoreCard({
-    required this.store,
-    required this.selected,
-    required this.isNearest,
-    required this.onTap,
-    this.distanceLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.offerTint : AppColors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? AppColors.brandBlue : AppColors.border,
-              width: selected ? 1.5 : 1,
-            ),
-          ),
-          padding: const EdgeInsets.all(13),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                size: 21,
-                color: selected ? AppColors.brandBlue : AppColors.textMuted,
-              ),
-              const SizedBox(width: 11),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      store.name,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      store.addressLine,
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        height: 1.3,
-                        color: AppColors.textBody,
-                      ),
-                    ),
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 6,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (isNearest)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 3,
-                            ),
-                            decoration: BoxDecoration(
-                              color: AppColors.brandGreenDeep,
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Text(
-                              'Nearest',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.white,
-                              ),
-                            ),
-                          ),
-                        if (distanceLabel != null)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.near_me_rounded,
-                                size: 12,
-                                color: AppColors.brandBlue,
-                              ),
-                              const SizedBox(width: 3),
-                              Text(
-                                '$distanceLabel away',
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: AppColors.brandBlue,
-                                ),
-                              ),
-                            ],
-                          ),
-                        Text(
-                          store.hours,
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w600,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// Full-height list of states and union territories.
 class _StatePicker extends StatelessWidget {

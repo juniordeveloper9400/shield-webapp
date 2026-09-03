@@ -12,7 +12,7 @@ import '../patients/patient_book.dart';
 import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
-import '../registration/store_locator.dart';
+import '../registration/store_map_picker.dart';
 import '../wallet/wallet_service.dart';
 import 'checkout_chrome.dart';
 import 'checkout_order.dart';
@@ -272,7 +272,15 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   // The agent code is optional — an order placed without one is still valid —
   // so it does not gate the step. Only a live method and (where the order
   // ships) a delivery address and a patient do.
-  bool get _canContinue => _method.isLive && _hasDeliveryAddress && _hasPatient;
+  /// The privilege-activation branch map needs a location fix before the
+  /// member can move on. Ignored on the product / pharmacy checkout.
+  bool _storeLocationReady = false;
+
+  bool get _canContinue =>
+      _method.isLive &&
+      _hasDeliveryAddress &&
+      _hasPatient &&
+      (!widget.storeSelectable || _storeLocationReady);
 
   bool get _canSubmit => _canContinue && _receipt.isComplete && !_receipt.busy;
 
@@ -463,6 +471,11 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
             ],
             _StorePanel(
               store: _store,
+              onLocationReady: (ready) {
+                if (ready != _storeLocationReady) {
+                  setState(() => _storeLocationReady = ready);
+                }
+              },
               account: _account,
               agent: _agent,
               storeNote: _storeNote,
@@ -1049,6 +1062,10 @@ class _StorePanel extends StatelessWidget {
   final ValueChanged<ShieldStore> onStoreChanged;
   final ValueChanged<StoreBankAccount?> onAccountChanged;
 
+  /// Fires as the branch map's location gate opens / closes. Only meaningful
+  /// when [selectable].
+  final ValueChanged<bool>? onLocationReady;
+
   const _StorePanel({
     required this.store,
     required this.account,
@@ -1060,6 +1077,7 @@ class _StorePanel extends StatelessWidget {
     required this.onPlanChanged,
     required this.onStoreChanged,
     required this.onAccountChanged,
+    this.onLocationReady,
   });
 
   @override
@@ -1084,9 +1102,10 @@ class _StorePanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            _LocatableStorePicker(
+            StoreMapPicker(
               selectedId: store.id,
-              onPick: onStoreChanged,
+              onSelected: onStoreChanged,
+              onLocationReady: onLocationReady,
             ),
           ] else ...[
             if (plans.isNotEmpty) ...[
@@ -1138,194 +1157,6 @@ class _StorePanel extends StatelessWidget {
   }
 }
 
-/// One selectable branch on the privilege-plan checkout.
-/// The branch picker on a privilege-plan activation checkout. Offers "Use my
-/// location" to rank the branches by real distance; falls back to SHIELD's
-/// listed order when location is declined.
-class _LocatableStorePicker extends StatefulWidget {
-  final String selectedId;
-  final ValueChanged<ShieldStore> onPick;
-
-  const _LocatableStorePicker({
-    required this.selectedId,
-    required this.onPick,
-  });
-
-  @override
-  State<_LocatableStorePicker> createState() => _LocatableStorePickerState();
-}
-
-class _LocatableStorePickerState extends State<_LocatableStorePicker> {
-  StoreLocationResult? _location;
-  bool _locating = false;
-
-  bool get _ok => _location?.ok ?? false;
-
-  Future<void> _useMyLocation() async {
-    setState(() => _locating = true);
-    final result = await StoreLocator.locate();
-    if (!mounted) {
-      return;
-    }
-    setState(() {
-      _locating = false;
-      if (result.ok) {
-        _location = result;
-        if (result.nearest != null) {
-          widget.onPick(result.nearest!);
-        }
-      }
-    });
-    if (!result.ok) {
-      final message = switch (result.outcome) {
-        LocationOutcome.serviceOff =>
-          'Turn on location on your device, then try again.',
-        LocationOutcome.denied =>
-          'Location permission is off. Pick a branch below.',
-        _ => "Couldn't get your location. Pick a branch below.",
-      };
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(message)));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final stores = _ok ? _location!.ranked : StoreDirectory.all;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Align(
-          alignment: Alignment.centerLeft,
-          child: OutlinedButton.icon(
-            onPressed: _locating ? null : _useMyLocation,
-            icon: _locating
-                ? const SizedBox(
-                    width: 15,
-                    height: 15,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : const Icon(Icons.my_location_rounded, size: 17),
-            label: Text(_locating
-                ? 'Finding you…'
-                : _ok
-                    ? 'Location updated · use again'
-                    : 'Use my location'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.brandBlue,
-              side: const BorderSide(color: AppColors.brandBlue),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
-        for (final option in stores)
-          _PickableStoreTile(
-            store: option,
-            selected: option.id == widget.selectedId,
-            distanceLabel: _ok && option.hasLocation
-                ? StoreLocator.label(_location!.kmTo(option)!)
-                : null,
-            onTap: () => widget.onPick(option),
-          ),
-      ],
-    );
-  }
-}
-
-class _PickableStoreTile extends StatelessWidget {
-  final ShieldStore store;
-  final bool selected;
-  final VoidCallback onTap;
-  final String? distanceLabel;
-
-  const _PickableStoreTile({
-    required this.store,
-    required this.selected,
-    required this.onTap,
-    this.distanceLabel,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: selected ? AppColors.chipBlueTint : AppColors.white,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? AppColors.brandBlue : AppColors.border,
-            ),
-          ),
-          padding: const EdgeInsets.all(11),
-          child: Row(
-            children: [
-              Icon(
-                selected
-                    ? Icons.radio_button_checked_rounded
-                    : Icons.radio_button_unchecked_rounded,
-                size: 20,
-                color: selected ? AppColors.brandBlue : AppColors.textMuted,
-              ),
-              const SizedBox(width: 9),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      store.name,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    Text(
-                      store.addressLine,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (distanceLabel != null)
-                Padding(
-                  padding: const EdgeInsets.only(left: 8),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.near_me_rounded,
-                        size: 12,
-                        color: AppColors.brandBlue,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        distanceLabel!,
-                        style: const TextStyle(
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.brandBlue,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
 
 /// One activated plan on the product/pharmacy checkout, offered when the member
 /// holds more than one. Picking it bills the order against that plan and moves

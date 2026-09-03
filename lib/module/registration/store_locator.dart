@@ -7,8 +7,11 @@ enum LocationOutcome {
   /// Got a fix — [StoreLocationResult.position] is set.
   ok,
 
-  /// The member said no (once, or "don't ask again").
+  /// The member said no this time — asking again may still work.
   denied,
+
+  /// The member picked "don't ask again" — only Settings can turn it back on.
+  deniedForever,
 
   /// Location services are switched off on the device.
   serviceOff,
@@ -67,8 +70,12 @@ class StoreLocator {
       if (permission == LocationPermission.denied) {
         permission = await Geolocator.requestPermission();
       }
-      if (permission == LocationPermission.denied ||
-          permission == LocationPermission.deniedForever) {
+      if (permission == LocationPermission.deniedForever) {
+        return const StoreLocationResult(
+          outcome: LocationOutcome.deniedForever,
+        );
+      }
+      if (permission == LocationPermission.denied) {
         return const StoreLocationResult(outcome: LocationOutcome.denied);
       }
 
