@@ -84,8 +84,9 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '679326',
-      latitude: 10.988,
-      longitude: 76.216,
+      // Sahakar Medicals & Surgicals Hyperpharma, Meghadoot Complex, Melattur.
+      latitude: 11.0594898,
+      longitude: 76.2738839,
     ),
     ShieldStore(
       id: 'SHD-MKP',
@@ -114,8 +115,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '679321',
-      latitude: 10.97,
-      longitude: 76.245,
+      latitude: 10.9539365,
+      longitude: 76.3202802,
     ),
     ShieldStore(
       id: 'SHD-MJR',

@@ -16,7 +16,7 @@ FROM (VALUES
   ('SHD-MEL', 10.988000, 76.216000),  -- Melattur
   ('SHD-MKP', 10.944000, 76.101000),  -- Makkaraparamba
   ('SHD-TIR', 10.913800, 75.921800),  -- Tirur
-  ('SHD-KKT', 10.970000, 76.245000),  -- Karinkallathani
+  ('SHD-KKT', 10.953937, 76.320280),  -- Karinkallathani
   ('SHD-MJR', 11.120000, 76.119000),  -- Manjeri
   ('SHD-ALN', 10.976000, 76.523000),  -- Alanallur
   ('SHD-TRD', 11.042000, 75.928000),  -- Tirurangadi
