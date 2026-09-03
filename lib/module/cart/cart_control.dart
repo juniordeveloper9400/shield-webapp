@@ -258,6 +258,17 @@ class _QuantityStepperState extends State<QuantityStepper> {
   }
 }
 
+/// Opens the shared centred "Select quantity" dialog for the cart line named
+/// [name]. This is the one picker used everywhere — the product cards, the home
+/// showcases and the cart screen — so the quantity control looks and behaves
+/// the same wherever it is reached from.
+Future<void> showCartQuantityDialog(
+  BuildContext context, {
+  required String name,
+}) {
+  return _QuantityDialog.show(context, name: name);
+}
+
 /// Centred dialog for changing the quantity of a line already in the cart.
 ///
 /// A [QuantityStepper] at the top — which types or steps up to
