@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../privilege/plan_status_badge.dart';
 import '../privilege/privilege_card_face.dart';
 import '../privilege/privilege_tier.dart';
 import 'wallet_service.dart';
@@ -761,15 +762,15 @@ class _PlanTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = card.isActiveOn(asOf);
 
-    // Green where the plan's month has come round, red where it has not. The
+    // Green where the plan's month has come round, red where it has not,
+    // grey once it has expired. The
     // stripe used to carry the tier's own colour, which said which plan it was
     // — something the name printed beside it already says. What a member wants
     // off one glance at a wallet holding two plans is which of them they can
     // spend today, and that is what it says now.
     return _StripeTile(
-      stripe: _statusColour(active),
+      stripe: _planStripe(card, asOf),
       padding: const EdgeInsets.fromLTRB(11, 9, 12, 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -879,6 +880,13 @@ class _StripeTile extends StatelessWidget {
 Color _statusColour(bool active) =>
     active ? AppColors.planActive : AppColors.planWaiting;
 
+/// The stripe / accent colour for a plan card: greyed once the plan has
+/// expired, otherwise green when this month has come round and salmon while
+/// it waits.
+Color _planStripe(WalletCard card, DateTime asOf) => card.isExpired
+    ? PlanStatusBadge.colourOf(PlanStatus.expired)
+    : _statusColour(card.isActiveOn(asOf));
+
 /// Whether a plan's month has come round, and the date it turns over on.
 ///
 /// The two things a member with more than one plan cannot work out for
@@ -892,11 +900,16 @@ class _StatusLine extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final expired = card.isExpired;
     final active = card.isActiveOn(asOf);
-    final colour = _statusColour(active);
+    // Grey once the plan has lapsed; otherwise green when this month has come
+    // round and salmon while it waits.
+    final colour = expired
+        ? PlanStatusBadge.colourOf(PlanStatus.expired)
+        : _statusColour(active);
+    final label = expired ? 'Expired' : (active ? 'Active' : 'Waiting');
     // Active, and the date is the next turnover. Waiting, and it is the day
-    // this month that the plan opens — which is the whole of what the member
-    // is waiting for.
+    // this month that the plan opens. Expired, and it is the day it lapsed.
     final due = active ? card.nextDueOn(asOf) : card.dueDayIn(asOf);
 
     return Row(
@@ -921,7 +934,7 @@ class _StatusLine extends StatelessWidget {
               ),
               const SizedBox(width: 5),
               Text(
-                active ? 'Active' : 'Waiting',
+                label,
                 style: _onPanel(
                   10,
                   FontWeight.w800,
@@ -933,9 +946,11 @@ class _StatusLine extends StatelessWidget {
         const SizedBox(width: 8),
         Expanded(
           child: Text(
-            active
-                ? 'Renews ${formatDayMonth(due)}'
-                : 'Opens ${formatDayMonth(due)}',
+            expired
+                ? 'Expired ${formatDayMonth(card.expiresOn)}'
+                : active
+                    ? 'Renews ${formatDayMonth(due)}'
+                    : 'Opens ${formatDayMonth(due)}',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: _onPanel(11.5, FontWeight.w800).copyWith(color: colour),
@@ -961,8 +976,7 @@ class _ReleaseTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final active = card.isActiveOn(asOf);
-    final colour = _statusColour(active);
+    final colour = _planStripe(card, asOf);
     final released = card.instalmentOn(asOf);
     const total = PrivilegeProgramme.validityMonths;
 

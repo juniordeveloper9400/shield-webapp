@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../privilege/plan_status_badge.dart';
 import '../auth/auth_service.dart';
 import '../privilege/privilege_cards_launch.dart';
 import '../privilege/privilege_screen.dart';
@@ -291,9 +292,9 @@ class _PendingCardTile extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  rejected
-                      ? '${card.name} · Not approved'
-                      : '${card.name} · Awaiting approval',
+                  card.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w800,
@@ -301,6 +302,8 @@ class _PendingCardTile extends StatelessWidget {
                   ),
                 ),
               ),
+              const SizedBox(width: 8),
+              PlanStatusBadge(status: card.planStatus),
             ],
           ),
           const SizedBox(height: 6),

@@ -152,6 +152,11 @@ class WalletCard {
 
   bool get isExpired => DateTime.now().isAfter(expiresOn);
 
+  /// This plan's status as the member reads it: [PlanStatus.active] until
+  /// the year runs out, then [PlanStatus.expired].
+  PlanStatus get planStatus =>
+      isExpired ? PlanStatus.expired : PlanStatus.active;
+
   String get loadedLabel => '₹${formatRupees(loaded)}';
 
   String get rechargedOnLabel => formatDate(rechargedOn);
@@ -168,6 +173,20 @@ class WalletCard {
     store: store,
     remoteId: remoteId,
   );
+}
+
+/// The one status a member ever reads off a privilege plan, whatever
+/// class is backing it: a submission ([PendingWalletCard]) is `pending` or
+/// `rejected`; a card on the wallet ([WalletCard]) is `active` until its
+/// year is up, then `expired`.
+enum PlanStatus {
+  pending('Pending'),
+  rejected('Rejected'),
+  active('Active'),
+  expired('Expired');
+
+  final String label;
+  const PlanStatus(this.label);
 }
 
 /// Where a submitted privilege card sits before it is on the wallet.
@@ -209,6 +228,11 @@ class PendingWalletCard {
   String get name => load.name;
 
   bool get isRejected => status == PendingCardStatus.rejected;
+
+  /// This submission's status as the member reads it: [PlanStatus.rejected]
+  /// when the counter turned it down, otherwise [PlanStatus.pending].
+  PlanStatus get planStatus =>
+      isRejected ? PlanStatus.rejected : PlanStatus.pending;
 
   PendingWalletCard copyWith({
     String? remoteId,
