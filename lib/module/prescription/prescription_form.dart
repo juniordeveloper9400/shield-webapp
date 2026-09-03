@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -180,9 +181,11 @@ class PrescriptionFormController extends ChangeNotifier {
     // counter behind [PrescriptionRecord.number].
     final code = 'RX-'
         '${DateTime.now().millisecondsSinceEpoch.remainder(100000000).toString().padLeft(8, '0')}';
-    // The script itself, resized small, so the pharmacy console can read it
-    // and build the intake card from it. Best-effort — a photo that will not
-    // decode just leaves the row without an image.
+    // The script itself, so the pharmacy console can read it and build the
+    // intake card from it. Try a small re-encoded JPEG first; if the image
+    // package cannot decode it (an odd format, a screenshot), fall back to the
+    // raw bytes as-is so the counter still gets a picture. Best-effort either
+    // way — the row is kept even with no image.
     String? image;
     final rawImage = preview;
     if (rawImage != null) {
@@ -190,6 +193,10 @@ class PrescriptionFormController extends ChangeNotifier {
         image = await prescriptionImageDataUrl(rawImage);
       } catch (error) {
         debugPrint('prescription: could not encode the script image — $error');
+      }
+      if ((image == null || image.isEmpty) && rawImage.length <= 4 * 1024 * 1024) {
+        final mime = _mimeForName(file?.name ?? '');
+        image = 'data:$mime;base64,${base64Encode(rawImage)}';
       }
     }
     try {
@@ -237,6 +244,19 @@ class PrescriptionFormController extends ChangeNotifier {
     final nearby = pincode != null ? StoreDirectory.suggestFor(pincode) : null;
     return (nearby ?? StoreDirectory.all.first).id;
   }
+}
+
+/// A best-effort MIME type from a picked file's name, for the raw-bytes
+/// fallback data URI. Defaults to JPEG — most script photos are.
+String _mimeForName(String name) {
+  final ext = name.toLowerCase().split('.').last;
+  return switch (ext) {
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    'heic' || 'heif' => 'image/heic',
+    'gif' => 'image/gif',
+    _ => 'image/jpeg',
+  };
 }
 
 /// The upload form itself: where the file comes from, who it is for, how much
