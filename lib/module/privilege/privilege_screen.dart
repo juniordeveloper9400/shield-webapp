@@ -187,6 +187,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
                   storeCode: receipt.storeId,
                   receiptReference: receipt.bankReference,
                   receiptFileName: receipt.fileName,
+                  receiptImage: receipt.imageDataUrl,
                 );
                 if (uuid != null) {
                   WalletService.instance

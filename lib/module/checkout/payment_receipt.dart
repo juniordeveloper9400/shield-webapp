@@ -18,6 +18,11 @@ class PaymentReceipt {
   final String fileName;
   final int bytes;
 
+  /// The receipt image itself, `data:image/jpeg;base64,…`, so the review
+  /// console shows the picture and not just [fileName]. Null when the picker
+  /// could not read the bytes (or in tests).
+  final String? imageDataUrl;
+
   /// The bank's own reference for the transfer — a UTR or a transaction ID.
   /// Mandatory: it is what the checkout collects so a person settling the
   /// claim can match this picture to a line on the statement.
@@ -48,5 +53,6 @@ class PaymentReceipt {
     required this.agentCode,
     required this.submittedAt,
     required this.bankReference,
+    this.imageDataUrl,
   });
 }

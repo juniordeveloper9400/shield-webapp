@@ -76,6 +76,7 @@ class WalletRepository {
     String? storeCode,
     String? receiptReference,
     String? receiptFileName,
+    String? receiptImage,
   }) {
     return _run('submitCardForApproval', () async {
       final memberId = _rowId(
@@ -126,14 +127,14 @@ class WalletRepository {
           INSERT INTO app.wallet_card (
             wallet_id, tier_id, amount, bonus, card_number, store_id,
             status, submitted_at, issued_on, recharged_on, expires_on,
-            receipt_reference, receipt_file_name
+            receipt_reference, receipt_file_name, receipt_image
           )
           VALUES (
             \$1, \$2, \$3, \$4, \$5,
             (SELECT id FROM app.shield_store WHERE code = \$6),
             'PENDING', now(), current_date, current_date,
             current_date + make_interval(months => \$7),
-            \$8, \$9
+            \$8, \$9, \$10
           )
           RETURNING uuid
         ''',
@@ -147,6 +148,7 @@ class WalletRepository {
           validityMonths,
           receiptReference,
           receiptFileName,
+          receiptImage,
         ],
       );
       return inserted.isEmpty ? null : inserted.first['uuid']?.toString();

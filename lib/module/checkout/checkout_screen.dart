@@ -386,6 +386,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           method: _method,
           fileName: file.name,
           bytes: file.bytes,
+          imageDataUrl: file.dataUrl,
           orderReference: _order.reference,
           storeId: _store.id,
           bankAccount: _account,

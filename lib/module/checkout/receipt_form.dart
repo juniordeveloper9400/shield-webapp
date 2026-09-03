@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -22,7 +24,12 @@ class PickedFile {
   final String name;
   final int bytes;
 
-  const PickedFile({required this.name, required this.bytes});
+  /// The image as a `data:image/jpeg;base64,…` URI, so the review console can
+  /// show the receipt itself and not just its file name. Null in tests and if
+  /// the bytes could not be read.
+  final String? dataUrl;
+
+  const PickedFile({required this.name, required this.bytes, this.dataUrl});
 }
 
 /// Opens the camera or the gallery.
@@ -44,11 +51,23 @@ class ReceiptPicker {
     if (override != null) {
       return override(source);
     }
-    final picked = await ImagePicker().pickImage(source: source);
+    // Downscale on the way in: a receipt only has to be legible, and the image
+    // rides through to Neon as text on the wallet_card row.
+    final picked = await ImagePicker().pickImage(
+      source: source,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 75,
+    );
     if (picked == null) {
       return null;
     }
-    return PickedFile(name: picked.name, bytes: await picked.length());
+    final bytes = await picked.readAsBytes();
+    return PickedFile(
+      name: picked.name,
+      bytes: bytes.length,
+      dataUrl: 'data:image/jpeg;base64,${base64Encode(bytes)}',
+    );
   }
 }
 
