@@ -259,18 +259,26 @@ class _StoreMapPickerState extends State<StoreMapPicker>
                           height: 22,
                           child: const _MeDot(),
                         ),
-                        for (final s in StoreDirectory.all)
-                          if (s.hasLocation)
-                            Marker(
-                              point: LatLng(s.latitude!, s.longitude!),
-                              width: 44,
-                              height: 50,
-                              alignment: Alignment.topCenter,
-                              child: _Pin(
-                                selected: s.id == widget.selectedId,
-                                onTap: () => select(s),
-                              ),
+                        // Unselected branches first, the selected one last, so
+                        // its label and taller pin sit on top of any it overlaps.
+                        for (final s in [
+                          for (final s in StoreDirectory.all)
+                            if (s.hasLocation && s.id != widget.selectedId) s,
+                          for (final s in StoreDirectory.all)
+                            if (s.hasLocation && s.id == widget.selectedId) s,
+                        ])
+                          Marker(
+                            point: LatLng(s.latitude!, s.longitude!),
+                            width: 156,
+                            height: 66,
+                            // The pin's tip, not its top, marks the spot.
+                            alignment: Alignment.bottomCenter,
+                            child: _StorePin(
+                              name: s.area,
+                              selected: s.id == widget.selectedId,
+                              onTap: () => select(s),
                             ),
+                          ),
                       ],
                     ),
                   ],
@@ -347,23 +355,75 @@ class _MeDot extends StatelessWidget {
   }
 }
 
-class _Pin extends StatelessWidget {
+/// A branch marker: the store name on a small white tag, sitting directly above
+/// a red map pin whose tip marks the branch. The selected branch gets a deeper
+/// red, a bolder tag and a larger pin so it stands out from the rest.
+class _StorePin extends StatelessWidget {
+  final String name;
   final bool selected;
   final VoidCallback onTap;
 
-  const _Pin({required this.selected, required this.onTap});
+  const _StorePin({
+    required this.name,
+    required this.selected,
+    required this.onTap,
+  });
+
+  /// Map-pin red, and the deeper red for the chosen branch.
+  static const Color _red = Color(0xFFE23744);
+  static const Color _redDeep = Color(0xFFC0182A);
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? AppColors.brandBlue : AppColors.textMuted;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Icon(
-        Icons.location_on_rounded,
-        size: selected ? 44 : 34,
-        color: color,
-        shadows: const [Shadow(color: Colors.black26, blurRadius: 4)],
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Flexible(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 154),
+              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(
+                  color: selected ? _redDeep : const Color(0x33000000),
+                  width: selected ? 1.2 : 1,
+                ),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black26,
+                    blurRadius: 3,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: Text(
+                name,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  height: 1.15,
+                  fontWeight: selected ? FontWeight.w800 : FontWeight.w700,
+                  color: selected ? _redDeep : AppColors.textDark,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 1),
+          Icon(
+            Icons.location_on,
+            size: selected ? 40 : 30,
+            color: selected ? _redDeep : _red,
+            shadows: const [
+              Shadow(color: Colors.black38, blurRadius: 3, offset: Offset(0, 1)),
+            ],
+          ),
+        ],
       ),
     );
   }
