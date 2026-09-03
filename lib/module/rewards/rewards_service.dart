@@ -192,6 +192,31 @@ class RewardsService extends ChangeNotifier {
 
   // ---- redemption -----------------------------------------------------
 
+  // ---- test hooks --------------------------------------------------
+
+  /// Puts [balance] straight in, as if the ledger had been read — for
+  /// widget tests, which have no database. Leaves the service `ready`.
+  @visibleForTesting
+  void debugSet(int balance, {List<RewardTxn> history = const []}) {
+    _phone = AuthService.instance.currentUser.value?.phone ?? 'test';
+    _balance = balance;
+    _history = history;
+    _status = RewardsStatus.ready;
+    _inFlight = null;
+    notifyListeners();
+  }
+
+  /// Back to the unloaded state.
+  @visibleForTesting
+  void debugReset() {
+    _phone = null;
+    _balance = 0;
+    _history = const [];
+    _status = RewardsStatus.idle;
+    _inFlight = null;
+    notifyListeners();
+  }
+
   /// Spends [points] from the balance as a negative `REDEMPTION` ledger row.
   /// The caller does the wallet-side credit. Returns `true` when the row was
   /// written.
