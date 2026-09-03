@@ -12,11 +12,28 @@ import 'otp_field.dart';
 /// Which half of the flow is on screen.
 enum _Step { details, otp }
 
-/// The sign-in gate: name, then mobile number, then a one-time code.
+/// Sign in (returning member — number only) or create account (new member —
+/// name + number). Both finish with the same one-time code step.
+enum _Mode {
+  signIn('Sign in', 'Sign in to SHIELD',
+      'Enter your registered mobile number and we will send a one-time code.'),
+  signUp('Create account', 'Create your SHIELD account',
+      'Tell us your name and mobile number — we verify the number with a '
+          'one-time code.');
+
+  const _Mode(this.tab, this.title, this.subtitle);
+
+  final String tab;
+  final String title;
+  final String subtitle;
+}
+
+/// The auth gate: a Sign in / Create account switch over a mobile number (and,
+/// for a new member, a name), then a one-time code.
 ///
-/// One screen rather than three routes. The number field is revealed by the
-/// name being usable, and the code step replaces the details in place, so the
-/// member only ever sees the one thing being asked of them next.
+/// One screen rather than separate routes — the code step replaces the details
+/// in place, so the member only ever sees the one thing being asked of them
+/// next.
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
 
@@ -32,6 +49,10 @@ class _LoginScreenState extends State<LoginScreen> {
   final _otpFocus = FocusNode();
 
   _Step _step = _Step.details;
+
+  /// Opens on Sign in — most people reaching this screen already have an
+  /// account. A new member switches to Create account from the link below.
+  _Mode _mode = _Mode.signIn;
 
   /// A send or verify round trip is in flight — blocks the buttons and a
   /// re-entrant submit from the keyboard's "done" action or an autofilled code.
@@ -100,6 +121,24 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool get _phoneReady => AuthService.validatePhone(_phone.text) == null;
 
+  bool get _needsName => _mode == _Mode.signUp;
+
+  /// The name to send with the OTP request: the typed name when creating an
+  /// account, `null` on sign-in (the name is read back from `app.users`).
+  String? get _nameArg => _needsName ? _name.text : null;
+
+  bool get _canSubmit => _phoneReady && (!_needsName || _nameReady);
+
+  void _switchMode(_Mode mode) {
+    if (_busy || _mode == mode) {
+      return;
+    }
+    setState(() {
+      _mode = mode;
+      _error = null;
+    });
+  }
+
   // ---- Actions ----
 
   Future<void> _sendOtp() async {
@@ -117,7 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final failure = await AuthService.instance.requestOtp(
-      name: _name.text,
+      name: _nameArg,
       phone: _phone.text,
     );
     if (!mounted) {
@@ -151,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     final failure = await AuthService.instance.requestOtp(
-      name: _name.text,
+      name: _nameArg,
       phone: _phone.text,
     );
     if (!mounted) {
@@ -384,12 +423,9 @@ class _LoginScreenState extends State<LoginScreen> {
       key: const ValueKey(_Step.details),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const AuthHeading(
-          title: 'Sign in to SHIELD',
-          subtitle:
-              'Start with your name — we will verify your mobile number with '
-              'a one-time code.',
-        ),
+        _ModeSwitch(mode: _mode, onChanged: _switchMode),
+        const SizedBox(height: 22),
+        AuthHeading(title: _mode.title, subtitle: _mode.subtitle),
         const SizedBox(height: 20),
         Form(
           key: _formKey,
@@ -397,40 +433,33 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
+              // Only on the create-account path. Kept out of the tree entirely
+              // on sign-in so the Form has nothing to validate but the number.
+              if (_needsName) ...[
+                LabelledField(
+                  label: 'Full name',
+                  hint: 'Enter your name',
+                  controller: _name,
+                  icon: Icons.person_outline_rounded,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [LengthLimitingTextInputFormatter(40)],
+                  validator: AuthService.validateName,
+                ),
+                const SizedBox(height: 14),
+              ],
               LabelledField(
-                label: 'Full name',
-                hint: 'Enter your name',
-                controller: _name,
-                icon: Icons.person_outline_rounded,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [LengthLimitingTextInputFormatter(40)],
-                validator: AuthService.validateName,
-              ),
-              // Revealed by the name, not sitting greyed out beside it: one
-              // question at a time, and the growth is what signals progress.
-              AnimatedSize(
-                duration: const Duration(milliseconds: 220),
-                curve: Curves.easeOut,
-                alignment: Alignment.topCenter,
-                child: _nameReady
-                    ? Padding(
-                        padding: const EdgeInsets.only(top: 14),
-                        child: LabelledField(
-                          label: 'Mobile number',
-                          hint: '10-digit mobile number',
-                          controller: _phone,
-                          icon: Icons.phone_iphone_rounded,
-                          prefixText: '+91  ',
-                          keyboardType: TextInputType.phone,
-                          inputFormatters: [
-                            FilteringTextInputFormatter.digitsOnly,
-                            LengthLimitingTextInputFormatter(10),
-                          ],
-                          validator: AuthService.validatePhone,
-                          onSubmitted: _phoneReady ? _sendOtp : null,
-                        ),
-                      )
-                    : const SizedBox(width: double.infinity),
+                label: 'Mobile number',
+                hint: '10-digit mobile number',
+                controller: _phone,
+                icon: Icons.phone_iphone_rounded,
+                prefixText: '+91  ',
+                keyboardType: TextInputType.phone,
+                inputFormatters: [
+                  FilteringTextInputFormatter.digitsOnly,
+                  LengthLimitingTextInputFormatter(10),
+                ],
+                validator: AuthService.validatePhone,
+                onSubmitted: _canSubmit ? _sendOtp : null,
               ),
             ],
           ),
@@ -443,9 +472,11 @@ class _LoginScreenState extends State<LoginScreen> {
         AuthButton(
           label: 'Get OTP',
           busy: _busy,
-          onPressed: _nameReady && _phoneReady ? _sendOtp : null,
+          onPressed: _canSubmit ? _sendOtp : null,
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 14),
+        _ModeSwitchLink(mode: _mode, onSwitch: _switchMode),
+        const SizedBox(height: 12),
         const Text(
           'By continuing you agree to the Terms of Use and Privacy Policy.',
           textAlign: TextAlign.center,
@@ -509,6 +540,106 @@ class _LoginScreenState extends State<LoginScreen> {
         ),
         const SizedBox(height: 18),
         AuthButton(label: 'Verify & continue', busy: _busy, onPressed: _verify),
+      ],
+    );
+  }
+}
+
+/// The Sign in / Create account segmented switch at the top of the details
+/// step.
+class _ModeSwitch extends StatelessWidget {
+  final _Mode mode;
+  final ValueChanged<_Mode> onChanged;
+
+  const _ModeSwitch({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.pageTint,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          for (final m in _Mode.values)
+            Expanded(
+              child: GestureDetector(
+                onTap: () => onChanged(m),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 160),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: m == mode ? AppColors.white : AppColors.transparent,
+                    borderRadius: BorderRadius.circular(9),
+                    boxShadow: m == mode
+                        ? [
+                            BoxShadow(
+                              color: AppColors.textDark.withValues(alpha: 0.08),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ]
+                        : null,
+                  ),
+                  child: Text(
+                    m.tab,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: m == mode
+                          ? AppColors.brandBlue
+                          : AppColors.textMuted,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The "New to SHIELD? Create an account" / "Already have an account? Sign in"
+/// line under the button.
+class _ModeSwitchLink extends StatelessWidget {
+  final _Mode mode;
+  final ValueChanged<_Mode> onSwitch;
+
+  const _ModeSwitchLink({required this.mode, required this.onSwitch});
+
+  @override
+  Widget build(BuildContext context) {
+    final toSignUp = mode == _Mode.signIn;
+    return Wrap(
+      alignment: WrapAlignment.center,
+      crossAxisAlignment: WrapCrossAlignment.center,
+      children: [
+        Text(
+          toSignUp ? 'New to SHIELD?' : 'Already have an account?',
+          style: const TextStyle(fontSize: 13.5, color: AppColors.textBody),
+        ),
+        TextButton(
+          onPressed: () =>
+              onSwitch(toSignUp ? _Mode.signUp : _Mode.signIn),
+          style: TextButton.styleFrom(
+            minimumSize: Size.zero,
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          ),
+          child: Text(
+            toSignUp ? 'Create an account' : 'Sign in',
+            style: const TextStyle(
+              fontSize: 13.5,
+              fontWeight: FontWeight.w800,
+              color: AppColors.brandBlue,
+            ),
+          ),
+        ),
       ],
     );
   }

@@ -245,13 +245,16 @@ class AuthService {
 
   /// Sends a code to [phone] and holds the details until it is verified.
   /// Returns null when the code went out, otherwise the reason it did not.
+  ///
+  /// [name] is given on the sign-up path and left null on the sign-in path —
+  /// a returning member's name is read back from `app.users` in [verifyOtp].
   Future<OtpError?> requestOtp({
-    required String name,
+    String? name,
     required String phone,
   }) async {
-    final cleanName = name.trim();
+    final cleanName = name?.trim() ?? '';
     final cleanPhone = phone.trim();
-    if (validateName(cleanName) != null) {
+    if (name != null && validateName(cleanName) != null) {
       return OtpError.invalidName;
     }
     if (validatePhone(cleanPhone) != null) {
@@ -295,7 +298,21 @@ class AuthService {
     }
 
     _pending = null;
-    final user = AuthUser(name: pending.name, phone: pending.phone);
+
+    // Sign-up carries the name; sign-in does not, so read the returning
+    // member's name back from `app.users`, falling back to a neutral
+    // placeholder that registration will overwrite.
+    var name = pending.name.trim();
+    if (name.isEmpty) {
+      name = (await MemberRepository.instance.nameByPhone(pending.phone))
+              ?.trim() ??
+          '';
+    }
+
+    final user = AuthUser(
+      name: name.isEmpty ? 'Member' : name,
+      phone: pending.phone,
+    );
     currentUser.value = user;
     _afterSignIn(user);
     return null;
