@@ -3,6 +3,50 @@ import '../../module/prescription/medicine_duration.dart';
 import '../../module/prescription/prescription_record.dart';
 import 'neon_http.dart';
 
+/// One prescription's pharmacist-built intake card, as read back from Neon.
+class RemotePrescriptionCard {
+  final String code;
+  final String? uuid;
+
+  /// `AWAITING_REVIEW` / `ORDERED` / `READ` — the console's own status trail.
+  final String status;
+  final String doctor;
+  final List<RemotePrescriptionMedicine> medicines;
+
+  RemotePrescriptionCard({
+    required this.code,
+    required this.uuid,
+    required this.status,
+    required this.doctor,
+    required this.medicines,
+  });
+
+  /// The pharmacist has entered the lines — the app card can expand.
+  bool get hasIntakeCard => medicines.isNotEmpty;
+}
+
+/// One line on a [RemotePrescriptionCard].
+class RemotePrescriptionMedicine {
+  final String name;
+  final String pack;
+  final int morning;
+  final int afternoon;
+  final int night;
+
+  /// Units the pharmacist wrote for this line — entered in the console, not
+  /// derived.
+  final int totalUnits;
+
+  const RemotePrescriptionMedicine({
+    required this.name,
+    required this.pack,
+    required this.morning,
+    required this.afternoon,
+    required this.night,
+    required this.totalUnits,
+  });
+}
+
 /// Writes an uploaded prescription to the `app.prescription` (and
 /// `app.prescription_medicine`) tables on Neon.
 ///
@@ -42,6 +86,7 @@ class PrescriptionRepository {
     required String patientAbhaId,
     required String code,
     required String fileName,
+    String? image,
     String? storeCode,
     String doctor = '',
     MedicineDuration? duration,
@@ -111,14 +156,14 @@ class PrescriptionRepository {
       final inserted = await NeonHttp.instance.query(
         '''
           INSERT INTO app.prescription
-            (member_id, patient_id, store_id, code, file_name, doctor,
+            (member_id, patient_id, store_id, code, file_name, image, doctor,
              duration, custom_days, recurring_from, recurring_until)
           VALUES
             (\$1, \$2,
              (SELECT id FROM app.shield_store WHERE code = \$3),
-             \$4, \$5, \$6,
-             \$7::app.medicine_duration, \$8,
-             \$9::date, \$10::date)
+             \$4, \$5, \$6, \$7,
+             \$8::app.medicine_duration, \$9,
+             \$10::date, \$11::date)
           RETURNING id, uuid
         ''',
         [
@@ -127,6 +172,7 @@ class PrescriptionRepository {
           storeCode,
           code,
           fileName,
+          image,
           doctor,
           _durationName(duration),
           customDays,
@@ -216,6 +262,121 @@ class PrescriptionRepository {
       await _insertMedicines(prescriptionId, medicines);
       return null;
     });
+  }
+
+  /// The pharmacist-built intake cards for every prescription on the account.
+  ///
+  /// The app reads this when the prescription screen opens and on pull-to-
+  /// refresh: an uploaded script starts with no medicine lines, the counter
+  /// adds them in the console, and the card on the screen expands the next
+  /// time this is read. Returns null when the database is off or unreachable
+  /// (so "not loaded" reads differently from "nothing sent yet").
+  ///
+  /// Match a result to an in-memory [PrescriptionRecord] by
+  /// `card.uuid == record.remoteId`.
+  Future<List<RemotePrescriptionCard>?> fetchForMember(
+    String memberPhone,
+  ) async {
+    if (!NeonHttp.isConfigured || memberPhone.trim().isEmpty) {
+      return null;
+    }
+    try {
+      final rows = await NeonHttp.instance.query(
+        r'''
+          SELECT rx.code, rx.uuid, rx.status, rx.doctor,
+                 pm.name, pm.pack,
+                 pm.dose_morning, pm.dose_afternoon, pm.dose_night,
+                 pm.total_units, pm.sort
+          FROM app.prescription rx
+          JOIN app.users u ON u.id = rx.member_id
+          LEFT JOIN app.prescription_medicine pm ON pm.prescription_id = rx.id
+          WHERE u.phone = $1 AND rx.deleted_at IS NULL
+          ORDER BY rx.created_at DESC, pm.sort, pm.id
+        ''',
+        [memberPhone.trim()],
+      );
+
+      final byUuid = <String, RemotePrescriptionCard>{};
+      final order = <String>[];
+      for (final row in rows) {
+        final uuid = (row['uuid'] ?? '').toString();
+        if (uuid.isEmpty) {
+          continue;
+        }
+        final card = byUuid.putIfAbsent(uuid, () {
+          order.add(uuid);
+          return RemotePrescriptionCard(
+            code: (row['code'] ?? '').toString(),
+            uuid: uuid,
+            status: (row['status'] ?? '').toString().toUpperCase(),
+            doctor: (row['doctor'] ?? '').toString(),
+            medicines: [],
+          );
+        });
+        final name = (row['name'] ?? '').toString().trim();
+        if (name.isEmpty) {
+          continue; // The LEFT JOIN row for a script with no lines yet.
+        }
+        card.medicines.add(
+          RemotePrescriptionMedicine(
+            name: name,
+            pack: (row['pack'] ?? '').toString(),
+            morning: _toInt(row['dose_morning']),
+            afternoon: _toInt(row['dose_afternoon']),
+            night: _toInt(row['dose_night']),
+            totalUnits: _toInt(row['total_units']),
+          ),
+        );
+      }
+      return [for (final uuid in order) byUuid[uuid]!];
+    } catch (error) {
+      NeonHttp.log('PrescriptionRepository.fetchForMember failed', error: error);
+      return null;
+    }
+  }
+
+  /// Marks a prescription `ORDERED` once the customer places the fulfilment
+  /// order. Found by [prescriptionUuid], else by the member's most recent
+  /// non-ordered script. Best-effort.
+  Future<void> markOrdered({
+    required String memberPhone,
+    String? prescriptionUuid,
+  }) async {
+    await _run<Object?>('markOrdered', () async {
+      if (prescriptionUuid != null && prescriptionUuid.isNotEmpty) {
+        await NeonHttp.instance.query(
+          '''
+            UPDATE app.prescription
+               SET status = CASE WHEN status = 'AWAITING_REVIEW'
+                                 THEN 'ORDERED'::app.prescription_status
+                                 ELSE status END,
+                   updated_at = now()
+             WHERE uuid = \$1::uuid AND deleted_at IS NULL
+          ''',
+          [prescriptionUuid],
+        );
+        return null;
+      }
+      await NeonHttp.instance.query(
+        '''
+          UPDATE app.prescription rx
+             SET status = 'ORDERED'::app.prescription_status, updated_at = now()
+            FROM app.users u
+           WHERE u.id = rx.member_id
+             AND u.phone = \$1
+             AND rx.status = 'AWAITING_REVIEW'
+             AND rx.deleted_at IS NULL
+        ''',
+        [memberPhone],
+      );
+      return null;
+    });
+  }
+
+  static int _toInt(Object? v) {
+    if (v is int) return v;
+    if (v is num) return v.toInt();
+    return int.tryParse(v?.toString() ?? '') ?? 0;
   }
 
   /// Inserts every medicine line for [prescriptionId] in one set-based

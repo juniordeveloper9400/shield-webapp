@@ -112,6 +112,17 @@ class PrescriptionCopy {
   final String undo;
   final String sentToCart;
 
+  // ---- Order-first flow ----
+  final String proceedToDelivery;
+  final String beforeOrderNote;
+  final String orderPlacedTitle;
+  final String orderPlacedDetail;
+  final String intakeCardReady;
+  final String viewMedicines;
+  final String hideMedicines;
+  final String medicineSingular;
+  final String medicinePlural;
+
   const PrescriptionCopy({
     required this.heading,
     required this.intro,
@@ -171,6 +182,15 @@ class PrescriptionCopy {
     required this.prescriptionRemoved,
     required this.undo,
     required this.sentToCart,
+    required this.proceedToDelivery,
+    required this.beforeOrderNote,
+    required this.orderPlacedTitle,
+    required this.orderPlacedDetail,
+    required this.intakeCardReady,
+    required this.viewMedicines,
+    required this.hideMedicines,
+    required this.medicineSingular,
+    required this.medicinePlural,
   });
 
   static PrescriptionCopy of(AppLanguage language) =>
@@ -243,8 +263,8 @@ class PrescriptionCopy {
     dueBeforeFrom: 'The due date must come after the from date.',
     yourPrescriptions: 'Your prescriptions',
     yourPrescriptionsIntro:
-        'These are the medicines our pharmacist read on each prescription. '
-        'Check them against your paper, then send them to the cart.',
+        'Place the order and the pharmacist reads your prescription, calls '
+        'you, and sends the medicine list back to this card.',
     newPrescription: 'New prescription',
     addPrescription: 'Add prescription',
     addNewPrescription: 'Add new prescription',
@@ -278,6 +298,19 @@ class PrescriptionCopy {
     prescriptionRemoved: 'Prescription removed',
     undo: 'Undo',
     sentToCart: 'sent to the cart',
+    proceedToDelivery: 'Proceed to delivery',
+    beforeOrderNote:
+        'Place the order below. The pharmacist then reads the script and '
+        'builds the medicine list for you.',
+    orderPlacedTitle: 'Order placed',
+    orderPlacedDetail:
+        'The pharmacist will call you to confirm the medicines and the '
+        'price. This card fills in once they send the details.',
+    intakeCardReady: 'Intake card ready',
+    viewMedicines: 'View medicines',
+    hideMedicines: 'Hide',
+    medicineSingular: 'medicine',
+    medicinePlural: 'medicines',
   );
 
   static const PrescriptionCopy malayalam = PrescriptionCopy(
@@ -350,8 +383,8 @@ class PrescriptionCopy {
     dueBeforeFrom: 'അവസാന തീയതി ആരംഭ തീയതിക്ക് ശേഷമായിരിക്കണം.',
     yourPrescriptions: 'നിങ്ങളുടെ കുറിപ്പടികൾ',
     yourPrescriptionsIntro:
-        'ഓരോ കുറിപ്പടിയിലും ഞങ്ങളുടെ ഫാർമസിസ്റ്റ് വായിച്ചെടുത്ത മരുന്നുകളാണ് '
-        'ഇവ. നിങ്ങളുടെ കടലാസുമായി ഒത്തുനോക്കിയ ശേഷം കാർട്ടിലേക്ക് അയയ്ക്കുക.',
+        'ഓർഡർ നൽകുക; ഫാർമസിസ്റ്റ് കുറിപ്പടി വായിച്ച്, നിങ്ങളെ വിളിച്ച്, '
+        'മരുന്നുകളുടെ പട്ടിക ഈ കാർഡിലേക്ക് അയയ്ക്കും.',
     newPrescription: 'പുതിയ കുറിപ്പടി',
     addPrescription: 'കുറിപ്പടി ചേർക്കുക',
     addNewPrescription: 'പുതിയ കുറിപ്പടി ചേർക്കുക',
@@ -385,5 +418,18 @@ class PrescriptionCopy {
     prescriptionRemoved: 'കുറിപ്പടി നീക്കി',
     undo: 'തിരികെ',
     sentToCart: 'കാർട്ടിലേക്ക് അയച്ചു',
+    proceedToDelivery: 'ഡെലിവറിയിലേക്ക് തുടരുക',
+    beforeOrderNote:
+        'താഴെ ഓർഡർ നൽകുക. ശേഷം ഫാർമസിസ്റ്റ് കുറിപ്പടി വായിച്ച് '
+        'മരുന്നുകളുടെ പട്ടിക തയ്യാറാക്കും.',
+    orderPlacedTitle: 'ഓർഡർ നൽകി',
+    orderPlacedDetail:
+        'മരുന്നുകളും വിലയും സ്ഥിരീകരിക്കാൻ ഫാർമസിസ്റ്റ് നിങ്ങളെ വിളിക്കും. '
+        'അവർ വിവരങ്ങൾ അയയ്ക്കുമ്പോൾ ഈ കാർഡ് പൂർത്തിയാകും.',
+    intakeCardReady: 'അളവ് കാർഡ് തയ്യാറായി',
+    viewMedicines: 'മരുന്നുകൾ കാണുക',
+    hideMedicines: 'മറയ്ക്കുക',
+    medicineSingular: 'മരുന്ന്',
+    medicinePlural: 'മരുന്നുകൾ',
   );
 }

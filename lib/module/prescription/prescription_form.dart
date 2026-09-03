@@ -16,6 +16,7 @@ import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
 import 'medicine_duration.dart';
 import 'prescription_copy.dart';
+import 'prescription_image.dart';
 import 'prescription_image_view.dart';
 import 'prescription_record.dart';
 
@@ -179,6 +180,18 @@ class PrescriptionFormController extends ChangeNotifier {
     // counter behind [PrescriptionRecord.number].
     final code = 'RX-'
         '${DateTime.now().millisecondsSinceEpoch.remainder(100000000).toString().padLeft(8, '0')}';
+    // The script itself, resized small, so the pharmacy console can read it
+    // and build the intake card from it. Best-effort — a photo that will not
+    // decode just leaves the row without an image.
+    String? image;
+    final rawImage = preview;
+    if (rawImage != null) {
+      try {
+        image = await prescriptionImageDataUrl(rawImage);
+      } catch (error) {
+        debugPrint('prescription: could not encode the script image — $error');
+      }
+    }
     try {
       final uuid = await PrescriptionRepository.instance.insertUpload(
         memberPhone: user.phone,
@@ -193,6 +206,7 @@ class PrescriptionFormController extends ChangeNotifier {
         patientAbhaId: patient.abhaId,
         code: code,
         fileName: record.fileName,
+        image: image,
         storeCode: _uploadStoreCode(),
         doctor: record.doctor,
         duration: record.duration,

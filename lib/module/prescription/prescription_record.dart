@@ -108,14 +108,24 @@ class PrescriptionMedicine {
 
   final IntakePattern intake;
 
+  /// Units the pharmacist wrote for this line in the console. Null on a line
+  /// that pre-dates the intake card (the old auto-read flow), where the total
+  /// is worked out from [intake] over the prescription's day count instead.
+  final int? totalUnits;
+
   const PrescriptionMedicine({
     required this.name,
     this.pack = '',
     this.intake = IntakePattern.none,
+    this.totalUnits,
   });
 
   /// Enough to dispense against: something to look up, and a dose above zero.
   bool get isComplete => name.trim().isNotEmpty && !intake.isEmpty;
+
+  /// The number of units on this line: the pharmacist's figure when they gave
+  /// one, otherwise the intake pattern spread over [days].
+  int unitsFor(int days) => totalUnits ?? intake.totalFor(days);
 }
 
 /// When a repeat prescription starts, and when it stops.
@@ -179,6 +189,11 @@ class PrescriptionRecord {
   /// so instead of offering to send them twice.
   bool inCart;
 
+  /// Set once the customer has placed the fulfilment order for this script.
+  /// Until the pharmacist sends the intake card the record then shows a plain
+  /// "we're on it" state; once [medicines] arrive the card expands.
+  bool ordered;
+
   /// The `uuid` of this prescription's row in `app.prescription` on the
   /// backend, once one has been written. Null when the record has only ever
   /// lived in memory — a build with no `DATABASE_URL`, or a save made while
@@ -196,6 +211,7 @@ class PrescriptionRecord {
     this.recurring,
     List<PrescriptionMedicine>? medicines,
     this.inCart = false,
+    this.ordered = false,
     this.remoteId,
   }) : medicines = medicines ?? <PrescriptionMedicine>[];
 
@@ -213,8 +229,18 @@ class PrescriptionRecord {
 
   bool get isRecurring => recurring != null;
 
-  /// Uploaded, but not yet read at the counter. Nothing can be ordered
-  /// against it until it has been.
+  /// Uploaded, but the fulfilment order has not been placed yet.
+  bool get isAwaitingOrder => !ordered;
+
+  /// Order placed, but the pharmacist has not sent the intake card back — the
+  /// card shows a plain "we have your prescription" state.
+  bool get awaitingPharmacist => ordered && medicines.isEmpty;
+
+  /// The pharmacist has sent the intake card — the medicines can be shown.
+  bool get hasIntakeCard => medicines.isNotEmpty;
+
+  /// Uploaded, but not yet read at the counter. Kept for callers that still
+  /// phrase it this way; true whenever no intake lines are on the record.
   bool get isAwaitingReview => medicines.isEmpty;
 
   /// The run the totals are worked out over. A manual number of days wins
@@ -235,10 +261,11 @@ class PrescriptionRecord {
 
   bool get canOrder => dispensable.isNotEmpty && days > 0;
 
-  /// Total units across every complete line — what the pharmacist counts out.
+  /// Total units across every complete line — the pharmacist's figures where
+  /// they gave them, otherwise the intake pattern over [days].
   int get totalUnits => dispensable.fold(
     0,
-    (sum, medicine) => sum + medicine.intake.totalFor(days),
+    (sum, medicine) => sum + medicine.unitsFor(days),
   );
 }
 
@@ -334,6 +361,66 @@ class PrescriptionBook extends ChangeNotifier {
       record.doctor = doctor;
     }
     notifyListeners();
+  }
+
+  /// Marks the record's fulfilment order as placed.
+  void markOrdered(String id) {
+    final index = indexOf(id);
+    if (index == -1) {
+      return;
+    }
+    _records[index].ordered = true;
+    notifyListeners();
+  }
+
+  /// Folds in the pharmacist's intake card once it has been read back from the
+  /// backend: the medicine lines and, if it carries one, the prescriber.
+  /// [ordered] is set true when the backend row shows the order was placed on
+  /// another device.
+  void applyIntakeCard(
+    String id, {
+    required List<PrescriptionMedicine> medicines,
+    String doctor = '',
+    bool ordered = false,
+  }) {
+    final index = indexOf(id);
+    if (index == -1) {
+      return;
+    }
+    final record = _records[index];
+    var changed = false;
+    if (!_sameMedicines(record.medicines, medicines)) {
+      record.medicines = List.unmodifiable(medicines);
+      changed = true;
+    }
+    if (doctor.isNotEmpty && record.doctor != doctor) {
+      record.doctor = doctor;
+      changed = true;
+    }
+    if (ordered && !record.ordered) {
+      record.ordered = true;
+      changed = true;
+    }
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  static bool _sameMedicines(
+    List<PrescriptionMedicine> a,
+    List<PrescriptionMedicine> b,
+  ) {
+    if (a.length != b.length) {
+      return false;
+    }
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].name != b[i].name ||
+          a[i].intake != b[i].intake ||
+          a[i].totalUnits != b[i].totalUnits) {
+        return false;
+      }
+    }
+    return true;
   }
 
   /// Announces a change made to a record in place, such as its lines reaching

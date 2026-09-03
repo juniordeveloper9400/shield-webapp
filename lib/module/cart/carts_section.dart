@@ -3,13 +3,12 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../labtest/lab_cart_screen.dart';
 import '../labtest/lab_cart_service.dart';
-import '../prescription/prescription_cart_screen.dart';
-import '../prescription/prescription_cart_service.dart';
 import 'cart_screen.dart';
 import 'cart_service.dart';
 
-/// "Your carts": summarizes the three distinct carts (Products, Prescriptions,
-/// and Lab tests) on the home screen.
+/// "Your carts": summarizes the two priced carts (Products and Lab tests) on
+/// the home screen. Prescriptions are an order-first flow with no basket, so
+/// they are not one of these tiles.
 class CartsSection extends StatelessWidget {
   const CartsSection({super.key});
 
@@ -79,30 +78,6 @@ class CartsSection extends StatelessWidget {
                         accentColor: AppColors.brandBlue,
                         onTap: () => Navigator.of(context).push(
                           MaterialPageRoute(builder: (_) => const CartScreen()),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: ListenableBuilder(
-                    listenable: PrescriptionCartService.instance,
-                    builder: (context, _) {
-                      final count = PrescriptionCartService.instance.orderCount;
-                      return _CartTile(
-                        key: const ValueKey('cart-tile-prescriptions'),
-                        icon: Icons.receipt_long_outlined,
-                        label: 'Prescriptions',
-                        countText: count == 0
-                            ? 'Empty'
-                            : '$count ${count == 1 ? 'order' : 'orders'}',
-                        isFilled: count > 0,
-                        accentColor: AppColors.brandGreenDeep,
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => const PrescriptionCartScreen(),
-                          ),
                         ),
                       );
                     },

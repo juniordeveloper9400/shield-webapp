@@ -1,20 +1,32 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/reward_celebration.dart';
 import 'registration_service.dart';
 
-/// The "you're in" beat after the registration form is submitted.
+/// The beat after the registration form is submitted.
 ///
-/// A dialog rather than a SnackBar: the reward is the whole reason the form
-/// exists, so it earns a moment of its own. [isEditing] drops the reward line
-/// for a profile the member is only updating — there is no second reward.
+/// A first registration earns points, so it gets the full [RewardCelebration]
+/// — the coin fills the screen, sparks, and the point count lands. An edit is
+/// just a save, so it gets a plain confirmation dialog and no reward.
 ///
-/// Resolves once the member dismisses it, so the caller can close the form
-/// afterwards rather than racing the animation.
+/// Resolves once the moment is over (the celebration auto-dismisses; the edit
+/// dialog waits for a tap), so the caller can close the form afterwards.
 Future<void> showRegistrationCelebration(
   BuildContext context, {
   required bool isEditing,
 }) {
+  if (isEditing) {
+    return _showEditConfirmation(context);
+  }
+  return RewardCelebration.show(
+    context,
+    points: RegistrationService.rewardPoints,
+    caption: 'reward points added — welcome to SHIELD',
+  );
+}
+
+Future<void> _showEditConfirmation(BuildContext context) {
   return showDialog<void>(
     context: context,
     barrierDismissible: false,
@@ -40,24 +52,20 @@ Future<void> showRegistrationCelebration(
               ),
             ),
             const SizedBox(height: 18),
-            Text(
-              isEditing ? 'Profile updated' : "You're registered 🎉",
+            const Text(
+              'Profile updated',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.w700,
                 color: AppColors.textDark,
               ),
             ),
             const SizedBox(height: 8),
-            Text(
-              isEditing
-                  ? 'Your details have been saved.'
-                  : 'Welcome to SHIELD. '
-                        '${RegistrationService.rewardPoints} reward points have '
-                        'been added to your wallet.',
+            const Text(
+              'Your details have been saved.',
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
                 color: AppColors.textBody,
@@ -75,7 +83,7 @@ Future<void> showRegistrationCelebration(
                   ),
                 ),
                 onPressed: () => Navigator.of(context).pop(),
-                child: Text(isEditing ? 'Done' : 'Start exploring'),
+                child: const Text('Done'),
               ),
             ),
           ],

@@ -4,26 +4,27 @@ import '../../theme/app_colors.dart';
 import 'prescription_copy.dart';
 import 'prescription_record.dart';
 
-/// One uploaded prescription, shown as the pharmacy read it: who it is for,
-/// who prescribed it, and a line per medicine with its intake and its total.
+/// One uploaded prescription on the account, through its life:
 ///
-/// A view, not a form. The member uploads an image; a pharmacist at the
-/// counter keys in what is written on it, and this card shows that back so
-/// the member can check it against the paper before it goes to the cart.
-/// Nothing on the lower half is theirs to type — a dose that could be edited
-/// here would be a dose the prescription never authorised.
-class PrescriptionDetailCard extends StatelessWidget {
+///  1. **Before the order** — who it is for, who prescribed it, and a note
+///     that placing the order is what sends it to the pharmacy.
+///  2. **Order placed, waiting on the pharmacist** — a plain "we have it,
+///     they'll call you" card. Nothing to expand yet.
+///  3. **Intake card sent** — the card expands to a line per medicine with its
+///     intake code and the units the pharmacist counted out.
+///
+/// A view, not a form: the lower half is the pharmacist's reading of the paper
+/// and never the member's to type.
+class PrescriptionDetailCard extends StatefulWidget {
   final PrescriptionRecord record;
   final PrescriptionCopy copy;
   final VoidCallback onDelete;
-  final VoidCallback onAddToCart;
 
   const PrescriptionDetailCard({
     super.key,
     required this.record,
     required this.copy,
     required this.onDelete,
-    required this.onAddToCart,
   });
 
   /// Widths the headings and every row share, so the three columns line up.
@@ -31,22 +32,31 @@ class PrescriptionDetailCard extends StatelessWidget {
   static const double totalWidth = 52;
 
   @override
+  State<PrescriptionDetailCard> createState() => _PrescriptionDetailCardState();
+}
+
+class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
+  bool _expanded = false;
+
+  PrescriptionRecord get record => widget.record;
+  PrescriptionCopy get copy => widget.copy;
+
+  @override
   Widget build(BuildContext context) {
-    final waiting = record.isAwaitingReview;
+    final ready = record.hasIntakeCard;
+    final accent = ready ? AppColors.brandGreenDeep : AppColors.border;
 
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: record.inCart ? AppColors.brandGreenDeep : AppColors.border,
-        ),
+        border: Border.all(color: accent),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(record: record, copy: copy),
+          _Header(record: record, ready: ready),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(
@@ -74,29 +84,29 @@ class PrescriptionDetailCard extends StatelessWidget {
                 const SizedBox(height: 13),
                 const Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 11),
-                if (waiting)
-                  _AwaitingReview(copy: copy)
-                else ...[
-                  _ColumnHeadings(copy: copy),
-                  const SizedBox(height: 2),
-                  for (final medicine in record.medicines)
-                    _MedicineRow(
-                      medicine: medicine,
-                      days: record.days,
-                      copy: copy,
-                    ),
-                  const SizedBox(height: 2),
-                  _IntakeLegend(copy: copy),
-                ],
+                if (record.isAwaitingOrder)
+                  _InfoStrip(
+                    icon: Icons.local_shipping_outlined,
+                    title: copy.deliveryDetails,
+                    detail: copy.beforeOrderNote,
+                  )
+                else if (record.awaitingPharmacist)
+                  _InfoStrip(
+                    icon: Icons.hourglass_top_rounded,
+                    title: copy.orderPlacedTitle,
+                    detail: copy.orderPlacedDetail,
+                  )
+                else
+                  _IntakeSection(
+                    record: record,
+                    copy: copy,
+                    expanded: _expanded,
+                    onToggle: () => setState(() => _expanded = !_expanded),
+                  ),
               ],
             ),
           ),
-          _Actions(
-            record: record,
-            copy: copy,
-            onDelete: onDelete,
-            onAddToCart: onAddToCart,
-          ),
+          _DeleteBar(label: copy.delete, onDelete: widget.onDelete),
         ],
       ),
     );
@@ -105,23 +115,21 @@ class PrescriptionDetailCard extends StatelessWidget {
 
 class _Header extends StatelessWidget {
   final PrescriptionRecord record;
-  final PrescriptionCopy copy;
+  final bool ready;
 
-  const _Header({required this.record, required this.copy});
+  const _Header({required this.record, required this.ready});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: record.inCart ? AppColors.greenTint : AppColors.pageTint,
+      color: ready ? AppColors.greenTint : AppColors.pageTint,
       padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
       child: Row(
         children: [
           Icon(
             Icons.description_outlined,
             size: 20,
-            color: record.inCart
-                ? AppColors.brandGreenDark
-                : AppColors.brandBlue,
+            color: ready ? AppColors.brandGreenDark : AppColors.brandBlue,
           ),
           const SizedBox(width: 9),
           Expanded(
@@ -153,21 +161,26 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
-          if (record.inCart) ...[
+          if (record.ordered) ...[
             const SizedBox(width: 8),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
               decoration: BoxDecoration(
                 color: AppColors.white,
                 borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: AppColors.brandGreenDeep),
+                border: Border.all(
+                  color: ready ? AppColors.brandGreenDeep : AppColors.border,
+                ),
               ),
               child: Text(
-                copy.inCart,
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.brandGreenDark,
+                record.number,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 0.4,
+                  color: ready
+                      ? AppColors.brandGreenDark
+                      : AppColors.textMuted,
                 ),
               ),
             ),
@@ -178,7 +191,7 @@ class _Header extends StatelessWidget {
   }
 }
 
-/// A label and the value beside it. Everything on this card is one of these.
+/// A label and the value beside it.
 class _FactRow extends StatelessWidget {
   final String label;
   final String value;
@@ -225,15 +238,18 @@ class _FactRow extends StatelessWidget {
   }
 }
 
-/// Shown while the upload is still with the counter.
-///
-/// The card exists from the moment the file is sent, so it has to be able to
-/// say what is happening to it — an empty table would read as a prescription
-/// with nothing on it rather than one nobody has read yet.
-class _AwaitingReview extends StatelessWidget {
-  final PrescriptionCopy copy;
+/// The tinted "here is what's happening" panel used before the order and while
+/// the pharmacist is still working on it.
+class _InfoStrip extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String detail;
 
-  const _AwaitingReview({required this.copy});
+  const _InfoStrip({
+    required this.icon,
+    required this.title,
+    required this.detail,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -246,16 +262,9 @@ class _AwaitingReview extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // A still icon rather than a spinner: this waits on a person at a
-          // counter, not on a request in flight, and a spinner would promise
-          // an answer in the next second for minutes on end.
-          const Padding(
-            padding: EdgeInsets.only(top: 1),
-            child: Icon(
-              Icons.hourglass_top_rounded,
-              size: 18,
-              color: AppColors.brandBlue,
-            ),
+          Padding(
+            padding: const EdgeInsets.only(top: 1),
+            child: Icon(icon, size: 18, color: AppColors.brandBlue),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -263,7 +272,7 @@ class _AwaitingReview extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  copy.awaitingReview,
+                  title,
                   style: const TextStyle(
                     fontSize: 14,
                     fontWeight: FontWeight.w700,
@@ -272,7 +281,7 @@ class _AwaitingReview extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  copy.awaitingReviewDetail,
+                  detail,
                   style: const TextStyle(
                     fontSize: 12.5,
                     height: 1.4,
@@ -284,6 +293,108 @@ class _AwaitingReview extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// The pharmacist's intake card: a header row that toggles, and the medicine
+/// table underneath it when open.
+class _IntakeSection extends StatelessWidget {
+  final PrescriptionRecord record;
+  final PrescriptionCopy copy;
+  final bool expanded;
+  final VoidCallback onToggle;
+
+  const _IntakeSection({
+    required this.record,
+    required this.copy,
+    required this.expanded,
+    required this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final count = record.medicines.length;
+    final noun =
+        count == 1 ? copy.medicineSingular : copy.medicinePlural;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: onToggle,
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            decoration: BoxDecoration(
+              color: AppColors.greenTint,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            padding: const EdgeInsets.fromLTRB(12, 11, 10, 11),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.medication_outlined,
+                  size: 18,
+                  color: AppColors.brandGreenDark,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        copy.intakeCardReady,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        '$count $noun · '
+                        '${expanded ? copy.hideMedicines : copy.viewMedicines}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.brandGreenDark,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: expanded ? 0.5 : 0,
+                  duration: const Duration(milliseconds: 180),
+                  child: const Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.brandGreenDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (expanded)
+          Padding(
+            padding: const EdgeInsets.only(top: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _ColumnHeadings(copy: copy),
+                const SizedBox(height: 2),
+                for (final medicine in record.medicines)
+                  _MedicineRow(
+                    medicine: medicine,
+                    days: record.days,
+                    copy: copy,
+                  ),
+                const SizedBox(height: 2),
+                _IntakeLegend(copy: copy),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }
@@ -326,8 +437,8 @@ class _ColumnHeadings extends StatelessWidget {
   }
 }
 
-/// One line of the table: what to dispense, how it is taken, and how much of
-/// it that adds up to over the run the prescription was uploaded for.
+/// One line of the table: what to dispense, how it is taken, and how many
+/// units of it the pharmacist counted out.
 class _MedicineRow extends StatelessWidget {
   final PrescriptionMedicine medicine;
   final int days;
@@ -342,7 +453,7 @@ class _MedicineRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final intake = medicine.intake;
-    final total = intake.totalFor(days);
+    final total = medicine.unitsFor(days);
     final spelled = intake.labelWith(copy.intakeSlots, copy.intakeNotSet);
 
     return Padding(
@@ -365,9 +476,6 @@ class _MedicineRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  // The pack and the code spelled out: between them they say
-                  // what arrives and when it is taken, which is what a member
-                  // checks this card against the paper for.
                   medicine.pack.isEmpty
                       ? spelled
                       : '${medicine.pack} · $spelled',
@@ -433,9 +541,7 @@ class _MedicineRow extends StatelessWidget {
   }
 }
 
-/// What the three digits mean, said once under the table rather than on every
-/// row. Someone meeting `101` for the first time needs it; someone who has
-/// read a prescription before does not.
+/// What the three digits mean, said once under the table.
 class _IntakeLegend extends StatelessWidget {
   final PrescriptionCopy copy;
 
@@ -472,18 +578,12 @@ class _IntakeLegend extends StatelessWidget {
   }
 }
 
-class _Actions extends StatelessWidget {
-  final PrescriptionRecord record;
-  final PrescriptionCopy copy;
+/// The foot of the card: just the one destructive action, kept quiet.
+class _DeleteBar extends StatelessWidget {
+  final String label;
   final VoidCallback onDelete;
-  final VoidCallback onAddToCart;
 
-  const _Actions({
-    required this.record,
-    required this.copy,
-    required this.onDelete,
-    required this.onAddToCart,
-  });
+  const _DeleteBar({required this.label, required this.onDelete});
 
   @override
   Widget build(BuildContext context) {
@@ -492,65 +592,22 @@ class _Actions extends StatelessWidget {
         color: AppColors.white,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      padding: const EdgeInsets.fromLTRB(10, 8, 12, 8),
-      child: Row(
-        children: [
-          // Shared out rather than sized to their labels: Malayalam sets both
-          // of these longer than English does, and neither may push the other
-          // off the card.
-          Expanded(
-            flex: 4,
-            child: TextButton.icon(
-              onPressed: onDelete,
-              icon: const Icon(Icons.delete_outline_rounded, size: 18),
-              label: Text(
-                copy.delete,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: TextButton.styleFrom(
-                foregroundColor: AppColors.danger,
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                textStyle: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
+      padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: onDelete,
+          icon: const Icon(Icons.delete_outline_rounded, size: 18),
+          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
+          style: TextButton.styleFrom(
+            foregroundColor: AppColors.danger,
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            textStyle: const TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            flex: 6,
-            child: FilledButton.icon(
-              // Nothing to send while the counter is still reading it, and
-              // nothing to send twice once the lines are in the cart.
-              onPressed: record.canOrder && !record.inCart ? onAddToCart : null,
-              icon: const Icon(Icons.add_shopping_cart_rounded, size: 18),
-              label: Text(
-                record.inCart ? copy.inCart : copy.addToCart,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              style: FilledButton.styleFrom(
-                backgroundColor: AppColors.brandBlue,
-                disabledBackgroundColor: AppColors.searchBorder,
-                foregroundColor: AppColors.white,
-                disabledForegroundColor: AppColors.white,
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 11,
-                ),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                textStyle: const TextStyle(
-                  fontSize: 14.5,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

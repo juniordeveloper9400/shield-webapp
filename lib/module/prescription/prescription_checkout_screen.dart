@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/neon/order_repository.dart';
+import '../../data/neon/prescription_repository.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
@@ -15,7 +16,6 @@ import '../orders/purchase_service.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
 import 'medicine_duration.dart';
-import 'prescription_cart_service.dart';
 import 'prescription_record.dart';
 import 'prescription_order_placed_screen.dart';
 
@@ -26,9 +26,9 @@ import 'prescription_order_placed_screen.dart';
 /// will pay once the pharmacist has confirmed the price. **Place order** files
 /// it into My Orders as a processing order and empties the basket.
 class PrescriptionCheckoutScreen extends StatefulWidget {
-  final List<PrescriptionOrder> orders;
+  final List<PrescriptionRecord> records;
 
-  const PrescriptionCheckoutScreen({super.key, required this.orders});
+  const PrescriptionCheckoutScreen({super.key, required this.records});
 
   @override
   State<PrescriptionCheckoutScreen> createState() =>
@@ -39,12 +39,6 @@ class _PrescriptionCheckoutScreenState
     extends State<PrescriptionCheckoutScreen> {
   PaymentMethod _method = PaymentMethods.bankTransfer;
   bool _placing = false;
-
-  int get _medicineCount =>
-      widget.orders.fold(0, (sum, order) => sum + order.medicineCount);
-
-  int get _unitCount =>
-      widget.orders.fold(0, (sum, order) => sum + order.unitCount);
 
   /// The branch this order is served by. The one pinned to the account comes
   /// first — the store chosen at registration or privilege-plan activation —
@@ -109,9 +103,9 @@ class _PrescriptionCheckoutScreenState
       final purchase = PurchaseService.instance.record(
         id: id,
         placedOn: formatDate(DateTime.now()),
-        // Medicines across every prescription, so the order line reads as
-        // something rather than "0 items"; falls back to the paper count.
-        itemCount: _medicineCount == 0 ? widget.orders.length : _medicineCount,
+        // One line per prescription — the medicines are not known yet, the
+        // pharmacist builds that list after the call.
+        itemCount: widget.records.length,
         // Priced at the counter — nothing is owed yet, and a made-up figure
         // here would flow straight into the earnings total.
         mrpTotal: 0,
@@ -119,9 +113,9 @@ class _PrescriptionCheckoutScreenState
         status: OrderStatus.processing,
         kind: OrderKind.prescription,
       );
-      // Write the prescription chain — patient, prescription, medicines and a
-      // kind:PRESCRIPTION order — through to Neon before the basket is cleared.
-      // Best-effort: a missing or unreachable database must not stop the order.
+      // Write the prescription chain — patient, prescription and a
+      // kind:PRESCRIPTION order — through to Neon. Best-effort: a missing or
+      // unreachable database must not stop the order.
       final user = AuthService.instance.currentUser.value;
       if (user != null) {
         unawaited(
@@ -133,13 +127,24 @@ class _PrescriptionCheckoutScreenState
             paymentMethodCode: _method.id,
             address: AddressBook.instance.deliverTo?.toDeliveryInput(),
             prescriptions: [
-              for (final order in widget.orders)
-                _prescriptionInput(order.record),
+              for (final record in widget.records) _prescriptionInput(record),
             ],
           ),
         );
+        for (final record in widget.records) {
+          unawaited(
+            PrescriptionRepository.instance.markOrdered(
+              memberPhone: user.phone,
+              prescriptionUuid: record.remoteId,
+            ),
+          );
+        }
       }
-      PrescriptionCartService.instance.clear();
+      // The records stay in the book; they just move to the "ordered, waiting
+      // on the pharmacist" state the upload screen shows.
+      for (final record in widget.records) {
+        PrescriptionBook.instance.markOrdered(record.id);
+      }
 
       if (!mounted) {
         return;
@@ -229,11 +234,7 @@ class _PrescriptionCheckoutScreenState
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          _SummaryCard(
-            orders: widget.orders,
-            medicineCount: _medicineCount,
-            unitCount: _unitCount,
-          ),
+          _SummaryCard(records: widget.records),
           const SizedBox(height: 14),
           // The store follows the account, so keep it in step with a
           // registration completed or an address saved over this screen.
@@ -293,19 +294,13 @@ class _Card extends StatelessWidget {
 }
 
 class _SummaryCard extends StatelessWidget {
-  final List<PrescriptionOrder> orders;
-  final int medicineCount;
-  final int unitCount;
+  final List<PrescriptionRecord> records;
 
-  const _SummaryCard({
-    required this.orders,
-    required this.medicineCount,
-    required this.unitCount,
-  });
+  const _SummaryCard({required this.records});
 
   @override
   Widget build(BuildContext context) {
-    final n = orders.length;
+    final n = records.length;
 
     return _Card(
       child: Column(
@@ -319,16 +314,8 @@ class _SummaryCard extends StatelessWidget {
               color: AppColors.textDark,
             ),
           ),
-          if (medicineCount > 0) ...[
-            const SizedBox(height: 3),
-            Text(
-              '$medicineCount medicine${medicineCount == 1 ? '' : 's'} · '
-              '$unitCount units',
-              style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
-          ],
           const SizedBox(height: 12),
-          for (final order in orders)
+          for (final record in records)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
               child: Row(
@@ -343,7 +330,7 @@ class _SummaryCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Text(
-                      order.number,
+                      record.number,
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w800,
@@ -355,7 +342,7 @@ class _SummaryCard extends StatelessWidget {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      order.record.patient.name,
+                      record.patient.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -380,8 +367,9 @@ class _SummaryCard extends StatelessWidget {
               SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Priced at the counter once the pharmacist confirms what is '
-                  'dispensed. You will see the bill before paying.',
+                  'The pharmacist reads each script, calls you to confirm the '
+                  'medicines, and prices it at the counter. You see the bill '
+                  'before paying.',
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.4,

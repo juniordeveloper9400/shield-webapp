@@ -452,13 +452,17 @@ class OrderRepository {
           continue;
         }
 
-        // Re-key the lines so a re-submitted prescription reflects whatever the
-        // pharmacy has added since.
-        await NeonHttp.instance.query(
-          'DELETE FROM app.prescription_medicine WHERE prescription_id = \$1',
-          [prescriptionId],
-        );
-        await _insertPrescriptionMedicines(prescriptionId, rx.medicines);
+        // Re-key the lines only when the caller actually sent some. The
+        // order-first flow places the order with no medicines and lets the
+        // pharmacist build the intake card in the console afterwards — a blind
+        // DELETE here would wipe that card if checkout were ever re-run.
+        if (rx.medicines.isNotEmpty) {
+          await NeonHttp.instance.query(
+            'DELETE FROM app.prescription_medicine WHERE prescription_id = \$1',
+            [prescriptionId],
+          );
+          await _insertPrescriptionMedicines(prescriptionId, rx.medicines);
+        }
 
         await NeonHttp.instance.query(
           '''

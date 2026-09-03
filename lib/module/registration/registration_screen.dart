@@ -8,6 +8,7 @@ import '../auth/auth_service.dart';
 import 'registration_celebration.dart';
 import 'registration_service.dart';
 import 'shield_store.dart';
+import 'store_locator.dart';
 
 /// The registration form: profile, address, and the branch that will serve it.
 ///
@@ -93,9 +94,19 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   // ---- Stores ----
 
-  List<ShieldStore> get _ranked => StoreDirectory.nearest(_pincode.text);
+  /// Set once the member shares their location — then the branches are ranked
+  /// by real distance instead of by pincode.
+  StoreLocationResult? _location;
+  bool _locating = false;
 
-  ShieldStore? get _suggested => StoreDirectory.suggestFor(_pincode.text);
+  bool get _locatedOk => _location?.ok ?? false;
+
+  List<ShieldStore> get _ranked => _locatedOk
+      ? _location!.ranked
+      : StoreDirectory.nearest(_pincode.text);
+
+  ShieldStore? get _suggested =>
+      _locatedOk ? _location!.nearest : StoreDirectory.suggestFor(_pincode.text);
 
   void _onPincodeChanged() {
     if (!mounted) {
@@ -104,13 +115,41 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     setState(_syncSuggestedStore);
   }
 
-  /// Assigns the nearest branch as the pincode completes, unless the member
-  /// has already chosen one.
+  /// Assigns the nearest branch as the pincode completes (or as soon as a
+  /// location fix lands), unless the member has already chosen one.
   void _syncSuggestedStore() {
     if (_storePickedByHand) {
       return;
     }
     _storeId = _suggested?.id;
+  }
+
+  Future<void> _useMyLocation() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _locating = true);
+    final result = await StoreLocator.locate();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _locating = false;
+      if (result.ok) {
+        _location = result;
+        _syncSuggestedStore();
+      }
+    });
+    if (!result.ok) {
+      final message = switch (result.outcome) {
+        LocationOutcome.serviceOff =>
+          'Turn on location on your device, then try again.',
+        LocationOutcome.denied =>
+          'Location permission is off. You can still pick a branch below.',
+        _ => "Couldn't get your location. Pick a branch below.",
+      };
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
   }
 
   // ---- Pickers ----
@@ -432,18 +471,56 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     final suggested = _suggested;
     final visible = _showAllStores ? ranked : ranked.take(4).toList();
 
+    final String subtitle;
+    if (_locatedOk) {
+      subtitle = 'Ranked by distance from you. The nearest is pre-selected — '
+          'change it if another branch suits you better.';
+    } else if (suggested == null) {
+      subtitle = 'Share your location, or enter your pincode above, and we will '
+          'put the nearest branch first.';
+    } else {
+      subtitle = 'Nearest to ${_pincode.text} is pre-selected. Change it if '
+          'another branch suits you better.';
+    }
+
     return _Section(
       title: 'Your SHIELD store',
-      subtitle: suggested == null
-          ? 'Enter your pincode above and we will put the nearest branch first.'
-          : 'Nearest to ${_pincode.text} is pre-selected. Change it if another '
-                'branch suits you better.',
+      subtitle: subtitle,
       children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _locating ? null : _useMyLocation,
+            icon: _locating
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location_rounded, size: 18),
+            label: Text(
+              _locating
+                  ? 'Finding you…'
+                  : _locatedOk
+                      ? 'Location updated · use again'
+                      : 'Use my location',
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandBlue,
+              side: const BorderSide(color: AppColors.brandBlue),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            ),
+          ),
+        ),
+        const SizedBox(height: 12),
         for (final store in visible) ...[
           _StoreCard(
             store: store,
             selected: store.id == _storeId,
             isNearest: suggested != null && store.id == suggested.id,
+            distanceLabel: _locatedOk && store.hasLocation
+                ? StoreLocator.label(_location!.kmTo(store)!)
+                : null,
             onTap: () => setState(() {
               _storeId = store.id;
               _storePickedByHand = true;
@@ -736,11 +813,15 @@ class _StoreCard extends StatelessWidget {
   final bool isNearest;
   final VoidCallback onTap;
 
+  /// "2.3 km" from the member, when a location fix is in hand.
+  final String? distanceLabel;
+
   const _StoreCard({
     required this.store,
     required this.selected,
     required this.isNearest,
     required this.onTap,
+    this.distanceLabel,
   });
 
   @override
@@ -816,6 +897,26 @@ class _StoreCard extends StatelessWidget {
                                 color: AppColors.white,
                               ),
                             ),
+                          ),
+                        if (distanceLabel != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.near_me_rounded,
+                                size: 12,
+                                color: AppColors.brandBlue,
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                '$distanceLabel away',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.brandBlue,
+                                ),
+                              ),
+                            ],
                           ),
                         Text(
                           store.hours,

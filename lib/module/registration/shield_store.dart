@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 /// A SHIELD outlet. Every registered member is assigned one, and it is the
@@ -21,6 +23,12 @@ class ShieldStore {
   /// walking in today is an option.
   final String hours;
 
+  /// Branch coordinates (`app.shield_store.latitude` / `longitude`). Null for a
+  /// branch that has not been pinned yet — [StoreDirectory.nearestTo] then
+  /// leaves it in the pincode-ranked order rather than sorting it last.
+  final double? latitude;
+  final double? longitude;
+
   const ShieldStore({
     required this.id,
     required this.name,
@@ -30,10 +38,33 @@ class ShieldStore {
     required this.pincode,
     this.phone = '',
     this.hours = '8:00 AM – 10:00 PM',
+    this.latitude,
+    this.longitude,
   });
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   /// "Melattur, Malappuram · 679326"
   String get addressLine => '$area, $city · $pincode';
+
+  /// Great-circle distance in kilometres from ([lat], [lng]) to this branch,
+  /// or null when the branch has no coordinates.
+  double? distanceKmFrom(double lat, double lng) {
+    if (!hasLocation) {
+      return null;
+    }
+    const earthKm = 6371.0;
+    final dLat = _rad(latitude! - lat);
+    final dLng = _rad(longitude! - lng);
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(lat)) *
+            math.cos(_rad(latitude!)) *
+            math.sin(dLng / 2) *
+            math.sin(dLng / 2);
+    return earthKm * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  static double _rad(double deg) => deg * math.pi / 180;
 }
 
 /// The published outlets, and the rule for picking the nearest one.
@@ -53,6 +84,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '679326',
+      latitude: 10.988,
+      longitude: 76.216,
     ),
     ShieldStore(
       id: 'SHD-MKP',
@@ -61,6 +94,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '676507',
+      latitude: 10.944,
+      longitude: 76.101,
     ),
     ShieldStore(
       id: 'SHD-TIR',
@@ -69,6 +104,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '676101',
+      latitude: 10.9138,
+      longitude: 75.9218,
     ),
     ShieldStore(
       id: 'SHD-KKT',
@@ -77,6 +114,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '679321',
+      latitude: 10.97,
+      longitude: 76.245,
     ),
     ShieldStore(
       id: 'SHD-MJR',
@@ -85,6 +124,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '676121',
+      latitude: 11.12,
+      longitude: 76.119,
     ),
     ShieldStore(
       id: 'SHD-ALN',
@@ -93,6 +134,8 @@ class StoreDirectory {
       city: 'Palakkad',
       state: 'Kerala',
       pincode: '678601',
+      latitude: 10.976,
+      longitude: 76.523,
     ),
     ShieldStore(
       id: 'SHD-TRD',
@@ -101,6 +144,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '676306',
+      latitude: 11.042,
+      longitude: 75.928,
     ),
     ShieldStore(
       id: 'SHD-KNP',
@@ -109,6 +154,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '676505',
+      latitude: 10.993,
+      longitude: 76.08,
     ),
     ShieldStore(
       id: 'SHD-KND',
@@ -117,6 +164,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '673638',
+      latitude: 11.139,
+      longitude: 75.964,
     ),
     ShieldStore(
       id: 'SHD-ARK',
@@ -125,6 +174,8 @@ class StoreDirectory {
       city: 'Malappuram',
       state: 'Kerala',
       pincode: '673639',
+      latitude: 11.205,
+      longitude: 76.008,
     ),
   ];
 
@@ -138,6 +189,30 @@ class StoreDirectory {
       }
     }
     return null;
+  }
+
+  /// Every store ordered by real distance from ([lat], [lng]), closest first.
+  ///
+  /// Used once the member has shared their location. Branches with no
+  /// coordinates on record sort after the located ones, keeping their relative
+  /// order. See [ShieldStore.distanceKmFrom].
+  static List<ShieldStore> nearestTo(double lat, double lng) {
+    final ranked = List<ShieldStore>.of(all);
+    ranked.sort((a, b) {
+      final da = a.distanceKmFrom(lat, lng);
+      final db = b.distanceKmFrom(lat, lng);
+      if (da == null && db == null) return 0;
+      if (da == null) return 1;
+      if (db == null) return -1;
+      return da.compareTo(db);
+    });
+    return ranked;
+  }
+
+  /// The single closest branch to ([lat], [lng]) with coordinates on record.
+  static ShieldStore? closestTo(double lat, double lng) {
+    final ranked = nearestTo(lat, lng);
+    return ranked.isNotEmpty && ranked.first.hasLocation ? ranked.first : null;
   }
 
   /// Every store, nearest to [pincode] first.

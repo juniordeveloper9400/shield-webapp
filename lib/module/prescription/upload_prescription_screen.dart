@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../data/neon/prescription_repository.dart';
 import '../../theme/app_colors.dart';
+import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import '../location/address_form_screen.dart';
-import 'pharmacy_desk.dart';
-import 'prescription_cart_badge.dart';
-import 'prescription_cart_service.dart';
+import 'prescription_checkout_screen.dart';
 import 'prescription_copy.dart';
 import 'prescription_detail_card.dart';
 import 'prescription_form.dart';
@@ -57,10 +57,15 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
 
   PrescriptionCopy get _copy => PrescriptionCopy.of(_language);
 
+  /// Prescriptions that still need the fulfilment order placed.
+  List<PrescriptionRecord> get _unordered =>
+      _book.records.where((record) => record.isAwaitingOrder).toList();
+
   @override
   void initState() {
     super.initState();
     _book.addListener(_onBookChanged);
+    _refreshFromBackend();
   }
 
   @override
@@ -76,6 +81,45 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
+  /// Reads the pharmacist-built intake cards from Neon and folds them into the
+  /// in-memory records — so a card that was "waiting on the pharmacist" fills
+  /// in and expands. Runs on open and on pull-to-refresh. Best-effort.
+  Future<void> _refreshFromBackend() async {
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone == null || _book.isEmpty) {
+      return;
+    }
+    final cards = await PrescriptionRepository.instance.fetchForMember(phone);
+    if (cards == null || !mounted) {
+      return;
+    }
+    final byUuid = {for (final card in cards) card.uuid: card};
+    for (final record in _book.records) {
+      final card = byUuid[record.remoteId];
+      if (card == null) {
+        continue;
+      }
+      _book.applyIntakeCard(
+        record.id,
+        doctor: card.doctor,
+        ordered: card.status == 'ORDERED' || card.status == 'READ',
+        medicines: [
+          for (final m in card.medicines)
+            PrescriptionMedicine(
+              name: m.name,
+              pack: m.pack,
+              intake: IntakePattern(
+                morning: m.morning,
+                afternoon: m.afternoon,
+                night: m.night,
+              ),
+              totalUnits: m.totalUnits > 0 ? m.totalUnits : null,
+            ),
+        ],
+      );
+    }
+  }
+
   void _submitInlineForm() {
     final record = _form.addTo(_book);
     setState(() {
@@ -83,28 +127,39 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       _form = PrescriptionFormController();
       spent.dispose();
     });
-    _sendForReview(record);
+    _say('${record.patient.name} · ${record.supplyLabel}');
+    // Straight on to delivery — placing the order is what sends the script to
+    // the pharmacy in the new flow.
+    _proceedToCheckout();
   }
 
   Future<void> _addAnother() async {
     final record = await PrescriptionFormSheet.show(context, copy: _copy);
     if (record != null && mounted) {
-      _sendForReview(record);
+      _say('${record.patient.name} · ${record.supplyLabel}');
     }
   }
 
-  /// Hands the upload to the counter. The card is already on screen showing
-  /// that it is being read, and fills itself in when the answer arrives.
-  void _sendForReview(PrescriptionRecord record) {
-    _say('${record.patient.name} · ${record.supplyLabel}');
-    PharmacyDesk.review(record);
+  /// Opens delivery + place-order for every prescription that has not been
+  /// ordered yet.
+  Future<void> _proceedToCheckout() async {
+    final pending = _unordered;
+    if (pending.isEmpty) {
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PrescriptionCheckoutScreen(records: pending),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   void _delete(PrescriptionRecord record) {
     final index = _book.indexOf(record.id);
     _book.remove(record.id);
-    // The basket cannot go on holding a prescription that no longer exists.
-    PrescriptionCartService.instance.remove(record.id);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
@@ -115,29 +170,10 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
             // Deleting a card takes the pharmacy's whole reading of it with
             // it, so the way back is offered rather than a confirmation
             // asked for.
-            onPressed: () {
-              _book.insert(index, record);
-              if (record.inCart) {
-                PrescriptionCartService.instance.add(record);
-              }
-            },
+            onPressed: () => _book.insert(index, record),
           ),
         ),
       );
-  }
-
-  /// Sends the whole prescription to the prescription basket.
-  ///
-  /// One prescription, one order. This used to break the record into a
-  /// product line per medicine and push them into the medicine cart, which
-  /// lost the prescription: six lines off one paper looked exactly like six
-  /// things picked off a shelf, and nothing in the cart could be traced back
-  /// to the number the counter files it under.
-  void _addToCart(PrescriptionRecord record) {
-    PrescriptionCartService.instance.add(record);
-    record.inCart = true;
-    _book.touch();
-    _say('${record.number} · ${_copy.sentToCart}');
   }
 
   void _say(String message) {
@@ -164,13 +200,6 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
             color: AppColors.textDark,
           ),
         ),
-        // The basket this screen fills, on the screen that fills it. Sending
-        // a prescription to the counter is otherwise a tap with nowhere
-        // visible to land.
-        actions: const [
-          PrescriptionCartBadge(),
-          SizedBox(width: 12),
-        ],
         bottom: const PreferredSize(
           preferredSize: Size.fromHeight(1),
           child: Divider(height: 1, color: AppColors.border),
@@ -185,6 +214,13 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               listenable: _form,
               enabled: () => _form.isComplete,
               onPressed: _submitInlineForm,
+            )
+          : _unordered.isNotEmpty
+          ? _BottomBar(
+              label: _copy.proceedToDelivery,
+              icon: Icons.local_shipping_outlined,
+              enabled: () => true,
+              onPressed: _proceedToCheckout,
             )
           : _BottomBar(
               label: _copy.addNewPrescription,
@@ -219,7 +255,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
   Widget _buildPrescriptionList() {
     final records = _book.records;
 
-    return ListView(
+    return RefreshIndicator(
+      onRefresh: _refreshFromBackend,
+      child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       children: [
         _LanguageToggle(
@@ -254,7 +292,6 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               record: record,
               copy: _copy,
               onDelete: () => _delete(record),
-              onAddToCart: () => _addToCart(record),
             ),
           ),
         // Once something is uploaded the next question is where it goes, so
@@ -264,6 +301,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
         const SizedBox(height: 16),
         _PharmacistCallCard(copy: _copy),
       ],
+      ),
     );
   }
 }

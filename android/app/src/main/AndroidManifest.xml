@@ -3,6 +3,11 @@
          own manifests. Firebase Phone Auth, the Neon backend and every remote
          image or video all talk over the network. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- "Nearest SHIELD branch" during registration / privilege activation.
+         Coarse is enough — the branches are kilometres apart. Optional: the
+         picker falls back to pincode ranking when it is denied. -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
     <application
         android:label="SHIELD"

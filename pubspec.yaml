@@ -26,14 +26,20 @@ dependencies:
   # endpoint instead of the socket above: plain HTTPS on 443, same behaviour in
   # debug and release, reliable from a phone. See data/neon/neon_http.dart.
   http: ^1.6.0
+  # Device location for "nearest SHIELD branch" during registration and
+  # privilege-plan activation. Works on Android/iOS and, on the web build,
+  # through the browser's geolocation API. See registration/store_locator.dart.
+  geolocator: ^13.0.4
+  # Resizes an uploaded prescription photo to a small JPEG data URI before it
+  # is written to app.prescription.image, so the pharmacy console can view it.
+  # Also used by tool/whiten_product_backgrounds.dart.
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4
-  # Used only by tool/whiten_product_backgrounds.dart, never by the app.
-  image: ^4.5.4
 
 flutter:
   uses-material-design: true

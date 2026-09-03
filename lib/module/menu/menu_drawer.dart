@@ -13,8 +13,6 @@ import '../health/health_section.dart';
 import '../investment/investment_plan_screen.dart';
 import '../labtest/lab_cart_screen.dart';
 import '../labtest/lab_cart_service.dart';
-import '../prescription/prescription_cart_screen.dart';
-import '../prescription/prescription_cart_service.dart';
 import '../rewards/rewards_service.dart';
 import '../refer/refer_earn_screen.dart';
 import '../rewards/rewards_screen.dart';
@@ -86,8 +84,6 @@ class MenuDrawer extends StatelessWidget {
                   _DashboardPanel(
                     onOpenWallet: () => _push(context, const WalletScreen()),
                     onOpenCart: () => _push(context, const CartScreen()),
-                    onOpenPrescriptionCart: () =>
-                        _push(context, const PrescriptionCartScreen()),
                     onOpenLabCart: () =>
                         _push(context, const LabCartScreen()),
                     onOpenOrders: () => _go(context, AppTab.orders.index),
@@ -426,7 +422,6 @@ class _InvestmentPlanRow extends StatelessWidget {
 class _DashboardPanel extends StatelessWidget {
   final VoidCallback onOpenWallet;
   final VoidCallback onOpenCart;
-  final VoidCallback onOpenPrescriptionCart;
   final VoidCallback onOpenLabCart;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenRewards;
@@ -434,7 +429,6 @@ class _DashboardPanel extends StatelessWidget {
   const _DashboardPanel({
     required this.onOpenWallet,
     required this.onOpenCart,
-    required this.onOpenPrescriptionCart,
     required this.onOpenLabCart,
     required this.onOpenOrders,
     required this.onOpenRewards,
@@ -498,17 +492,6 @@ class _DashboardPanel extends StatelessWidget {
                       value: '${CartService.instance.itemCount}',
                       accent: AppColors.brandBlue,
                       onTap: onOpenCart,
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _StatTile(
-                      icon: Icons.receipt_long_outlined,
-                      label: 'Prescription cart',
-                      value:
-                          '${PrescriptionCartService.instance.orderCount}',
-                      accent: AppColors.brandGreenDeep,
-                      onTap: onOpenPrescriptionCart,
                     ),
                   ),
                   SizedBox(

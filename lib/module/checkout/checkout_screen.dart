@@ -12,6 +12,7 @@ import '../patients/patient_book.dart';
 import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
+import '../registration/store_locator.dart';
 import '../wallet/wallet_service.dart';
 import 'checkout_chrome.dart';
 import 'checkout_order.dart';
@@ -1083,12 +1084,10 @@ class _StorePanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 10),
-            for (final option in StoreDirectory.all)
-              _PickableStoreTile(
-                store: option,
-                selected: option.id == store.id,
-                onTap: () => onStoreChanged(option),
-              ),
+            _LocatableStorePicker(
+              selectedId: store.id,
+              onPick: onStoreChanged,
+            ),
           ] else ...[
             if (plans.isNotEmpty) ...[
               const Text(
@@ -1140,15 +1139,112 @@ class _StorePanel extends StatelessWidget {
 }
 
 /// One selectable branch on the privilege-plan checkout.
+/// The branch picker on a privilege-plan activation checkout. Offers "Use my
+/// location" to rank the branches by real distance; falls back to SHIELD's
+/// listed order when location is declined.
+class _LocatableStorePicker extends StatefulWidget {
+  final String selectedId;
+  final ValueChanged<ShieldStore> onPick;
+
+  const _LocatableStorePicker({
+    required this.selectedId,
+    required this.onPick,
+  });
+
+  @override
+  State<_LocatableStorePicker> createState() => _LocatableStorePickerState();
+}
+
+class _LocatableStorePickerState extends State<_LocatableStorePicker> {
+  StoreLocationResult? _location;
+  bool _locating = false;
+
+  bool get _ok => _location?.ok ?? false;
+
+  Future<void> _useMyLocation() async {
+    setState(() => _locating = true);
+    final result = await StoreLocator.locate();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _locating = false;
+      if (result.ok) {
+        _location = result;
+        if (result.nearest != null) {
+          widget.onPick(result.nearest!);
+        }
+      }
+    });
+    if (!result.ok) {
+      final message = switch (result.outcome) {
+        LocationOutcome.serviceOff =>
+          'Turn on location on your device, then try again.',
+        LocationOutcome.denied =>
+          'Location permission is off. Pick a branch below.',
+        _ => "Couldn't get your location. Pick a branch below.",
+      };
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(message)));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final stores = _ok ? _location!.ranked : StoreDirectory.all;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Align(
+          alignment: Alignment.centerLeft,
+          child: OutlinedButton.icon(
+            onPressed: _locating ? null : _useMyLocation,
+            icon: _locating
+                ? const SizedBox(
+                    width: 15,
+                    height: 15,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : const Icon(Icons.my_location_rounded, size: 17),
+            label: Text(_locating
+                ? 'Finding you…'
+                : _ok
+                    ? 'Location updated · use again'
+                    : 'Use my location'),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandBlue,
+              side: const BorderSide(color: AppColors.brandBlue),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+        for (final option in stores)
+          _PickableStoreTile(
+            store: option,
+            selected: option.id == widget.selectedId,
+            distanceLabel: _ok && option.hasLocation
+                ? StoreLocator.label(_location!.kmTo(option)!)
+                : null,
+            onTap: () => widget.onPick(option),
+          ),
+      ],
+    );
+  }
+}
+
 class _PickableStoreTile extends StatelessWidget {
   final ShieldStore store;
   final bool selected;
   final VoidCallback onTap;
+  final String? distanceLabel;
 
   const _PickableStoreTile({
     required this.store,
     required this.selected,
     required this.onTap,
+    this.distanceLabel,
   });
 
   @override
@@ -1200,6 +1296,29 @@ class _PickableStoreTile extends StatelessWidget {
                   ],
                 ),
               ),
+              if (distanceLabel != null)
+                Padding(
+                  padding: const EdgeInsets.only(left: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.near_me_rounded,
+                        size: 12,
+                        color: AppColors.brandBlue,
+                      ),
+                      const SizedBox(width: 3),
+                      Text(
+                        distanceLabel!,
+                        style: const TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.brandBlue,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
         ),
