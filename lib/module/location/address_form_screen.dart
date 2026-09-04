@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../theme/app_colors.dart';
 import 'address_book.dart';
 import 'address_fields.dart';
+import 'device_location.dart';
 
 /// "Add address details" — search or pincode, the address lines, a label, and
 /// receiver details, saved from a pinned bottom action.
@@ -26,6 +28,7 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
   final _phone = TextEditingController();
 
   AddressLabel _label = AddressLabel.home;
+  bool _locating = false;
 
   @override
   void dispose() {
@@ -63,9 +66,57 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
     ).showSnackBar(SnackBar(content: Text('${_label.label} address saved')));
   }
 
-  void _useCurrentLocation() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Device location is not connected yet')),
+  Future<void> _useCurrentLocation() async {
+    if (_locating) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _locating = true);
+    final result = await DeviceLocation.current();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _locating = false);
+
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    if (!result.ok) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(DeviceLocation.message(result.outcome)),
+          action: switch (result.outcome) {
+            DeviceLocationOutcome.deniedForever => SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openAppSettings,
+              ),
+            DeviceLocationOutcome.serviceOff => SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openLocationSettings,
+              ),
+            _ => null,
+          },
+        ),
+      );
+      return;
+    }
+
+    final place = result.place!;
+    setState(() {
+      if (place.hasPincode) {
+        _pincode.text = place.pincode;
+      }
+      if (_area.text.trim().isEmpty && place.areaLine.isNotEmpty) {
+        _area.text = place.areaLine;
+      }
+    });
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          place.hasPincode
+              ? 'Location set${place.city.isNotEmpty ? ' — ${place.city}' : ''} '
+                    '(${place.pincode})'
+              : 'Got your location — add the pincode to finish',
+        ),
+      ),
     );
   }
 
@@ -121,7 +172,10 @@ class _AddressFormScreenState extends State<AddressFormScreen> {
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: CurrentLocationButton(onTap: _useCurrentLocation),
+                  child: CurrentLocationButton(
+                    onTap: _useCurrentLocation,
+                    loading: _locating,
+                  ),
                 ),
               ],
             ),

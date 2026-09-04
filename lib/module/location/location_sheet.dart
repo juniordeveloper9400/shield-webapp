@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../theme/app_colors.dart';
 import 'address_book.dart';
 import 'address_form_screen.dart';
+import 'device_location.dart';
 
 /// Bottom sheet for choosing the delivery location.
 ///
@@ -45,6 +47,7 @@ class _LocationSheetState extends State<LocationSheet> {
     text: widget.currentPincode,
   );
   String? _error;
+  bool _locating = false;
 
   @override
   void dispose() {
@@ -61,11 +64,46 @@ class _LocationSheetState extends State<LocationSheet> {
     Navigator.of(context).pop(value);
   }
 
-  void _notConnected(String what) {
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text('$what is not connected yet')));
+  Future<void> _useCurrentLocation() async {
+    if (_locating) {
+      return;
+    }
+    setState(() {
+      _locating = true;
+      _error = null;
+    });
+    final result = await DeviceLocation.current();
+    if (!mounted) {
+      return;
+    }
+
+    if (result.ok && result.place!.hasPincode) {
+      Navigator.of(context).pop(result.place!.pincode);
+      return;
+    }
+
+    setState(() => _locating = false);
+    final messenger = ScaffoldMessenger.of(context)..clearSnackBars();
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result.ok
+              ? 'Found your location but not its pincode — enter it above.'
+              : DeviceLocation.message(result.outcome),
+        ),
+        action: switch (result.outcome) {
+          DeviceLocationOutcome.deniedForever => SnackBarAction(
+              label: 'Settings',
+              onPressed: Geolocator.openAppSettings,
+            ),
+          DeviceLocationOutcome.serviceOff => SnackBarAction(
+              label: 'Settings',
+              onPressed: Geolocator.openLocationSettings,
+            ),
+          _ => null,
+        },
+      ),
+    );
   }
 
   @override
@@ -129,9 +167,10 @@ class _LocationSheetState extends State<LocationSheet> {
             ),
             const Divider(height: 1, color: AppColors.border),
             _ActionRow(
-              label: 'Use current location',
+              label: _locating ? 'Getting your location…' : 'Use current location',
               trailing: Icons.my_location_rounded,
-              onTap: () => _notConnected('Device location'),
+              loading: _locating,
+              onTap: _useCurrentLocation,
             ),
             const Divider(height: 1, color: AppColors.border),
             _ActionRow(
@@ -248,11 +287,13 @@ class _ActionRow extends StatelessWidget {
   final String label;
   final IconData trailing;
   final VoidCallback onTap;
+  final bool loading;
 
   const _ActionRow({
     required this.label,
     required this.trailing,
     required this.onTap,
+    this.loading = false,
   });
 
   @override
@@ -260,7 +301,7 @@ class _ActionRow extends StatelessWidget {
     return Material(
       color: AppColors.white,
       child: InkWell(
-        onTap: onTap,
+        onTap: loading ? null : onTap,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
           child: Row(
@@ -278,7 +319,17 @@ class _ActionRow extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 10),
-              Icon(trailing, size: 22, color: AppColors.brandBlue),
+              if (loading)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.brandBlue,
+                  ),
+                )
+              else
+                Icon(trailing, size: 22, color: AppColors.brandBlue),
             ],
           ),
         ),

@@ -73,7 +73,14 @@ class AddressLineField extends StatelessWidget {
 class CurrentLocationButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const CurrentLocationButton({super.key, required this.onTap});
+  /// Shows a spinner and ignores taps while the fix is being fetched.
+  final bool loading;
+
+  const CurrentLocationButton({
+    super.key,
+    required this.onTap,
+    this.loading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -81,7 +88,7 @@ class CurrentLocationButton extends StatelessWidget {
       color: AppColors.offerTint,
       borderRadius: BorderRadius.circular(10),
       child: InkWell(
-        onTap: onTap,
+        onTap: loading ? null : onTap,
         borderRadius: BorderRadius.circular(10),
         child: Container(
           decoration: BoxDecoration(
@@ -94,15 +101,25 @@ class CurrentLocationButton extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(
-                Icons.my_location_rounded,
-                size: 19,
-                color: AppColors.brandBlue,
-              ),
+              if (loading)
+                const SizedBox(
+                  width: 17,
+                  height: 17,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: AppColors.brandBlue,
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.my_location_rounded,
+                  size: 19,
+                  color: AppColors.brandBlue,
+                ),
               const SizedBox(width: 7),
               Flexible(
                 child: Text(
-                  'Current Location',
+                  loading ? 'Locating…' : 'Current Location',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(

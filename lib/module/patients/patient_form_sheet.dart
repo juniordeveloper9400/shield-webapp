@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:geolocator/geolocator.dart';
 
 import '../../data/neon/patient_repository.dart';
 import '../../dates.dart';
@@ -10,6 +11,7 @@ import '../../widgets/age_badge.dart';
 import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import '../location/address_fields.dart';
+import '../location/device_location.dart';
 import 'patient_book.dart';
 
 /// Add or edit a patient.
@@ -110,6 +112,7 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
   /// Set on the first refused save, so the date — which has no validator of
   /// its own — reports alongside the fields that do.
   bool _submitted = false;
+  bool _locating = false;
 
   @override
   void dispose() {
@@ -155,14 +158,60 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
     }
   }
 
-  /// Same stub the standalone address form shows — device location is not wired
-  /// up yet, so the button says so rather than doing nothing.
-  void _useCurrentLocation() {
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        const SnackBar(content: Text('Device location is not connected yet')),
+  /// Fills the pincode (and locality, when it is still blank) from the
+  /// device's current position — the same flow as the standalone address form.
+  Future<void> _useCurrentLocation() async {
+    if (_locating) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    setState(() => _locating = true);
+    final result = await DeviceLocation.current();
+    if (!mounted) {
+      return;
+    }
+    setState(() => _locating = false);
+
+    final messenger = ScaffoldMessenger.of(context)..hideCurrentSnackBar();
+    if (!result.ok) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(DeviceLocation.message(result.outcome)),
+          action: switch (result.outcome) {
+            DeviceLocationOutcome.deniedForever => SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openAppSettings,
+              ),
+            DeviceLocationOutcome.serviceOff => SnackBarAction(
+                label: 'Settings',
+                onPressed: Geolocator.openLocationSettings,
+              ),
+            _ => null,
+          },
+        ),
       );
+      return;
+    }
+
+    final place = result.place!;
+    setState(() {
+      if (place.hasPincode) {
+        _pincode.text = place.pincode;
+      }
+      if (_area.text.trim().isEmpty && place.areaLine.isNotEmpty) {
+        _area.text = place.areaLine;
+      }
+    });
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          place.hasPincode
+              ? 'Location set${place.city.isNotEmpty ? ' — ${place.city}' : ''} '
+                    '(${place.pincode})'
+              : 'Got your location — add the pincode to finish',
+        ),
+      ),
+    );
   }
 
   void _save() {
@@ -437,7 +486,10 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: CurrentLocationButton(onTap: _useCurrentLocation),
+                        child: CurrentLocationButton(
+                          onTap: _useCurrentLocation,
+                          loading: _locating,
+                        ),
                       ),
                     ],
                   ),
