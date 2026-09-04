@@ -291,14 +291,9 @@ class AuthService {
       return OtpError.invalidPhone;
     }
 
-    // The app's own cap — four requests an hour — checked before Firebase is
-    // touched, so a member who keeps tapping never trips Firebase's own
-    // harsher block.
-    final blocked = await _sendThrottle.blockedFor();
-    if (blocked != null) {
-      _sendCooldownRemaining = blocked;
-      return OtpError.throttled;
-    }
+    // The device-side cap is gone (see [OtpSendThrottle]); this call only
+    // clears anything an older build left stored so an updated app recovers.
+    await _sendThrottle.blockedFor();
 
     final OtpError? failure;
     try {
@@ -310,17 +305,10 @@ class AuthService {
       debugPrint('requestOtp: gateway unavailable — $error');
       return OtpError.unavailable;
     }
-    // A real attempt reached Firebase — count it toward the hourly cap
-    // whatever it came back with.
-    unawaited(_sendThrottle.recordSend());
     if (failure != null) {
-      // Firebase's own abuse block. It is opaque and only grows while it keeps
-      // being hit, so take the device off Firebase for an hour and surface it
-      // as the same self-clearing "try again in N min" state as the local cap.
-      if (failure == OtpError.tooManyRequests) {
-        _sendCooldownRemaining = await _sendThrottle.registerServerBlock();
-        return OtpError.throttled;
-      }
+      // A genuine Firebase abuse block — surfaced honestly as "try again
+      // later" (it clears on Firebase's own schedule, usually minutes). The
+      // app no longer piles an hour-long device lock on top of it.
       return failure;
     }
 
