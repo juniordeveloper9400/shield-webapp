@@ -66,6 +66,16 @@ class _LoginScreenState extends State<LoginScreen> {
   Timer? _cooldown;
   int _secondsLeft = 0;
 
+  /// While set and in the future, the send button is disabled and the form
+  /// shows a self-updating "try again in N min" note — the device has hit the
+  /// four-an-hour cap or Firebase's own block. A ticking [_throttleTimer]
+  /// refreshes the note and clears both when the wait runs out.
+  DateTime? _throttledUntil;
+  Timer? _throttleTimer;
+
+  bool get _throttled =>
+      _throttledUntil != null && DateTime.now().isBefore(_throttledUntil!);
+
   @override
   void initState() {
     super.initState();
@@ -84,6 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void dispose() {
     _cooldown?.cancel();
+    _throttleTimer?.cancel();
     AuthService.instance.currentUser.removeListener(_onSessionChanged);
     _name
       ..removeListener(_repaint)
@@ -127,7 +138,7 @@ class _LoginScreenState extends State<LoginScreen> {
   /// account, `null` on sign-in (the name is read back from `app.users`).
   String? get _nameArg => _needsName ? _name.text : null;
 
-  bool get _canSubmit => _phoneReady && (!_needsName || _nameReady);
+  bool get _canSubmit => _phoneReady && (!_needsName || _nameReady) && !_throttled;
 
   void _switchMode(_Mode mode) {
     if (_busy || _mode == mode) {
@@ -165,7 +176,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (failure != null) {
       setState(() {
         _busy = false;
-        _error = _sendErrorText(failure);
+        if (failure == OtpError.throttled) {
+          _beginThrottle();
+        } else {
+          _error = _sendErrorText(failure);
+        }
       });
       return;
     }
@@ -181,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _resend() async {
-    if (_secondsLeft > 0 || _resending || _busy) {
+    if (_secondsLeft > 0 || _resending || _busy || _throttled) {
       return;
     }
     setState(() {
@@ -199,7 +214,11 @@ class _LoginScreenState extends State<LoginScreen> {
     if (failure != null) {
       setState(() {
         _resending = false;
-        _error = _sendErrorText(failure);
+        if (failure == OtpError.throttled) {
+          _beginThrottle();
+        } else {
+          _error = _sendErrorText(failure);
+        }
       });
       return;
     }
@@ -211,6 +230,46 @@ class _LoginScreenState extends State<LoginScreen> {
     _otpFocus.requestFocus();
     _startCooldown();
     _announceCode();
+  }
+
+  /// Locks the send button for the wait [AuthService] reported and shows a
+  /// note that counts itself down, clearing when the wait is up. The device
+  /// can sign in again straight after — no reinstall, no new number.
+  void _beginThrottle() {
+    final left =
+        AuthService.instance.sendCooldownRemaining ?? const Duration(hours: 1);
+    _throttledUntil = DateTime.now().add(left);
+    _error = _throttleMessage();
+    _throttleTimer?.cancel();
+    _throttleTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) {
+        return;
+      }
+      if (!_throttled) {
+        setState(() {
+          _throttledUntil = null;
+          _error = null;
+          _throttleTimer?.cancel();
+          _throttleTimer = null;
+        });
+      } else {
+        setState(() => _error = _throttleMessage());
+      }
+    });
+  }
+
+  /// "You can try again in about 42 minutes." — refreshed on every timer tick.
+  String _throttleMessage() {
+    final until = _throttledUntil;
+    if (until == null) {
+      return '';
+    }
+    final minutes = until.difference(DateTime.now()).inMinutes + 1;
+    final wait =
+        minutes <= 1 ? 'under a minute' : 'about $minutes minutes';
+    return 'That is too many code requests in a row. You can try again in '
+        '$wait — it clears on its own, no need to reinstall or use another '
+        'number.';
   }
 
   /// Turns a send-time [OtpError] into a line for the form.

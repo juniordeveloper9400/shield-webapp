@@ -314,6 +314,13 @@ class AuthService {
     // whatever it came back with.
     unawaited(_sendThrottle.recordSend());
     if (failure != null) {
+      // Firebase's own abuse block. It is opaque and only grows while it keeps
+      // being hit, so take the device off Firebase for an hour and surface it
+      // as the same self-clearing "try again in N min" state as the local cap.
+      if (failure == OtpError.tooManyRequests) {
+        _sendCooldownRemaining = await _sendThrottle.registerServerBlock();
+        return OtpError.throttled;
+      }
       return failure;
     }
 
