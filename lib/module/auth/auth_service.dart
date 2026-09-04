@@ -273,6 +273,16 @@ class AuthService {
     return null;
   }
 
+  /// Whether [phone] already has an account — an `app.users` row, meaning the
+  /// number has signed in before. `true` / `false` when the database answered,
+  /// `null` when it could not be reached (the caller should let the sign-in
+  /// through rather than block a member on a network blip).
+  ///
+  /// The login screen uses this to send an unknown number to "Create account"
+  /// instead of firing an OTP at a number with no account.
+  Future<bool?> hasAccount(String phone) =>
+      MemberRepository.instance.phoneExists(phone.trim());
+
   /// Sends a code to [phone] and holds the details until it is verified.
   /// Returns null when the code went out, otherwise the reason it did not.
   ///

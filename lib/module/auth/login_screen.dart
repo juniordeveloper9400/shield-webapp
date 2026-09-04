@@ -166,6 +166,26 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
+    // Sign in is for numbers that already have an account. An unknown number
+    // belongs on Create account — don't fire an OTP at it. If the check can't
+    // reach the database it returns null and we carry on, so a real member is
+    // never blocked by a blip.
+    if (_mode == _Mode.signIn) {
+      final exists = await AuthService.instance.hasAccount(_phone.text);
+      if (!mounted) {
+        return;
+      }
+      if (exists == false) {
+        setState(() {
+          _busy = false;
+          _mode = _Mode.signUp;
+          _error =
+              "That number doesn't have an account yet — create one to continue.";
+        });
+        return;
+      }
+    }
+
     final failure = await AuthService.instance.requestOtp(
       name: _nameArg,
       phone: _phone.text,
@@ -191,43 +211,6 @@ class _LoginScreenState extends State<LoginScreen> {
       _step = _Step.otp;
       _error = null;
     });
-    _startCooldown();
-    _announceCode();
-  }
-
-  Future<void> _resend() async {
-    if (_secondsLeft > 0 || _resending || _busy || _throttled) {
-      return;
-    }
-    setState(() {
-      _resending = true;
-      _error = null;
-    });
-
-    final failure = await AuthService.instance.requestOtp(
-      name: _nameArg,
-      phone: _phone.text,
-    );
-    if (!mounted) {
-      return;
-    }
-    if (failure != null) {
-      setState(() {
-        _resending = false;
-        if (failure == OtpError.throttled) {
-          _beginThrottle();
-        } else {
-          _error = _sendErrorText(failure);
-        }
-      });
-      return;
-    }
-    _otp.clear();
-    setState(() {
-      _resending = false;
-      _error = null;
-    });
-    _otpFocus.requestFocus();
     _startCooldown();
     _announceCode();
   }
@@ -265,11 +248,47 @@ class _LoginScreenState extends State<LoginScreen> {
       return '';
     }
     final minutes = until.difference(DateTime.now()).inMinutes + 1;
-    final wait =
-        minutes <= 1 ? 'under a minute' : 'about $minutes minutes';
+    final wait = minutes <= 1 ? 'under a minute' : 'about $minutes minutes';
     return 'That is too many code requests in a row. You can try again in '
         '$wait — it clears on its own, no need to reinstall or use another '
         'number.';
+  }
+
+  Future<void> _resend() async {
+    if (_secondsLeft > 0 || _resending || _busy || _throttled) {
+      return;
+    }
+    setState(() {
+      _resending = true;
+      _error = null;
+    });
+
+    final failure = await AuthService.instance.requestOtp(
+      name: _nameArg,
+      phone: _phone.text,
+    );
+    if (!mounted) {
+      return;
+    }
+    if (failure != null) {
+      setState(() {
+        _resending = false;
+        if (failure == OtpError.throttled) {
+          _beginThrottle();
+        } else {
+          _error = _sendErrorText(failure);
+        }
+      });
+      return;
+    }
+    _otp.clear();
+    setState(() {
+      _resending = false;
+      _error = null;
+    });
+    _otpFocus.requestFocus();
+    _startCooldown();
+    _announceCode();
   }
 
   /// Turns a send-time [OtpError] into a line for the form.
@@ -311,8 +330,8 @@ class _LoginScreenState extends State<LoginScreen> {
     return code == null || code.isEmpty ? '' : '\n($code)';
   }
 
-  /// "about 45 minutes" / "a minute" — the wait quoted when the hourly code
-  /// cap is hit.
+  /// "about 45 minutes" / "about a minute" — the wait quoted when the hourly
+  /// code cap is hit.
   String _cooldownLabel() {
     final left = AuthService.instance.sendCooldownRemaining;
     final minutes = left == null ? 60 : left.inMinutes + 1;

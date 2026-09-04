@@ -45,6 +45,20 @@ class MemberRepository {
     });
   }
 
+  /// Whether an `app.users` row exists for [phone] — i.e. this number has
+  /// signed in before and has an account. `null` when the check could not run
+  /// (no `DATABASE_URL`, or the network is down), so a caller can fall open
+  /// rather than block a real member on a blip.
+  Future<bool?> phoneExists(String phone) {
+    return _run('phoneExists', () async {
+      final rows = await NeonHttp.instance.query(
+        'SELECT 1 FROM app.users WHERE phone = \$1 AND deleted_at IS NULL LIMIT 1',
+        [phone],
+      );
+      return rows.isNotEmpty;
+    });
+  }
+
   /// The stored name for [phone], used at launch when the Firebase profile
   /// carries no display name. Null when there is no row or the lookup failed.
   Future<String?> nameByPhone(String phone) async {
