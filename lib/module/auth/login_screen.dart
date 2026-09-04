@@ -225,20 +225,28 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Verification is temporarily unavailable. Try again later.';
       case OtpError.configError:
         return 'SMS verification is not set up for this app yet. '
-            'Please contact support.';
+            'Please contact support.${_diagnosticSuffix()}';
       case OtpError.network:
         return 'No connection. Check your network and try again.';
       case OtpError.timeout:
         return 'Verification timed out before the code was sent. '
-            'Check your connection and tap Resend.';
+            'Check your connection and tap Resend.${_diagnosticSuffix()}';
       case OtpError.unavailable:
         return 'Verification is unavailable on this device right now.';
       case OtpError.noPendingRequest:
       case OtpError.wrongOtp:
       case OtpError.codeExpired:
       case OtpError.unknown:
-        return 'Could not send the code. Please try again.';
+        return 'Could not send the code. Please try again.${_diagnosticSuffix()}';
     }
+  }
+
+  /// The raw Firebase code, appended in parentheses when there is one — turns
+  /// a support screenshot into a precise pointer at the console setting to fix
+  /// (`unauthorized-domain`, `operation-not-allowed`, `billing-not-enabled`…).
+  String _diagnosticSuffix() {
+    final code = AuthService.instance.lastAuthDiagnostic;
+    return code == null || code.isEmpty ? '' : '\n($code)';
   }
 
   Future<void> _verify([String? completed]) async {

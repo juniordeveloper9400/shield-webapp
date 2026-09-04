@@ -119,6 +119,15 @@ class AuthService {
   AuthGateway get _activeGateway =>
       _gateway ??= FirebaseAuthGateway(onResolved: _resolvePendingFromGateway);
 
+  /// The raw Firebase error code behind the most recent config failure
+  /// (`operation-not-allowed`, `unauthorized-domain`, `billing-not-enabled`,
+  /// …), or null. Shown under the "not set up" line so a support screenshot
+  /// names the exact Firebase console setting to fix.
+  String? get lastAuthDiagnostic {
+    final gateway = _gateway;
+    return gateway is FirebaseAuthGateway ? gateway.lastDiagnostic : null;
+  }
+
   /// Set between [requestOtp] and [verifyOtp] — the half-finished sign-in.
   _PendingLogin? _pending;
 
@@ -398,6 +407,12 @@ class FirebaseAuthGateway implements AuthGateway {
   String? _verificationId;
   int? _resendToken;
 
+  /// The raw Firebase code from the last [_map]ped failure — see
+  /// [AuthService.lastAuthDiagnostic].
+  String? _lastDiagnostic;
+
+  String? get lastDiagnostic => _lastDiagnostic;
+
   /// Web only. `verifyPhoneNumber`'s callback API is unreliable in a browser —
   /// when the reCAPTCHA step fails (most often the deploy origin is not in the
   /// Firebase project's Authorized domains) none of its callbacks fire and the
@@ -417,6 +432,7 @@ class FirebaseAuthGateway implements AuthGateway {
 
   @override
   Future<OtpError?> sendCode(String e164Phone) async {
+    _lastDiagnostic = null;
     if (kIsWeb) {
       return _sendCodeWeb(e164Phone);
     }
@@ -583,6 +599,7 @@ class FirebaseAuthGateway implements AuthGateway {
       'FirebaseAuth: code="${e.code}" message="${e.message}" '
       'plugin="${e.plugin}"',
     );
+    _lastDiagnostic = e.code.isEmpty ? null : e.code;
     switch (e.code) {
       case 'invalid-verification-code':
         return OtpError.wrongOtp;
