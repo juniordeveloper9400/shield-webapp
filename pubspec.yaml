@@ -12,8 +12,13 @@ dependencies:
   cupertino_icons: ^1.0.8
   # Member sign-in: Firebase Phone Auth (SMS OTP). Config is pulled from the
   # `shield-zabnix` project by `flutterfire configure` — see AuthService.
-  firebase_core: ^3.8.0
-  firebase_auth: ^5.3.4
+  # Pinned exactly (no ^) because pubspec.lock is not committed here, so a
+  # caret lets rebuilds drift. These versions use Play Integrity for Android
+  # Phone Auth attestation (SafetyNet, which older firebase_auth used, has been
+  # shut down by Google). Needs the app's SHA-1 + SHA-256 registered on the
+  # Firebase Android app and the Play Integrity API enabled for the project.
+  firebase_core: 3.15.2
+  firebase_auth: 5.7.0
   # Persists the local OTP-send throttle (4 requests / hour) across restarts
   # and page reloads. See module/auth/otp_send_throttle.dart.
   shared_preferences: ^2.3.2
