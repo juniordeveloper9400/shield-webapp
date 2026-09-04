@@ -293,21 +293,32 @@ class _ListingBanner extends StatelessWidget {
           ],
         ),
         clipBehavior: Clip.antiAlias,
-        child: isNetwork
-            ? Image.network(
-                group.bannerImage!,
+        child: AppImage.isDataUri(group.bannerImage)
+            // An admin-uploaded banner, stored as a base64 data URI — the
+            // same shape as a product photo, so it needs AppImage's decode
+            // rather than Image.network (a data: URI is not an HTTP request)
+            // or Image.asset (it is not a bundled asset path either).
+            ? AppImage(
+                image: group.bannerImage,
                 fit: BoxFit.cover,
                 width: double.infinity,
                 height: 152,
-                errorBuilder: (_, _, _) => _buildGradientBanner(),
               )
-            : Image.asset(
-                group.bannerImage!,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: 152,
-                errorBuilder: (_, _, _) => _buildGradientBanner(),
-              ),
+            : isNetwork
+                ? Image.network(
+                    group.bannerImage!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: 152,
+                    errorBuilder: (_, _, _) => _buildGradientBanner(),
+                  )
+                : Image.asset(
+                    group.bannerImage!,
+                    fit: BoxFit.cover,
+                    width: double.infinity,
+                    height: 152,
+                    errorBuilder: (_, _, _) => _buildGradientBanner(),
+                  ),
       );
     }
 
