@@ -221,6 +221,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Could not send the code. Check your details.';
       case OtpError.tooManyRequests:
         return 'Too many attempts from this device. Try again later.';
+      case OtpError.throttled:
+        return 'That is 4 code requests in an hour — the most we allow. '
+            'You can try again in ${_cooldownLabel()}.';
       case OtpError.quotaExceeded:
         return 'Verification is temporarily unavailable. Try again later.';
       case OtpError.configError:
@@ -247,6 +250,17 @@ class _LoginScreenState extends State<LoginScreen> {
   String _diagnosticSuffix() {
     final code = AuthService.instance.lastAuthDiagnostic;
     return code == null || code.isEmpty ? '' : '\n($code)';
+  }
+
+  /// "about 45 minutes" / "a minute" — the wait quoted when the hourly code
+  /// cap is hit.
+  String _cooldownLabel() {
+    final left = AuthService.instance.sendCooldownRemaining;
+    final minutes = left == null ? 60 : left.inMinutes + 1;
+    if (minutes <= 1) {
+      return 'about a minute';
+    }
+    return 'about $minutes minutes';
   }
 
   Future<void> _verify([String? completed]) async {

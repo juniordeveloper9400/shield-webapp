@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 
 import '../../data/neon/member_repository.dart';
+import 'otp_send_throttle.dart';
 
 /// A signed-in member.
 ///
@@ -47,6 +48,12 @@ enum OtpError {
 
   /// Firebase is rate-limiting this device or number.
   tooManyRequests,
+
+  /// The app's own cap — four code requests inside an hour — has been hit.
+  /// Unlike [tooManyRequests] this never reaches Firebase; it keeps the
+  /// device well inside Firebase's harsher, opaque block. See
+  /// [AuthService.sendCooldownRemaining] for the wait.
+  throttled,
 
   /// The project's SMS allowance is used up.
   quotaExceeded,
@@ -128,6 +135,17 @@ class AuthService {
     return gateway is FirebaseAuthGateway ? gateway.lastDiagnostic : null;
   }
 
+  /// The local cap on code requests: four an hour, then the send button is
+  /// refused until the oldest ages out.
+  final OtpSendThrottle _sendThrottle = OtpSendThrottle();
+
+  /// How long the member must wait before another code can be requested, set
+  /// whenever [requestOtp] returns [OtpError.throttled]. Read by the login
+  /// form to say "try again in N min".
+  Duration? _sendCooldownRemaining;
+
+  Duration? get sendCooldownRemaining => _sendCooldownRemaining;
+
   /// Set between [requestOtp] and [verifyOtp] — the half-finished sign-in.
   _PendingLogin? _pending;
 
@@ -174,6 +192,9 @@ class AuthService {
   /// `app.users` table. Both are best-effort and never block the sign-in.
   void _afterSignIn(AuthUser user) {
     _freshSignIn = user;
+    // Signed in — clear the hourly send cap so a later sign-in starts fresh.
+    _sendCooldownRemaining = null;
+    unawaited(_sendThrottle.reset());
     unawaited(_activeGateway.saveDisplayName(user.name));
     unawaited(
       MemberRepository.instance.upsertOnSignIn(
@@ -270,6 +291,15 @@ class AuthService {
       return OtpError.invalidPhone;
     }
 
+    // The app's own cap — four requests an hour — checked before Firebase is
+    // touched, so a member who keeps tapping never trips Firebase's own
+    // harsher block.
+    final blocked = await _sendThrottle.blockedFor();
+    if (blocked != null) {
+      _sendCooldownRemaining = blocked;
+      return OtpError.throttled;
+    }
+
     final OtpError? failure;
     try {
       failure = await _activeGateway.sendCode('+91$cleanPhone');
@@ -280,6 +310,9 @@ class AuthService {
       debugPrint('requestOtp: gateway unavailable — $error');
       return OtpError.unavailable;
     }
+    // A real attempt reached Firebase — count it toward the hourly cap
+    // whatever it came back with.
+    unawaited(_sendThrottle.recordSend());
     if (failure != null) {
       return failure;
     }

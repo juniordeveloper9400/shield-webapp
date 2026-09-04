@@ -14,6 +14,9 @@ dependencies:
   # `shield-zabnix` project by `flutterfire configure` — see AuthService.
   firebase_core: ^3.8.0
   firebase_auth: ^5.3.4
+  # Persists the local OTP-send throttle (4 requests / hour) across restarts
+  # and page reloads. See module/auth/otp_send_throttle.dart.
+  shared_preferences: ^2.3.2
   share_plus: ^13.3.0
   image_picker: ^1.2.3
   # Opens the platform dialer for the call-to-order number.
