@@ -79,10 +79,15 @@ class StoreLocator {
         return const StoreLocationResult(outcome: LocationOutcome.denied);
       }
 
+      // High rather than medium: "medium" on Android is network/cell-tower
+      // positioning, which can be off by a kilometre or more and was showing
+      // a visibly wrong distance on the APK next to the browser's GPS-backed
+      // fix. The branch list is what the distance ranks, so it needs the real
+      // fix, not a fast approximate one.
       final position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.medium,
-          timeLimit: Duration(seconds: 12),
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 20),
         ),
       );
 
