@@ -4,6 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
+import 'customer_reviews_service.dart';
+
+/// A `VideoPlayerController` for [video] — network for an admin-hosted link
+/// (every clip added from the console is a hosted URL; see
+/// `CustomerReviewRepository`), a bundled asset otherwise (every clip that
+/// ships with the app).
+VideoPlayerController _controllerFor(String video) {
+  return AppImage.isNetwork(video)
+      ? VideoPlayerController.networkUrl(Uri.parse(video))
+      : VideoPlayerController.asset(video);
+}
 
 /// One clip in the reel.
 ///
@@ -23,6 +35,10 @@ class CustomerReviewItem {
   /// Optional line over the video in the story player.
   final String? subtitle;
 
+  /// An admin-supplied poster image for the thumbnail card, or null to decode
+  /// one from the clip itself — which is all every bundled clip has.
+  final String? thumbnail;
+
   /// How long the story runs when the video will not play.
   ///
   /// The real length comes from the file. This is only what the progress bar
@@ -35,16 +51,22 @@ class CustomerReviewItem {
     required this.name,
     required this.video,
     this.subtitle,
+    this.thumbnail,
     this.duration = const Duration(seconds: 8),
   });
 }
 
 /// "What our customers have to say" — the customer video reel under the offer
 /// banner, and the full-screen story player it opens into.
-class CustomerReviews extends StatelessWidget {
+///
+/// Backed by [CustomerReviewsService]: shows whatever clips the pharmacy
+/// admin has added and switched on, falling back to [reviews] — the clips
+/// bundled with the app — whenever the admin hasn't added one yet or the
+/// database can't be reached, so the reel is never blank.
+class CustomerReviews extends StatefulWidget {
   const CustomerReviews({super.key});
 
-  /// The clips, in the order they run.
+  /// The clips bundled with the app, in the order they run.
   ///
   /// Plain lowercase filenames with no spaces, because an asset path is a
   /// URI. Both batches of clips have arrived with spaces in their names and
@@ -108,7 +130,35 @@ class CustomerReviews extends StatelessWidget {
     ),
   ];
 
-  void _openStoryViewer(BuildContext context, int initialIndex) {
+  @override
+  State<CustomerReviews> createState() => _CustomerReviewsState();
+}
+
+class _CustomerReviewsState extends State<CustomerReviews> {
+  @override
+  void initState() {
+    super.initState();
+    CustomerReviewsService.instance.ensureLoaded();
+    CustomerReviewsService.instance.addListener(_onServiceChanged);
+  }
+
+  @override
+  void dispose() {
+    CustomerReviewsService.instance.removeListener(_onServiceChanged);
+    super.dispose();
+  }
+
+  void _onServiceChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  void _openStoryViewer(
+    BuildContext context,
+    List<CustomerReviewItem> reviews,
+    int initialIndex,
+  ) {
     Navigator.of(context).push(
       PageRouteBuilder(
         opaque: false,
@@ -128,6 +178,7 @@ class CustomerReviews extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final reviews = CustomerReviewsService.instance.items;
     return Container(
       color: AppColors.white,
       padding: const EdgeInsets.only(top: 14, bottom: 20),
@@ -157,7 +208,7 @@ class CustomerReviews extends StatelessWidget {
                 final review = reviews[index];
                 return _VideoReviewThumbnailCard(
                   review: review,
-                  onTap: () => _openStoryViewer(context, index),
+                  onTap: () => _openStoryViewer(context, reviews, index),
                 );
               },
             ),
@@ -209,7 +260,13 @@ class _VideoReviewThumbnailCardState extends State<_VideoReviewThumbnailCard> {
   /// cards scroll in and out — so only the clips on screen hold a decoder,
   /// and each holds it only long enough to paint one frame.
   Future<void> _load() async {
-    final controller = VideoPlayerController.asset(widget.review.video);
+    if ((widget.review.thumbnail ?? '').isNotEmpty) {
+      // The admin gave this clip a poster of its own — decoding a frame
+      // (over the network, for a hosted clip) would be slower and no
+      // better than what they chose.
+      return;
+    }
+    final controller = _controllerFor(widget.review.video);
     try {
       await controller.initialize();
       await controller.setVolume(0);
@@ -263,7 +320,10 @@ class _VideoReviewThumbnailCardState extends State<_VideoReviewThumbnailCard> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _ReviewVideoSurface(controller: _controller),
+              _ReviewVideoSurface(
+                controller: _controller,
+                thumbnail: widget.review.thumbnail,
+              ),
 
               // Gradient overlay from top (dark for name) to bottom
               DecoratedBox(
@@ -321,14 +381,19 @@ class _VideoReviewThumbnailCardState extends State<_VideoReviewThumbnailCard> {
 class _ReviewVideoSurface extends StatelessWidget {
   final VideoPlayerController? controller;
 
-  /// What fills the box until the clip can. A flat colour and nothing else:
-  /// a camcorder icon that shows for a moment and then vanishes announces the
-  /// wait instead of covering it, and in the player — which opens black and
-  /// fades the clip up — there is nothing to cover in the first place.
+  /// An admin-supplied poster, shown until (or instead of) the clip.
+  final String? thumbnail;
+
+  /// What fills the box until the clip can, when there is no [thumbnail]
+  /// either. A flat colour and nothing else: a camcorder icon that shows for
+  /// a moment and then vanishes announces the wait instead of covering it,
+  /// and in the player — which opens black and fades the clip up — there is
+  /// nothing to cover in the first place.
   final Color placeholder;
 
   const _ReviewVideoSurface({
     required this.controller,
+    this.thumbnail,
     this.placeholder = AppColors.bannerTop,
   });
 
@@ -336,6 +401,10 @@ class _ReviewVideoSurface extends StatelessWidget {
   Widget build(BuildContext context) {
     final player = controller;
     if (player == null || !player.value.isInitialized) {
+      final poster = thumbnail;
+      if (poster != null && poster.isNotEmpty) {
+        return AppImage(image: poster, fit: BoxFit.cover);
+      }
       return ColoredBox(color: placeholder);
     }
 
@@ -453,9 +522,7 @@ class _CustomerStoryPlayerModalState extends State<CustomerStoryPlayerModal>
       setState(() {});
     }
 
-    final controller = VideoPlayerController.asset(
-      widget.reviews[_currentIndex].video,
-    );
+    final controller = _controllerFor(widget.reviews[_currentIndex].video);
     try {
       await controller.initialize();
     } catch (error) {
@@ -637,6 +704,7 @@ class _CustomerStoryPlayerModalState extends State<CustomerStoryPlayerModal>
               Center(
                 child: _ReviewVideoSurface(
                   controller: _video,
+                  thumbnail: currentReview.thumbnail,
                   placeholder: Colors.black,
                 ),
               ),

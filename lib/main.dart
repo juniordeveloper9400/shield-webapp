@@ -7,6 +7,7 @@ import 'data/neon/neon_http.dart';
 import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/catalogue/catalogue_service.dart';
+import 'module/home/customer_reviews_service.dart';
 import 'module/persona/persona_service.dart';
 import 'module/rewards/rewards_service.dart';
 import 'screens/root_screen.dart';
@@ -55,6 +56,11 @@ Future<void> main() async {
   // category and search screens each call ensureLoaded() again and share this
   // one request.
   unawaited(CatalogueService.instance.ensureLoaded());
+
+  // Warm "What our customers have to say" the same way, so the reel shows
+  // the admin's own clips on first paint rather than the bundled fallback
+  // flashing up first.
+  unawaited(CustomerReviewsService.instance.ensureLoaded());
 
   // One line at launch — via dart:developer so it survives a release build —
   // saying whether the Neon write-through is live. A build started without
