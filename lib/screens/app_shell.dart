@@ -9,6 +9,7 @@ import '../module/menu/menu_drawer.dart';
 import '../module/orders/orders_screen.dart';
 import '../module/patients/patient_book.dart';
 import '../module/registration/register_bar.dart';
+import '../module/registration/registration_service.dart';
 import '../widgets/app_messenger.dart';
 import '../widgets/bottom_nav.dart';
 import 'app_tabs.dart';
@@ -56,6 +57,14 @@ class _AppShellState extends State<AppShell> {
           PatientBook.instance.replaceRemote(remote);
         }
       });
+
+      // Same idea for a completed registration: read it back from
+      // `app.users` so the register bar shows the member's saved details
+      // straight away, rather than nagging someone who already registered
+      // just because this app process started with nothing in memory (a
+      // fresh launch, or a log-in after another account signed out on this
+      // device). See [RegistrationService.loadForSignedInMember].
+      RegistrationService.instance.loadForSignedInMember(phone);
     }
   }
 

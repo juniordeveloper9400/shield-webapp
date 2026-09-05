@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 
 import '../../data/neon/member_repository.dart';
+import '../registration/registration_service.dart';
 import 'otp_send_throttle.dart';
 
 /// A signed-in member.
@@ -376,6 +377,10 @@ class AuthService {
     _freshSignIn = null;
     await _gateway?.signOut();
     currentUser.value = null;
+    // Otherwise this member's registration details would still be sitting in
+    // memory — and visible on the register bar — for whichever account (or
+    // none) signs in next on this device.
+    RegistrationService.instance.clearForSignOut();
   }
 
   /// Test hook: puts a member straight into the session, skipping the round

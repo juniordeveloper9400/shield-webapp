@@ -218,6 +218,39 @@ class RegistrationService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Loads a previously completed registration for [phone] from `app.users`
+  /// and adopts it as the in-memory profile.
+  ///
+  /// [_profile] otherwise lives only in this process's memory, so a member
+  /// who registered on an earlier run would see the prompt again — and lose
+  /// their saved details off the register bar — just because the app was
+  /// relaunched, or a different account signed in and out on the same
+  /// device in between. Called on sign-in and on a session restored at
+  /// launch (see `AppShell.initState`). A no-op when there is nothing to
+  /// load, or a profile is already in memory (the form itself just wrote it
+  /// — no need to read it straight back).
+  Future<void> loadForSignedInMember(String phone) async {
+    if (_profile != null) {
+      return;
+    }
+    final registration = await MemberRepository.instance.fetchByPhone(phone);
+    if (registration != null) {
+      _profile = registration;
+      notifyListeners();
+    }
+  }
+
+  /// Drops the in-memory profile on sign-out, so it cannot leak into
+  /// whichever account — or no account — uses this app process next.
+  void clearForSignOut() {
+    if (_profile == null && !_promptDismissed) {
+      return;
+    }
+    _profile = null;
+    _promptDismissed = false;
+    notifyListeners();
+  }
+
   @visibleForTesting
   void reset() {
     _profile = null;

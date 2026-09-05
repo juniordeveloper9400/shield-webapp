@@ -78,6 +78,66 @@ class MemberRepository {
     NeonHttp.log('upsertRegistration: saved ${registration.phone}');
   }
 
+  /// Reads back a previously completed registration for [phone] — the row
+  /// [upsertRegistration] wrote, joined back to the store's stable code.
+  ///
+  /// Null when there is no row, when one exists but the form was never
+  /// finished (`registration_completed_at` is only set on submit, so a bare
+  /// sign-in row does not count), or when the read failed. Every caller
+  /// already treats a null profile as "not registered yet", so this fails
+  /// safe rather than throwing.
+  Future<Registration?> fetchByPhone(String phone) async {
+    if (!isAvailable) {
+      return null;
+    }
+    try {
+      final rows = await NeonHttp.instance.query(
+        '''
+          SELECT u.name, u.email, u.gender, u.dob,
+                 u.address, u.place, u.pincode, u.state,
+                 s.code AS store_code
+          FROM app.users u
+          LEFT JOIN app.shield_store s ON s.id = u.home_store_id
+          WHERE u.phone = \$1 AND u.registration_completed_at IS NOT NULL
+          LIMIT 1
+        ''',
+        [phone],
+      );
+      if (rows.isEmpty) {
+        return null;
+      }
+
+      final row = rows.first;
+      final storeCode = row['store_code'] as String?;
+      final dob = row['dob'] as String?;
+      // Both are required by the form; either missing means the row is not
+      // a usable registration, not something worth surfacing as one.
+      if (storeCode == null || dob == null) {
+        return null;
+      }
+      final genderName = (row['gender'] as String?)?.toUpperCase();
+
+      return Registration(
+        name: (row['name'] as String?) ?? '',
+        phone: phone,
+        email: (row['email'] as String?) ?? '',
+        gender: Gender.values.firstWhere(
+          (gender) => gender.name.toUpperCase() == genderName,
+          orElse: () => Gender.other,
+        ),
+        dob: DateTime.parse(dob),
+        address: (row['address'] as String?) ?? '',
+        place: (row['place'] as String?) ?? '',
+        pincode: (row['pincode'] as String?) ?? '',
+        state: (row['state'] as String?) ?? '',
+        storeId: storeCode,
+      );
+    } catch (error) {
+      NeonHttp.log('fetchByPhone failed', error: error);
+      return null;
+    }
+  }
+
   /// `1994-09-04` — an unambiguous value for a `date` column.
   static String _isoDate(DateTime date) {
     final month = date.month.toString().padLeft(2, '0');
