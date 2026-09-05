@@ -214,6 +214,35 @@ class OrderRepository {
   /// Whether a write would actually reach a database.
   bool get isAvailable => NeonHttp.isConfigured;
 
+  /// Every order the member has placed, newest first — standard and
+  /// prescription alike, whatever their status. Raw rows rather than the UI
+  /// [Purchase] shape, so this file does not have to depend on the orders
+  /// module; [PurchaseService] maps each one with `Purchase.fromRow`.
+  ///
+  /// Returns `null` (not an empty list) when the database is off or
+  /// unreachable, so a transient failure is not shown as "no orders yet".
+  Future<List<Map<String, dynamic>>?> listForMember(String phone) async {
+    if (!NeonHttp.isConfigured || phone.isEmpty) {
+      return null;
+    }
+    try {
+      return await NeonHttp.instance.query(
+        '''
+          SELECT o.code, o.kind, o.status, o.item_count,
+                 o.mrp_total, o.paid_total, o.placed_on
+          FROM app."order" o
+          JOIN app.users m ON m.id = o.member_id
+          WHERE m.phone = \$1 AND m.deleted_at IS NULL
+          ORDER BY o.placed_at DESC
+        ''',
+        [phone],
+      );
+    } catch (error) {
+      NeonHttp.log('OrderRepository.listForMember failed', error: error);
+      return null;
+    }
+  }
+
   /// Files a standard product checkout: one `app."order"` row, one
   /// `app.order_line` per cart line, the initial `app.order_track_step` graph
   /// and, when one was submitted, the `app.order_receipt` claim.

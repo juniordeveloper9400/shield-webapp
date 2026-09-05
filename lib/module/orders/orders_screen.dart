@@ -5,9 +5,19 @@ import 'order_track_screen.dart';
 import 'purchase_service.dart';
 
 /// Order history, the Orders destination in the bottom bar.
-class OrdersScreen extends StatelessWidget {
+class OrdersScreen extends StatefulWidget {
   const OrdersScreen({super.key});
 
+  @override
+  State<OrdersScreen> createState() => _OrdersScreenState();
+}
+
+class _OrdersScreenState extends State<OrdersScreen> {
+  @override
+  void initState() {
+    super.initState();
+    PurchaseService.instance.ensureLoaded();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +47,16 @@ class OrdersScreen extends StatelessWidget {
       body: ListenableBuilder(
         listenable: PurchaseService.instance,
         builder: (context, _) {
-          final orders = PurchaseService.instance.purchases;
+          final service = PurchaseService.instance;
+          final orders = service.purchases;
+          if (orders.isEmpty && service.isLoading) {
+            return const Center(
+              child: CircularProgressIndicator(color: AppColors.brandBlue),
+            );
+          }
+          if (orders.isEmpty) {
+            return const _EmptyOrders();
+          }
           return ListView.separated(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             itemCount: orders.length,
@@ -45,6 +64,44 @@ class OrdersScreen extends StatelessWidget {
             itemBuilder: (context, index) => _OrderCard(order: orders[index]),
           );
         },
+      ),
+    );
+  }
+}
+
+class _EmptyOrders extends StatelessWidget {
+  const _EmptyOrders();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.receipt_long_outlined,
+              size: 44,
+              color: AppColors.textMuted.withValues(alpha: 0.6),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'No orders yet',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 6),
+            const Text(
+              'Orders you place will show up here, with what you saved on each.',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -186,5 +243,3 @@ class _StatusChip extends StatelessWidget {
     );
   }
 }
-
-

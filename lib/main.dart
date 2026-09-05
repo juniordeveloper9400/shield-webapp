@@ -8,6 +8,7 @@ import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/catalogue/catalogue_service.dart';
 import 'module/home/customer_reviews_service.dart';
+import 'module/orders/purchase_service.dart';
 import 'module/persona/persona_service.dart';
 import 'module/rewards/rewards_service.dart';
 import 'screens/root_screen.dart';
@@ -50,6 +51,11 @@ Future<void> main() async {
   // sign-in, clear it on sign-out. The header coin, rewards screen and menu
   // read RewardsService.balance from here.
   RewardsService.instance.attach();
+
+  // Follow the session for the member's real order history: load it from
+  // app."order" on sign-in, clear it on sign-out. The "Your savings" card and
+  // the Orders tab both read PurchaseService from here.
+  PurchaseService.instance.attach();
 
   // Warm the storefront catalogue so the home rows have products on first
   // paint rather than popping in a beat later. Fire-and-forget — the home,

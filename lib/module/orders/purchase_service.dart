@@ -2,9 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/neon/neon_http.dart';
+import '../../data/neon/order_repository.dart';
+import '../../dates.dart' as dates;
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../auth/auth_service.dart';
 import '../rewards/rewards_service.dart';
+
+enum PurchaseStatus { idle, loading, ready, error }
 
 /// Where an order has got to.
 enum OrderStatus {
@@ -87,7 +93,42 @@ class Purchase {
   String get mrpLabel => '₹${formatRupees(mrpTotal)}';
 
   String get savedLabel => '₹${formatRupees(saved)}';
+
+  /// One row of `app."order"` (see `OrderRepository.listForMember`) → a
+  /// [Purchase] the earnings card and the orders list can read directly.
+  factory Purchase.fromRow(Map<String, dynamic> row) {
+    String str(Object? v) => (v ?? '').toString().trim();
+    int i(Object? v) => int.tryParse(str(v)) ?? 0;
+
+    final placedOn = DateTime.tryParse(str(row['placed_on']));
+    return Purchase(
+      id: str(row['code']),
+      placedOn: placedOn == null ? str(row['placed_on']) : dates.formatDate(placedOn),
+      itemCount: i(row['item_count']),
+      mrpTotal: i(row['mrp_total']),
+      paidTotal: i(row['paid_total']),
+      status: _statusFromDb(str(row['status'])),
+      kind: _kindFromDb(str(row['kind'])),
+    );
+  }
 }
+
+OrderStatus _statusFromDb(String token) {
+  switch (token.toUpperCase()) {
+    case 'DELIVERED':
+      return OrderStatus.delivered;
+    case 'OUT_FOR_DELIVERY':
+      return OrderStatus.outForDelivery;
+    case 'CANCELLED':
+      return OrderStatus.cancelled;
+    case 'PROCESSING':
+    default:
+      return OrderStatus.processing;
+  }
+}
+
+OrderKind _kindFromDb(String token) =>
+    token.toUpperCase() == 'PRESCRIPTION' ? OrderKind.prescription : OrderKind.standard;
 
 /// The order book, and the earnings that come out of it.
 ///
@@ -96,11 +137,13 @@ class Purchase {
 /// card that totals a different four is the app disagreeing with itself over
 /// money. The list reads [purchases]; the card reads the sums below it.
 ///
-/// In memory only; a backend would replace this class wholesale.
+/// Backed by `app."order"` (see `OrderRepository.listForMember`), keyed to
+/// the signed-in mobile number the same way [RewardsService] is: [attach]
+/// wires it to the auth session, loading on sign-in and clearing on sign-out,
+/// so what a member sees here is their own real order history rather than a
+/// fixture every fresh install showed alike.
 class PurchaseService extends ChangeNotifier {
-  PurchaseService._() {
-    seedSampleOrders();
-  }
+  PurchaseService._();
 
   static final PurchaseService instance = PurchaseService._();
 
@@ -109,6 +152,92 @@ class PurchaseService extends ChangeNotifier {
   List<Purchase> get purchases => List.unmodifiable(_purchases);
 
   bool get isEmpty => _purchases.isEmpty;
+
+  PurchaseStatus _status = PurchaseStatus.idle;
+  PurchaseStatus get status => _status;
+  bool get isLoading => _status == PurchaseStatus.loading;
+
+  String? _phone;
+  bool _attached = false;
+  Future<void>? _inFlight;
+
+  /// Follows the auth session: (re)loads on sign-in, clears on sign-out. Safe
+  /// to call more than once. Call from `main()`, alongside the other services
+  /// that key their data to the signed-in member.
+  void attach() {
+    if (_attached) {
+      return;
+    }
+    _attached = true;
+    AuthService.instance.currentUser.addListener(_onAuthChanged);
+    _onAuthChanged();
+  }
+
+  void _onAuthChanged() {
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone == _phone) {
+      return;
+    }
+    _phone = phone;
+    if (phone == null) {
+      _purchases.clear();
+      _status = PurchaseStatus.idle;
+      _inFlight = null;
+      notifyListeners();
+    } else {
+      unawaited(refresh());
+    }
+  }
+
+  /// Loads the member's orders if not already loaded. A no-op while signed
+  /// out.
+  Future<void> ensureLoaded() {
+    if (_phone == null || _status == PurchaseStatus.ready) {
+      return Future.value();
+    }
+    return _inFlight ??= _load();
+  }
+
+  /// Re-reads the order book now (after a checkout, or pull-to-refresh).
+  Future<void> refresh() {
+    _inFlight = null;
+    return _inFlight ??= _load();
+  }
+
+  Future<void> _load() async {
+    final phone = _phone;
+    if (phone == null) {
+      _status = PurchaseStatus.idle;
+      _inFlight = null;
+      notifyListeners();
+      return;
+    }
+    if (!NeonHttp.isConfigured) {
+      _status = PurchaseStatus.error;
+      _inFlight = null;
+      notifyListeners();
+      return;
+    }
+    _status = PurchaseStatus.loading;
+    notifyListeners();
+    try {
+      final rows = await OrderRepository.instance.listForMember(phone);
+      if (rows != null) {
+        _purchases
+          ..clear()
+          ..addAll(rows.map(Purchase.fromRow));
+        _status = PurchaseStatus.ready;
+      } else {
+        _status = PurchaseStatus.error;
+      }
+    } catch (error) {
+      NeonHttp.log('PurchaseService load failed', error: error);
+      _status = PurchaseStatus.error;
+    } finally {
+      _inFlight = null;
+      notifyListeners();
+    }
+  }
 
   /// Orders that still count — everything but the cancelled ones.
   Iterable<Purchase> get _counted =>
