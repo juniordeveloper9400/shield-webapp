@@ -368,7 +368,11 @@ class _MindNode extends StatelessWidget {
         pillKey: keyFor(agent.id),
         boxKey: ValueKey('mind-pill-${agent.id}'),
         title: agent.name,
-        subtitle: agent.level.label,
+        // A region agent's card names the zone they head, not just "Region".
+        subtitle: agent.level == AgentLevel.region &&
+                agentRegions.contains(agent.area)
+            ? '${agent.level.label} · ${agent.area}'
+            : agent.level.label,
         code: agent.agentCode,
         depth: depth,
         toggleLabel: agent.name,
@@ -401,6 +405,13 @@ class _MindNode extends StatelessWidget {
                   depth: depth + 1,
                   slotId: 'slot/${agent.id}/${childLevel.name}/$i',
                   realParent: agent,
+                  // Name a national agent's open region slots after the six
+                  // zones, so the hierarchy reads North / South / East / … .
+                  slotLabel: childLevel == AgentLevel.region &&
+                          agent.level == AgentLevel.national &&
+                          i < agentRegions.length
+                      ? agentRegions[i]
+                      : null,
                   expanded: expanded,
                   keyFor: keyFor,
                   onToggle: onToggle,
@@ -431,6 +442,10 @@ class _MindPlusNode extends StatelessWidget {
   /// reports to.
   final Agent realParent;
 
+  /// The zone this slot stands for, when it is one of a national agent's six
+  /// region positions — shown on the card in place of "Region".
+  final String? slotLabel;
+
   final Set<String> expanded;
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
@@ -445,6 +460,7 @@ class _MindPlusNode extends StatelessWidget {
     required this.keyFor,
     required this.onToggle,
     required this.onAdd,
+    this.slotLabel,
   });
 
   @override
@@ -463,6 +479,7 @@ class _MindPlusNode extends StatelessWidget {
         expanded: isExpanded,
         onAdd: () => onAdd(realParent, level),
         onToggle: canExpand ? () => onToggle(slotId) : null,
+        slotLabel: slotLabel,
       ),
       children: isExpanded
           ? [
@@ -607,6 +624,10 @@ class _MindPlusPill extends StatelessWidget {
   final VoidCallback onAdd;
   final VoidCallback? onToggle;
 
+  /// Shown on the card instead of the plain tier name — used to name the six
+  /// zones on a national agent's open region slots ("North", "South", …).
+  final String? slotLabel;
+
   const _MindPlusPill({
     required this.pillKey,
     required this.level,
@@ -615,6 +636,7 @@ class _MindPlusPill extends StatelessWidget {
     required this.expanded,
     required this.onAdd,
     required this.onToggle,
+    this.slotLabel,
   });
 
   @override
@@ -650,7 +672,7 @@ class _MindPlusPill extends StatelessWidget {
                     ),
                     const SizedBox(width: 6),
                     Text(
-                      level.label,
+                      slotLabel ?? level.label,
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
