@@ -50,11 +50,15 @@ enum AgentLevel {
   /// slot until the state slot directly above it is filled first.
   AgentLevel? get parent => index > 0 ? AgentLevel.values[index - 1] : null;
 
-  /// How many positions one agent at this level opens up at [child] — every
-  /// tier down to lsgd doubles, so the tree's fixed shape is 1 national → 2
-  /// region → 4 state → 8 district → 16 assembly → 32 lsgd → 64 ward. A ward
-  /// heads nobody, so this is 0 there.
-  int get childCapacity => child == null ? 0 : 2;
+  /// How many positions one agent at this level opens up at [child].
+  ///
+  /// The national agent heads the six fixed zones ([agentRegions]); every
+  /// tier below that doubles — 6 region → 12 state → 24 district → 48
+  /// assembly → 96 lsgd → 192 ward. A ward heads nobody, so this is 0 there.
+  int get childCapacity => switch (this) {
+    AgentLevel.national => agentRegions.length,
+    _ => child == null ? 0 : 2,
+  };
 
   /// A short tag for the square badge, e.g. `NAT`, `WRD`.
   String get code => switch (this) {
@@ -67,6 +71,18 @@ enum AgentLevel {
     AgentLevel.ward => 'WRD',
   };
 }
+
+/// The six zones the country is split into for the field hierarchy — every
+/// [AgentLevel.region] agent heads exactly one of these, so the registration
+/// form offers them as a fixed list rather than a free-text box.
+const List<String> agentRegions = <String>[
+  'North',
+  'South',
+  'East',
+  'West',
+  'Central',
+  'Northeast',
+];
 
 /// Whether the agent who recruited this one has signed off on them yet.
 ///

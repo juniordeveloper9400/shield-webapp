@@ -302,6 +302,7 @@ class AgentService extends ChangeNotifier {
     required String pincode,
     required String place,
     required String accountNumber,
+    String? region,
     Uint8List? photoBytes,
     bool active = true,
   }) {
@@ -313,6 +314,11 @@ class AgentService extends ChangeNotifier {
     }
     if (openPositionsUnder(parent) <= 0) {
       return 'Every position under ${parent.name} is already filled';
+    }
+    // A region agent heads one of the six fixed zones, picked from a list.
+    if (level == AgentLevel.region &&
+        !agentRegions.contains((region ?? '').trim())) {
+      return 'Choose which region this agent heads';
     }
 
     final checks = <String?>[
@@ -338,6 +344,10 @@ class AgentService extends ChangeNotifier {
     final last = lastName.trim();
     final cleanPlace = place.trim();
 
+    // What the agent heads: a region agent's zone, everyone else's home place.
+    final area =
+        level == AgentLevel.region ? (region ?? '').trim() : cleanPlace;
+
     _added++;
     _agents.add(
       Agent(
@@ -348,7 +358,7 @@ class AgentService extends ChangeNotifier {
         level: level,
         active: active,
         parentId: parent.id,
-        area: cleanPlace,
+        area: area,
         firstName: first,
         middleName: middle,
         lastName: last,

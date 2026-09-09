@@ -77,6 +77,11 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   late Agent _parent = widget.initialParent;
   late AgentLevel _level = _initialLevel();
 
+  /// Which of the six zones a region-level agent heads — picked from a fixed
+  /// list, not typed. Null until chosen, and only used when [_level] is
+  /// [AgentLevel.region].
+  String? _region;
+
   AgentLevel _initialLevel() {
     final levels = _levelsUnder(_parent);
     final wanted = widget.initialLevel;
@@ -144,6 +149,9 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       if (!levels.contains(_level)) {
         _level = levels.first;
       }
+      if (_level != AgentLevel.region) {
+        _region = null;
+      }
     });
   }
 
@@ -190,7 +198,9 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     final formOk = _formKey.currentState?.validate() ?? false;
     setState(() => _submitted = true);
-    if (!formOk || _dob == null) {
+    final regionMissing =
+        _level == AgentLevel.region && !agentRegions.contains(_region);
+    if (!formOk || _dob == null || regionMissing) {
       return;
     }
 
@@ -261,6 +271,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       pincode: _pincode.text,
       place: _place.text,
       accountNumber: _account.text,
+      region: _region,
       photoBytes: _photo,
     );
     if (failure != null) {
@@ -416,10 +427,37 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
           ],
           onChanged: (level) {
             if (level != null) {
-              setState(() => _level = level);
+              setState(() {
+                _level = level;
+                if (level != AgentLevel.region) {
+                  _region = null;
+                }
+              });
             }
           },
         ),
+        if (_level == AgentLevel.region) ...[
+          const SizedBox(height: 14),
+          _Label('Region'),
+          DropdownButtonFormField<String>(
+            initialValue: _region,
+            isExpanded: true,
+            decoration: shieldFieldDecoration(hint: 'Pick a region'),
+            items: [
+              for (final region in agentRegions)
+                DropdownMenuItem(value: region, child: Text(region)),
+            ],
+            onChanged: (region) => setState(() => _region = region),
+          ),
+          if (_submitted && _region == null)
+            const Padding(
+              padding: EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                'Choose which region this agent heads',
+                style: TextStyle(fontSize: 12.5, color: AppColors.danger),
+              ),
+            ),
+        ],
         const SizedBox(height: 18),
 
         Form(
