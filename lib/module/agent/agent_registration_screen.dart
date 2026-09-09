@@ -84,16 +84,13 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   late Agent _parent = widget.initialParent;
   late AgentLevel _level = _initialLevel();
 
-  /// Which of the six zones a region-level agent heads, or — for a state-level
-  /// agent whose parent is not already a zoned region agent — the zone whose
-  /// state list to read. Picked from a fixed list, not typed. Null until
-  /// chosen.
+  /// The cascade of fixed-slot picks that place the new agent: the zone, then
+  /// (for a state agent or deeper) the state, then (for a district agent) the
+  /// district. Each is picked from a list, never typed, and each is null until
+  /// chosen or pinned by the parent / the tapped slot.
   String? _region;
-
-  /// Which state a state-level agent heads — picked from that zone's fixed
-  /// list ([agentRegionStates]), not typed. Only used when [_level] is
-  /// [AgentLevel.state].
   String? _state;
+  String? _district;
 
   AgentLevel _initialLevel() {
     final levels = _levelsUnder(_parent);
@@ -122,25 +119,27 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   void initState() {
     super.initState();
     _otp.addListener(_clearErrorOnEdit);
-    // Tapping a named "+ South" slot fixes the zone — pre-select it.
-    if (_level == AgentLevel.region &&
-        widget.initialArea != null &&
-        agentRegions.contains(widget.initialArea)) {
-      _region = widget.initialArea;
+
+    // A tapped "+ Kerala" / "+ South" / "+ Ernakulam" slot pins the whole
+    // chain it belongs to — classify what kind of name it is and fill in
+    // every tier at or above it.
+    final tapped = widget.initialArea;
+    if (tapped != null) {
+      if (agentRegions.contains(tapped)) {
+        _region = tapped;
+      } else if (_zoneOfState(tapped) != null) {
+        _region = _zoneOfState(tapped);
+        _state = tapped;
+      } else if (_stateOfDistrict(tapped) != null) {
+        _state = _stateOfDistrict(tapped);
+        _region = _zoneOfState(_state!);
+        _district = tapped;
+      }
     }
-    // Sitting straight under a zoned region agent — read that zone's states.
-    if (_parent.level == AgentLevel.region &&
-        agentRegions.contains(_parent.area)) {
-      _region = _parent.area;
-    }
-    // Tapping a named "+ Kerala" slot fixes the state — pre-select it and the
-    // zone it belongs to, so the locked pickers both show the right value.
-    if (_level == AgentLevel.state &&
-        widget.initialArea != null &&
-        !agentRegions.contains(widget.initialArea!)) {
-      _state = widget.initialArea;
-      _region = _zoneOfState(widget.initialArea!) ?? _region;
-    }
+
+    // Anything the parent already fixes overrides a form pick.
+    if (_parentRegion != null) _region = _parentRegion;
+    if (_parentState != null) _state = _parentState;
   }
 
   /// The zone that owns [state] in [agentRegionStates], or null if none does.
@@ -153,31 +152,60 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     return null;
   }
 
-  /// The state dropdown is fixed (not a choice) when the recruiter came in
-  /// through a named "+ Kerala" slot.
-  bool get _stateLocked =>
-      widget.initialArea != null &&
-      _level == AgentLevel.state &&
-      !agentRegions.contains(widget.initialArea!);
+  /// The state that owns [district] in [agentStateDistricts], or null.
+  static String? _stateOfDistrict(String district) {
+    for (final entry in agentStateDistricts.entries) {
+      if (entry.value.contains(district)) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
 
-  /// The zone dropdown is fixed (not a choice) when the recruiter came in
-  /// through a named "+ South" slot, or through a named state slot that
-  /// already pins the zone.
-  bool get _regionLocked =>
-      (widget.initialArea != null &&
-          agentRegions.contains(widget.initialArea!)) ||
-      _stateLocked;
+  // ---- The region → state → district cascade ----
+  //
+  // Each tier the new agent's level reaches gets a picker, unless the parent
+  // it reports to (or the slot the recruiter tapped) already pins that tier.
 
-  /// The zone whose state list applies to a state-level agent — the region
-  /// agent they sit under, or the zone picked in the form when there is no
-  /// such parent.
-  String? get _regionContext =>
-      _parent.level == AgentLevel.region && agentRegions.contains(_parent.area)
-      ? _parent.area
-      : _region;
+  /// The zone the parent sits in, or null when the parent is above the zones.
+  String? get _parentRegion {
+    final p = _parent;
+    if (p.level == AgentLevel.region && agentRegions.contains(p.area)) {
+      return p.area;
+    }
+    final viaState = _parentState;
+    return viaState == null ? null : _zoneOfState(viaState);
+  }
 
-  /// The states to choose from for a state-level agent, or empty when the
-  /// zone is unknown or has no named state slots.
+  /// The state the parent sits in, or null when the parent is above the states.
+  String? get _parentState {
+    final p = _parent;
+    if (p.level == AgentLevel.state && _zoneOfState(p.area) != null) {
+      return p.area;
+    }
+    if (p.level == AgentLevel.district && _stateOfDistrict(p.area) != null) {
+      return _stateOfDistrict(p.area);
+    }
+    return null;
+  }
+
+  /// True once the level reaches this tier — a district agent needs a zone, a
+  /// state and a district; a state agent needs a zone and a state.
+  bool get _levelReachesRegion =>
+      _level.index >= AgentLevel.region.index &&
+      _level.index <= AgentLevel.district.index;
+  bool get _levelReachesState =>
+      _level.index >= AgentLevel.state.index &&
+      _level.index <= AgentLevel.district.index;
+  bool get _levelReachesDistrict => _level == AgentLevel.district;
+
+  /// The zone in force — the parent's, else the form pick.
+  String? get _regionContext => _parentRegion ?? _region;
+
+  /// The state in force — the parent's, else the form pick.
+  String? get _stateContext => _parentState ?? _state;
+
+  /// The states to choose from, or empty when the zone is unknown / unnamed.
   List<String> get _statesForRegion {
     final zone = _regionContext;
     return zone == null
@@ -185,26 +213,56 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
         : agentRegionStates[zone] ?? const <String>[];
   }
 
-  /// Whether the zone picker shows for the current level — always for a
-  /// region agent, and for a state agent that is not already sitting under a
-  /// zoned region parent.
-  bool get _showRegionPicker =>
-      _level == AgentLevel.region ||
-      (_level == AgentLevel.state &&
-          !(_parent.level == AgentLevel.region &&
-              agentRegions.contains(_parent.area)));
+  /// The districts to choose from, or empty when the state is unknown / has no
+  /// named district slots (every state but Kerala, for now).
+  List<String> get _districtsForState {
+    final state = _stateContext;
+    return state == null
+        ? const <String>[]
+        : agentStateDistricts[state] ?? const <String>[];
+  }
 
-  /// The named slot this agent fills — the picked zone for a region agent,
-  /// the picked state for a state agent, else whatever slot the recruiter
-  /// tapped in through.
+  bool get _showRegionPicker => _levelReachesRegion && _parentRegion == null;
+  bool get _showStatePicker =>
+      _levelReachesState && _parentState == null && _statesForRegion.isNotEmpty;
+  bool get _showDistrictPicker =>
+      _levelReachesDistrict && _districtsForState.isNotEmpty;
+
+  /// The zone / state / district picker is fixed (not a choice) when the
+  /// recruiter came in through a named slot that pins that tier.
+  bool get _regionLocked {
+    final ia = widget.initialArea;
+    return ia != null &&
+        (agentRegions.contains(ia) ||
+            _zoneOfState(ia) != null ||
+            _stateOfDistrict(ia) != null);
+  }
+
+  bool get _stateLocked {
+    final ia = widget.initialArea;
+    return ia != null &&
+        (_zoneOfState(ia) != null || _stateOfDistrict(ia) != null);
+  }
+
+  bool get _districtLocked {
+    final ia = widget.initialArea;
+    return ia != null && _stateOfDistrict(ia) != null;
+  }
+
+  /// The named slot this agent fills — the deepest pick its level reaches,
+  /// falling back to a tapped slot name.
   String? get _slotArea {
-    if (_level == AgentLevel.region) {
-      return _region;
-    }
-    if (_level == AgentLevel.state) {
-      return _state ?? widget.initialArea;
-    }
+    if (_level == AgentLevel.region) return _region ?? widget.initialArea;
+    if (_level == AgentLevel.state) return _state ?? widget.initialArea;
+    if (_level == AgentLevel.district) return _district ?? widget.initialArea;
     return widget.initialArea;
+  }
+
+  /// Drops any cascade pick that its parent tier no longer allows — called
+  /// after the parent, the level, or a higher pick changes.
+  void _syncCascade() {
+    if (!_statesForRegion.contains(_state)) _state = null;
+    if (!_districtsForState.contains(_district)) _district = null;
   }
 
   @override
@@ -245,17 +303,14 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       if (!levels.contains(_level)) {
         _level = levels.first;
       }
-      // A zoned region parent pins the zone; anything that neither heads a
-      // zone nor a state clears it.
-      if (parent.level == AgentLevel.region &&
-          agentRegions.contains(parent.area)) {
-        _region = parent.area;
-      } else if (_level != AgentLevel.region && _level != AgentLevel.state) {
-        _region = null;
-      }
-      if (_level != AgentLevel.state || !_statesForRegion.contains(_state)) {
-        _state = null;
-      }
+      // Whatever the new parent already pins wins over an old form pick;
+      // tiers the level no longer reaches are dropped.
+      if (_parentRegion != null) _region = _parentRegion;
+      if (_parentState != null) _state = _parentState;
+      if (!_levelReachesRegion) _region = null;
+      if (!_levelReachesState) _state = null;
+      if (!_levelReachesDistrict) _district = null;
+      _syncCascade();
     });
   }
 
@@ -304,10 +359,15 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     setState(() => _submitted = true);
     final regionMissing =
         _showRegionPicker && !agentRegions.contains(_region);
-    final stateMissing = _level == AgentLevel.state &&
-        _statesForRegion.isNotEmpty &&
-        !_statesForRegion.contains(_state);
-    if (!formOk || _dob == null || regionMissing || stateMissing) {
+    final stateMissing =
+        _showStatePicker && !_statesForRegion.contains(_state);
+    final districtMissing =
+        _showDistrictPicker && !_districtsForState.contains(_district);
+    if (!formOk ||
+        _dob == null ||
+        regionMissing ||
+        stateMissing ||
+        districtMissing) {
       return;
     }
 
@@ -536,13 +596,10 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             if (level != null) {
               setState(() {
                 _level = level;
-                if (level != AgentLevel.region && level != AgentLevel.state) {
-                  _region = null;
-                }
-                if (level != AgentLevel.state ||
-                    !_statesForRegion.contains(_state)) {
-                  _state = null;
-                }
+                if (!_levelReachesRegion) _region = null;
+                if (!_levelReachesState) _state = null;
+                if (!_levelReachesDistrict) _district = null;
+                _syncCascade();
               });
             }
           },
@@ -558,15 +615,12 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
               for (final region in agentRegions)
                 DropdownMenuItem(value: region, child: Text(region)),
             ],
-            // Fixed when the recruiter tapped a named "+ South" slot.
+            // Fixed when the recruiter tapped a named slot that pins the zone.
             onChanged: _regionLocked
                 ? null
                 : (region) => setState(() {
                     _region = region;
-                    // A different zone — drop a state pick from the old one.
-                    if (!_statesForRegion.contains(_state)) {
-                      _state = null;
-                    }
+                    _syncCascade();
                   }),
           ),
           if (_submitted && _region == null)
@@ -583,7 +637,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
               ),
             ),
         ],
-        if (_level == AgentLevel.state && _statesForRegion.isNotEmpty) ...[
+        if (_showStatePicker) ...[
           const SizedBox(height: 14),
           _Label('State'),
           DropdownButtonFormField<String>(
@@ -594,16 +648,50 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
               for (final state in _statesForRegion)
                 DropdownMenuItem(value: state, child: Text(state)),
             ],
-            // Fixed when the recruiter tapped a named "+ Kerala" slot.
+            // Fixed when the recruiter tapped a named slot that pins the state.
             onChanged: _stateLocked
                 ? null
-                : (state) => setState(() => _state = state),
+                : (state) => setState(() {
+                    _state = state;
+                    _syncCascade();
+                  }),
           ),
           if (_submitted && _state == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                _level == AgentLevel.state
+                    ? 'Choose which state this agent heads'
+                    : 'Choose which state this agent sits under',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.danger,
+                ),
+              ),
+            ),
+        ],
+        if (_showDistrictPicker) ...[
+          const SizedBox(height: 14),
+          _Label('District'),
+          DropdownButtonFormField<String>(
+            initialValue:
+                _districtsForState.contains(_district) ? _district : null,
+            isExpanded: true,
+            decoration: shieldFieldDecoration(hint: 'Pick a district'),
+            items: [
+              for (final district in _districtsForState)
+                DropdownMenuItem(value: district, child: Text(district)),
+            ],
+            // Fixed when the recruiter tapped a named "+ Ernakulam" slot.
+            onChanged: _districtLocked
+                ? null
+                : (district) => setState(() => _district = district),
+          ),
+          if (_submitted && _district == null)
             const Padding(
               padding: EdgeInsets.only(top: 6, left: 4),
               child: Text(
-                'Choose which state this agent heads',
+                'Choose which district this agent heads',
                 style: TextStyle(fontSize: 12.5, color: AppColors.danger),
               ),
             ),

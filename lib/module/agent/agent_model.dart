@@ -50,11 +50,12 @@ enum AgentLevel {
   /// slot until the state slot directly above it is filled first.
   AgentLevel? get parent => index > 0 ? AgentLevel.values[index - 1] : null;
 
-  /// How many positions one agent at this level opens up at [child].
-  ///
-  /// The national agent heads the six fixed zones ([agentRegions]); every
-  /// tier below that doubles — 6 region → 12 state → 24 district → 48
-  /// assembly → 96 lsgd → 192 ward. A ward heads nobody, so this is 0 there.
+  /// How many positions one agent at this level opens up at [child] where the
+  /// tier below is *not* a fixed set of named slots. The named tiers — the six
+  /// zones under national, a zone's states under a region agent, a state's
+  /// districts under a state agent — size their budget from the slot list
+  /// itself ([agentSlotLabelsUnder]); this is the fallback for the rest, where
+  /// every tier below simply doubles. A ward heads nobody, so this is 0 there.
   int get childCapacity => switch (this) {
     AgentLevel.national => agentRegions.length,
     _ => child == null ? 0 : 2,
@@ -135,11 +136,37 @@ const Map<String, List<String>> agentRegionStates = <String, List<String>>{
   ],
 };
 
+/// The districts that sit under a state — the fixed district slots below a
+/// state agent, one tier further down from [agentRegionStates]. Only the
+/// states listed here use named slots; a state missing from the map (or a
+/// state agent whose area is not one of them) falls back to the plain
+/// doubling shape.
+const Map<String, List<String>> agentStateDistricts = <String, List<String>>{
+  'Kerala': [
+    'Thiruvananthapuram',
+    'Kollam',
+    'Pathanamthitta',
+    'Alappuzha',
+    'Kottayam',
+    'Idukki',
+    'Ernakulam',
+    'Thrissur',
+    'Palakkad',
+    'Malappuram',
+    'Kozhikode',
+    'Wayanad',
+    'Kannur',
+    'Kasaragod',
+  ],
+};
+
 /// The fixed slot names one level below [parent], or an empty list when this
-/// tier does not use named slots (state and below, once past a known zone).
+/// tier does not use named slots (district and below, or a region/state whose
+/// area is not one of the known ones).
 ///
 /// national → the six [agentRegions]; a region agent heading a known zone →
-/// that zone's [agentRegionStates].
+/// that zone's [agentRegionStates]; a state agent heading a known state →
+/// that state's [agentStateDistricts].
 List<String> agentSlotLabelsUnder({
   required AgentLevel level,
   required String area,
@@ -149,6 +176,9 @@ List<String> agentSlotLabelsUnder({
   }
   if (level == AgentLevel.region) {
     return agentRegionStates[area] ?? const <String>[];
+  }
+  if (level == AgentLevel.state) {
+    return agentStateDistricts[area] ?? const <String>[];
   }
   return const <String>[];
 }
