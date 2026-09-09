@@ -84,13 +84,21 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   late Agent _parent = widget.initialParent;
   late AgentLevel _level = _initialLevel();
 
-  /// The cascade of fixed-slot picks that place the new agent: the zone, then
-  /// (for a state agent or deeper) the state, then (for a district agent) the
-  /// district. Each is picked from a list, never typed, and each is null until
-  /// chosen or pinned by the parent / the tapped slot.
-  String? _region;
-  String? _state;
-  String? _district;
+  /// The fixed-slot pick for each named tier — the zone, then the state, the
+  /// district, the assembly. Filled from the top down as the recruiter picks
+  /// (or pinned outright by a tapped "+ Kovalam" slot); a tier is absent until
+  /// it has a value. Never typed — always chosen from the list a tier above
+  /// hands down.
+  final Map<AgentLevel, String> _areaPick = {};
+
+  /// The named tiers, widest first — the levels [agentSlotLabelsUnder] can put
+  /// a fixed list of slots below.
+  static const List<AgentLevel> _cascadeTiers = [
+    AgentLevel.region,
+    AgentLevel.state,
+    AgentLevel.district,
+    AgentLevel.assembly,
+  ];
 
   AgentLevel _initialLevel() {
     final levels = _levelsUnder(_parent);
@@ -120,149 +128,188 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     super.initState();
     _otp.addListener(_clearErrorOnEdit);
 
-    // A tapped "+ Kerala" / "+ South" / "+ Ernakulam" slot pins the whole
-    // chain it belongs to — classify what kind of name it is and fill in
-    // every tier at or above it.
+    // A tapped "+ South" / "+ Kerala" / "+ Ernakulam" / "+ Kovalam" slot pins
+    // every tier at and above it — seed the whole chain from its name.
     final tapped = widget.initialArea;
-    if (tapped != null) {
-      if (agentRegions.contains(tapped)) {
-        _region = tapped;
-      } else if (_zoneOfState(tapped) != null) {
-        _region = _zoneOfState(tapped);
-        _state = tapped;
-      } else if (_stateOfDistrict(tapped) != null) {
-        _state = _stateOfDistrict(tapped);
-        _region = _zoneOfState(_state!);
-        _district = tapped;
-      }
+    final tappedLevel = tapped == null ? null : _namedLevelOf(tapped);
+    if (tapped != null && tappedLevel != null) {
+      _areaPick.addAll(_ancestryOf(tapped, tappedLevel));
     }
-
-    // Anything the parent already fixes overrides a form pick.
-    if (_parentRegion != null) _region = _parentRegion;
-    if (_parentState != null) _state = _parentState;
   }
 
-  /// The zone that owns [state] in [agentRegionStates], or null if none does.
-  static String? _zoneOfState(String state) {
-    for (final entry in agentRegionStates.entries) {
-      if (entry.value.contains(state)) {
+  /// The tier one step up from [tier] in the cascade, or null at the top.
+  static AgentLevel? _tierAbove(AgentLevel tier) =>
+      tier == AgentLevel.region ? null : tier.parent;
+
+  /// The whole named chain that ends at [area] (which sits at [level]) — every
+  /// tier from [level] up to the widest named one, keyed by level.
+  static Map<AgentLevel, String> _ancestryOf(String area, AgentLevel level) {
+    final chain = <AgentLevel, String>{};
+    var name = area;
+    AgentLevel? tier = level;
+    while (tier != null) {
+      chain[tier] = name;
+      final up = _tierAbove(tier);
+      final upName = up == null ? null : _ownerOf(name, tier);
+      if (up == null || upName == null) {
+        break;
+      }
+      name = upName;
+      tier = up;
+    }
+    return chain;
+  }
+
+  /// The name one tier up that owns the [tier]-level slot [name] — the state a
+  /// district sits in, the district an assembly sits in, and so on.
+  static String? _ownerOf(String name, AgentLevel tier) => switch (tier) {
+    AgentLevel.state => _lookUp(agentRegionStates, name),
+    AgentLevel.district => _lookUp(agentStateDistricts, name),
+    AgentLevel.assembly => _lookUp(agentDistrictAssemblies, name),
+    _ => null,
+  };
+
+  static String? _lookUp(Map<String, List<String>> map, String value) {
+    for (final entry in map.entries) {
+      if (entry.value.contains(value)) {
         return entry.key;
       }
     }
     return null;
   }
 
-  /// The state that owns [district] in [agentStateDistricts], or null.
-  static String? _stateOfDistrict(String district) {
-    for (final entry in agentStateDistricts.entries) {
-      if (entry.value.contains(district)) {
-        return entry.key;
-      }
+  /// Which named tier [area] is a slot of, or null when it is not a fixed
+  /// slot anywhere (a free-text place).
+  static AgentLevel? _namedLevelOf(String area) {
+    if (agentRegions.contains(area)) return AgentLevel.region;
+    if (_lookUp(agentRegionStates, area) != null) return AgentLevel.state;
+    if (_lookUp(agentStateDistricts, area) != null) return AgentLevel.district;
+    if (_lookUp(agentDistrictAssemblies, area) != null) {
+      return AgentLevel.assembly;
     }
     return null;
   }
 
-  // ---- The region → state → district cascade ----
+  // ---- The region → state → district → assembly cascade ----
   //
-  // Each tier the new agent's level reaches gets a picker, unless the parent
-  // it reports to (or the slot the recruiter tapped) already pins that tier.
+  // Every named tier the new agent's level reaches gets a picker, unless the
+  // parent it reports to — or the slot the recruiter tapped — already pins it.
 
-  /// The zone the parent sits in, or null when the parent is above the zones.
-  String? get _parentRegion {
+  /// The named chain the parent already sits in, keyed by level. A region
+  /// agent pins the zone; a state agent the zone and state; and so on. Only a
+  /// parent whose own level is a named tier and whose area is a real slot at
+  /// that tier pins anything — a national agent (or one placed on a free-text
+  /// place) pins nothing.
+  Map<AgentLevel, String> get _parentAncestry {
     final p = _parent;
-    if (p.level == AgentLevel.region && agentRegions.contains(p.area)) {
-      return p.area;
+    if (!_cascadeTiers.contains(p.level) || _namedLevelOf(p.area) != p.level) {
+      return const {};
     }
-    final viaState = _parentState;
-    return viaState == null ? null : _zoneOfState(viaState);
+    return _ancestryOf(p.area, p.level);
   }
 
-  /// The state the parent sits in, or null when the parent is above the states.
-  String? get _parentState {
-    final p = _parent;
-    if (p.level == AgentLevel.state && _zoneOfState(p.area) != null) {
-      return p.area;
-    }
-    if (p.level == AgentLevel.district && _stateOfDistrict(p.area) != null) {
-      return _stateOfDistrict(p.area);
-    }
-    return null;
+  /// The named chain the tapped "+ …" slot pins, keyed by level.
+  Map<AgentLevel, String> get _tappedAncestry {
+    final ia = widget.initialArea;
+    final level = ia == null ? null : _namedLevelOf(ia);
+    return level == null ? const {} : _ancestryOf(ia!, level);
   }
 
-  /// True once the level reaches this tier — a district agent needs a zone, a
-  /// state and a district; a state agent needs a zone and a state.
-  bool get _levelReachesRegion =>
-      _level.index >= AgentLevel.region.index &&
-      _level.index <= AgentLevel.district.index;
-  bool get _levelReachesState =>
-      _level.index >= AgentLevel.state.index &&
-      _level.index <= AgentLevel.district.index;
-  bool get _levelReachesDistrict => _level == AgentLevel.district;
+  /// Whether the level being registered reaches down to [tier] — a district
+  /// agent reaches region, state and district; an assembly agent one further.
+  /// Levels past assembly (lsgd, ward) use a plain place and reach no tier.
+  bool _levelReaches(AgentLevel tier) =>
+      _level.index >= tier.index &&
+      _level.index <= AgentLevel.assembly.index;
 
-  /// The zone in force — the parent's, else the form pick.
-  String? get _regionContext => _parentRegion ?? _region;
+  /// The name in force at [tier] — the parent's, else the form pick.
+  String? _areaAt(AgentLevel tier) =>
+      _parentAncestry[tier] ?? _areaPick[tier];
 
-  /// The state in force — the parent's, else the form pick.
-  String? get _stateContext => _parentState ?? _state;
-
-  /// The states to choose from, or empty when the zone is unknown / unnamed.
-  List<String> get _statesForRegion {
-    final zone = _regionContext;
-    return zone == null
+  /// The fixed slots to choose from at [tier], drawn from the name one tier up.
+  List<String> _optionsFor(AgentLevel tier) {
+    if (tier == AgentLevel.region) {
+      return agentRegions;
+    }
+    final above = _tierAbove(tier)!;
+    final aboveArea = _areaAt(above);
+    return aboveArea == null
         ? const <String>[]
-        : agentRegionStates[zone] ?? const <String>[];
+        : agentSlotLabelsUnder(level: above, area: aboveArea);
   }
 
-  /// The districts to choose from, or empty when the state is unknown / has no
-  /// named district slots (every state but Kerala, for now).
-  List<String> get _districtsForState {
-    final state = _stateContext;
-    return state == null
-        ? const <String>[]
-        : agentStateDistricts[state] ?? const <String>[];
-  }
+  /// A picker shows for [tier] when the level reaches it, the parent has not
+  /// already pinned it, and there is a non-empty list to pick from.
+  bool _showPicker(AgentLevel tier) =>
+      _levelReaches(tier) &&
+      !_parentAncestry.containsKey(tier) &&
+      _optionsFor(tier).isNotEmpty;
 
-  bool get _showRegionPicker => _levelReachesRegion && _parentRegion == null;
-  bool get _showStatePicker =>
-      _levelReachesState && _parentState == null && _statesForRegion.isNotEmpty;
-  bool get _showDistrictPicker =>
-      _levelReachesDistrict && _districtsForState.isNotEmpty;
+  /// The [tier] picker is fixed (not a choice) when the tapped slot pins it.
+  bool _pickerLocked(AgentLevel tier) => _tappedAncestry.containsKey(tier);
 
-  /// The zone / state / district picker is fixed (not a choice) when the
-  /// recruiter came in through a named slot that pins that tier.
-  bool get _regionLocked {
-    final ia = widget.initialArea;
-    return ia != null &&
-        (agentRegions.contains(ia) ||
-            _zoneOfState(ia) != null ||
-            _stateOfDistrict(ia) != null);
-  }
+  /// The named slot this agent fills — its own tier's name, falling back to a
+  /// tapped slot name for the tiers with no picker (lsgd, ward).
+  String? get _slotArea =>
+      _cascadeTiers.contains(_level) ? _areaAt(_level) : widget.initialArea;
 
-  bool get _stateLocked {
-    final ia = widget.initialArea;
-    return ia != null &&
-        (_zoneOfState(ia) != null || _stateOfDistrict(ia) != null);
-  }
-
-  bool get _districtLocked {
-    final ia = widget.initialArea;
-    return ia != null && _stateOfDistrict(ia) != null;
-  }
-
-  /// The named slot this agent fills — the deepest pick its level reaches,
-  /// falling back to a tapped slot name.
-  String? get _slotArea {
-    if (_level == AgentLevel.region) return _region ?? widget.initialArea;
-    if (_level == AgentLevel.state) return _state ?? widget.initialArea;
-    if (_level == AgentLevel.district) return _district ?? widget.initialArea;
-    return widget.initialArea;
-  }
-
-  /// Drops any cascade pick that its parent tier no longer allows — called
-  /// after the parent, the level, or a higher pick changes.
+  /// Drops any pick a higher change has invalidated — walked top-down so a
+  /// cleared zone cascades to its state, district and assembly.
   void _syncCascade() {
-    if (!_statesForRegion.contains(_state)) _state = null;
-    if (!_districtsForState.contains(_district)) _district = null;
+    for (final tier in _cascadeTiers) {
+      if (tier == AgentLevel.region) {
+        continue;
+      }
+      if (!_optionsFor(tier).contains(_areaPick[tier])) {
+        _areaPick.remove(tier);
+      }
+    }
+  }
+
+  /// "Pick a region" / "Pick a state" / "Pick a district" / "Pick an
+  /// assembly" — the empty-state hint for the [tier] dropdown.
+  static String _pickHint(AgentLevel tier) => tier == AgentLevel.assembly
+      ? 'Pick an assembly'
+      : 'Pick a ${tier.label.toLowerCase()}';
+
+  /// One tier's dropdown, plus its label and the after-submit prompt when it
+  /// is still empty. Spread into the details column.
+  List<Widget> _cascadePicker(AgentLevel tier) {
+    final options = _optionsFor(tier);
+    final value = options.contains(_areaPick[tier]) ? _areaPick[tier] : null;
+    return [
+      const SizedBox(height: 14),
+      _Label(tier.label),
+      DropdownButtonFormField<String>(
+        initialValue: value,
+        isExpanded: true,
+        decoration: shieldFieldDecoration(hint: _pickHint(tier)),
+        items: [
+          for (final option in options)
+            DropdownMenuItem(value: option, child: Text(option)),
+        ],
+        // Fixed when the recruiter tapped a named slot that pins this tier.
+        onChanged: _pickerLocked(tier)
+            ? null
+            : (picked) => setState(() {
+                if (picked == null) {
+                  _areaPick.remove(tier);
+                } else {
+                  _areaPick[tier] = picked;
+                }
+                _syncCascade();
+              }),
+      ),
+      if (_submitted && value == null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 4),
+          child: Text(
+            'Choose which ${tier.label.toLowerCase()} this agent '
+            '${_level == tier ? 'heads' : 'sits under'}',
+            style: const TextStyle(fontSize: 12.5, color: AppColors.danger),
+          ),
+        ),
+    ];
   }
 
   @override
@@ -303,15 +350,20 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       if (!levels.contains(_level)) {
         _level = levels.first;
       }
-      // Whatever the new parent already pins wins over an old form pick;
-      // tiers the level no longer reaches are dropped.
-      if (_parentRegion != null) _region = _parentRegion;
-      if (_parentState != null) _state = _parentState;
-      if (!_levelReachesRegion) _region = null;
-      if (!_levelReachesState) _state = null;
-      if (!_levelReachesDistrict) _district = null;
-      _syncCascade();
+      _normalizeCascade();
     });
+  }
+
+  /// Drops every cascade pick the current parent or level no longer wants: a
+  /// tier the parent pins needs no pick, a tier the level does not reach needs
+  /// no pick, and [_syncCascade] clears anything a higher clear invalidated.
+  void _normalizeCascade() {
+    for (final tier in _cascadeTiers) {
+      if (_parentAncestry.containsKey(tier) || !_levelReaches(tier)) {
+        _areaPick.remove(tier);
+      }
+    }
+    _syncCascade();
   }
 
   Future<void> _pickDob() async {
@@ -357,17 +409,11 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     final formOk = _formKey.currentState?.validate() ?? false;
     setState(() => _submitted = true);
-    final regionMissing =
-        _showRegionPicker && !agentRegions.contains(_region);
-    final stateMissing =
-        _showStatePicker && !_statesForRegion.contains(_state);
-    final districtMissing =
-        _showDistrictPicker && !_districtsForState.contains(_district);
-    if (!formOk ||
-        _dob == null ||
-        regionMissing ||
-        stateMissing ||
-        districtMissing) {
+    final slotMissing = _cascadeTiers.any(
+      (tier) =>
+          _showPicker(tier) && !_optionsFor(tier).contains(_areaPick[tier]),
+    );
+    if (!formOk || _dob == null || slotMissing) {
       return;
     }
 
@@ -596,106 +642,13 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             if (level != null) {
               setState(() {
                 _level = level;
-                if (!_levelReachesRegion) _region = null;
-                if (!_levelReachesState) _state = null;
-                if (!_levelReachesDistrict) _district = null;
-                _syncCascade();
+                _normalizeCascade();
               });
             }
           },
         ),
-        if (_showRegionPicker) ...[
-          const SizedBox(height: 14),
-          _Label('Region'),
-          DropdownButtonFormField<String>(
-            initialValue: _region,
-            isExpanded: true,
-            decoration: shieldFieldDecoration(hint: 'Pick a region'),
-            items: [
-              for (final region in agentRegions)
-                DropdownMenuItem(value: region, child: Text(region)),
-            ],
-            // Fixed when the recruiter tapped a named slot that pins the zone.
-            onChanged: _regionLocked
-                ? null
-                : (region) => setState(() {
-                    _region = region;
-                    _syncCascade();
-                  }),
-          ),
-          if (_submitted && _region == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4),
-              child: Text(
-                _level == AgentLevel.region
-                    ? 'Choose which region this agent heads'
-                    : 'Choose which region this agent sits under',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.danger,
-                ),
-              ),
-            ),
-        ],
-        if (_showStatePicker) ...[
-          const SizedBox(height: 14),
-          _Label('State'),
-          DropdownButtonFormField<String>(
-            initialValue: _statesForRegion.contains(_state) ? _state : null,
-            isExpanded: true,
-            decoration: shieldFieldDecoration(hint: 'Pick a state'),
-            items: [
-              for (final state in _statesForRegion)
-                DropdownMenuItem(value: state, child: Text(state)),
-            ],
-            // Fixed when the recruiter tapped a named slot that pins the state.
-            onChanged: _stateLocked
-                ? null
-                : (state) => setState(() {
-                    _state = state;
-                    _syncCascade();
-                  }),
-          ),
-          if (_submitted && _state == null)
-            Padding(
-              padding: const EdgeInsets.only(top: 6, left: 4),
-              child: Text(
-                _level == AgentLevel.state
-                    ? 'Choose which state this agent heads'
-                    : 'Choose which state this agent sits under',
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: AppColors.danger,
-                ),
-              ),
-            ),
-        ],
-        if (_showDistrictPicker) ...[
-          const SizedBox(height: 14),
-          _Label('District'),
-          DropdownButtonFormField<String>(
-            initialValue:
-                _districtsForState.contains(_district) ? _district : null,
-            isExpanded: true,
-            decoration: shieldFieldDecoration(hint: 'Pick a district'),
-            items: [
-              for (final district in _districtsForState)
-                DropdownMenuItem(value: district, child: Text(district)),
-            ],
-            // Fixed when the recruiter tapped a named "+ Ernakulam" slot.
-            onChanged: _districtLocked
-                ? null
-                : (district) => setState(() => _district = district),
-          ),
-          if (_submitted && _district == null)
-            const Padding(
-              padding: EdgeInsets.only(top: 6, left: 4),
-              child: Text(
-                'Choose which district this agent heads',
-                style: TextStyle(fontSize: 12.5, color: AppColors.danger),
-              ),
-            ),
-        ],
+        for (final tier in _cascadeTiers)
+          if (_showPicker(tier)) ..._cascadePicker(tier),
         const SizedBox(height: 18),
 
         Form(

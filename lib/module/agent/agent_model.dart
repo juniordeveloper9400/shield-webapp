@@ -54,8 +54,9 @@ enum AgentLevel {
   /// tier below is *not* a fixed set of named slots. The named tiers — the six
   /// zones under national, a zone's states under a region agent, a state's
   /// districts under a state agent — size their budget from the slot list
-  /// itself ([agentSlotLabelsUnder]); this is the fallback for the rest, where
-  /// every tier below simply doubles. A ward heads nobody, so this is 0 there.
+  /// itself ([agentSlotLabelsUnder]) — including a district's assemblies; this
+  /// is the fallback for the rest, where every tier below simply doubles. A
+  /// ward heads nobody, so this is 0 there.
   int get childCapacity => switch (this) {
     AgentLevel.national => agentRegions.length,
     _ => child == null ? 0 : 2,
@@ -160,13 +161,38 @@ const Map<String, List<String>> agentStateDistricts = <String, List<String>>{
   ],
 };
 
+/// The local bodies that sit under a district — the fixed slots below a
+/// district agent, one tier further down from [agentStateDistricts]. Only the
+/// districts listed here use named slots; Thiruvananthapuram splits into its
+/// thirteen assembly segments plus the city corporation.
+const Map<String, List<String>> agentDistrictAssemblies =
+    <String, List<String>>{
+  'Thiruvananthapuram': [
+    'Varkala',
+    'Attingal',
+    'Chirayinkeezhu',
+    'Nedumangad',
+    'Vamanapuram',
+    'Kazhakkoottam',
+    'Vattiyoorkavu',
+    'Nemom',
+    'Aruvikkara',
+    'Parassala',
+    'Kattakkada',
+    'Kovalam',
+    'Neyyattinkara',
+    'Thiruvananthapuram Corporation',
+  ],
+};
+
 /// The fixed slot names one level below [parent], or an empty list when this
-/// tier does not use named slots (district and below, or a region/state whose
-/// area is not one of the known ones).
+/// tier does not use named slots (assembly and below, or a region/state/
+/// district whose area is not one of the known ones).
 ///
 /// national → the six [agentRegions]; a region agent heading a known zone →
 /// that zone's [agentRegionStates]; a state agent heading a known state →
-/// that state's [agentStateDistricts].
+/// that state's [agentStateDistricts]; a district agent heading a known
+/// district → that district's [agentDistrictAssemblies].
 List<String> agentSlotLabelsUnder({
   required AgentLevel level,
   required String area,
@@ -179,6 +205,9 @@ List<String> agentSlotLabelsUnder({
   }
   if (level == AgentLevel.state) {
     return agentStateDistricts[area] ?? const <String>[];
+  }
+  if (level == AgentLevel.district) {
+    return agentDistrictAssemblies[area] ?? const <String>[];
   }
   return const <String>[];
 }
