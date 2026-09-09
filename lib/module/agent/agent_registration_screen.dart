@@ -84,10 +84,16 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   late Agent _parent = widget.initialParent;
   late AgentLevel _level = _initialLevel();
 
-  /// Which of the six zones a region-level agent heads — picked from a fixed
-  /// list, not typed. Null until chosen, and only used when [_level] is
-  /// [AgentLevel.region].
+  /// Which of the six zones a region-level agent heads, or — for a state-level
+  /// agent whose parent is not already a zoned region agent — the zone whose
+  /// state list to read. Picked from a fixed list, not typed. Null until
+  /// chosen.
   String? _region;
+
+  /// Which state a state-level agent heads — picked from that zone's fixed
+  /// list ([agentRegionStates]), not typed. Only used when [_level] is
+  /// [AgentLevel.state].
+  String? _state;
 
   AgentLevel _initialLevel() {
     final levels = _levelsUnder(_parent);
@@ -122,17 +128,84 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
         agentRegions.contains(widget.initialArea)) {
       _region = widget.initialArea;
     }
+    // Sitting straight under a zoned region agent — read that zone's states.
+    if (_parent.level == AgentLevel.region &&
+        agentRegions.contains(_parent.area)) {
+      _region = _parent.area;
+    }
+    // Tapping a named "+ Kerala" slot fixes the state — pre-select it and the
+    // zone it belongs to, so the locked pickers both show the right value.
+    if (_level == AgentLevel.state &&
+        widget.initialArea != null &&
+        !agentRegions.contains(widget.initialArea!)) {
+      _state = widget.initialArea;
+      _region = _zoneOfState(widget.initialArea!) ?? _region;
+    }
   }
 
+  /// The zone that owns [state] in [agentRegionStates], or null if none does.
+  static String? _zoneOfState(String state) {
+    for (final entry in agentRegionStates.entries) {
+      if (entry.value.contains(state)) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  /// The state dropdown is fixed (not a choice) when the recruiter came in
+  /// through a named "+ Kerala" slot.
+  bool get _stateLocked =>
+      widget.initialArea != null &&
+      _level == AgentLevel.state &&
+      !agentRegions.contains(widget.initialArea!);
+
   /// The zone dropdown is fixed (not a choice) when the recruiter came in
-  /// through a named "+ South" slot.
+  /// through a named "+ South" slot, or through a named state slot that
+  /// already pins the zone.
   bool get _regionLocked =>
-      widget.initialArea != null && agentRegions.contains(widget.initialArea!);
+      (widget.initialArea != null &&
+          agentRegions.contains(widget.initialArea!)) ||
+      _stateLocked;
+
+  /// The zone whose state list applies to a state-level agent — the region
+  /// agent they sit under, or the zone picked in the form when there is no
+  /// such parent.
+  String? get _regionContext =>
+      _parent.level == AgentLevel.region && agentRegions.contains(_parent.area)
+      ? _parent.area
+      : _region;
+
+  /// The states to choose from for a state-level agent, or empty when the
+  /// zone is unknown or has no named state slots.
+  List<String> get _statesForRegion {
+    final zone = _regionContext;
+    return zone == null
+        ? const <String>[]
+        : agentRegionStates[zone] ?? const <String>[];
+  }
+
+  /// Whether the zone picker shows for the current level — always for a
+  /// region agent, and for a state agent that is not already sitting under a
+  /// zoned region parent.
+  bool get _showRegionPicker =>
+      _level == AgentLevel.region ||
+      (_level == AgentLevel.state &&
+          !(_parent.level == AgentLevel.region &&
+              agentRegions.contains(_parent.area)));
 
   /// The named slot this agent fills — the picked zone for a region agent,
-  /// else whatever slot the recruiter tapped in through.
-  String? get _slotArea =>
-      _level == AgentLevel.region ? _region : widget.initialArea;
+  /// the picked state for a state agent, else whatever slot the recruiter
+  /// tapped in through.
+  String? get _slotArea {
+    if (_level == AgentLevel.region) {
+      return _region;
+    }
+    if (_level == AgentLevel.state) {
+      return _state ?? widget.initialArea;
+    }
+    return widget.initialArea;
+  }
 
   @override
   void dispose() {
@@ -172,8 +245,16 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       if (!levels.contains(_level)) {
         _level = levels.first;
       }
-      if (_level != AgentLevel.region) {
+      // A zoned region parent pins the zone; anything that neither heads a
+      // zone nor a state clears it.
+      if (parent.level == AgentLevel.region &&
+          agentRegions.contains(parent.area)) {
+        _region = parent.area;
+      } else if (_level != AgentLevel.region && _level != AgentLevel.state) {
         _region = null;
+      }
+      if (_level != AgentLevel.state || !_statesForRegion.contains(_state)) {
+        _state = null;
       }
     });
   }
@@ -222,8 +303,11 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     final formOk = _formKey.currentState?.validate() ?? false;
     setState(() => _submitted = true);
     final regionMissing =
-        _level == AgentLevel.region && !agentRegions.contains(_region);
-    if (!formOk || _dob == null || regionMissing) {
+        _showRegionPicker && !agentRegions.contains(_region);
+    final stateMissing = _level == AgentLevel.state &&
+        _statesForRegion.isNotEmpty &&
+        !_statesForRegion.contains(_state);
+    if (!formOk || _dob == null || regionMissing || stateMissing) {
       return;
     }
 
@@ -452,14 +536,18 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             if (level != null) {
               setState(() {
                 _level = level;
-                if (level != AgentLevel.region) {
+                if (level != AgentLevel.region && level != AgentLevel.state) {
                   _region = null;
+                }
+                if (level != AgentLevel.state ||
+                    !_statesForRegion.contains(_state)) {
+                  _state = null;
                 }
               });
             }
           },
         ),
-        if (_level == AgentLevel.region) ...[
+        if (_showRegionPicker) ...[
           const SizedBox(height: 14),
           _Label('Region'),
           DropdownButtonFormField<String>(
@@ -473,13 +561,49 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             // Fixed when the recruiter tapped a named "+ South" slot.
             onChanged: _regionLocked
                 ? null
-                : (region) => setState(() => _region = region),
+                : (region) => setState(() {
+                    _region = region;
+                    // A different zone — drop a state pick from the old one.
+                    if (!_statesForRegion.contains(_state)) {
+                      _state = null;
+                    }
+                  }),
           ),
           if (_submitted && _region == null)
+            Padding(
+              padding: const EdgeInsets.only(top: 6, left: 4),
+              child: Text(
+                _level == AgentLevel.region
+                    ? 'Choose which region this agent heads'
+                    : 'Choose which region this agent sits under',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: AppColors.danger,
+                ),
+              ),
+            ),
+        ],
+        if (_level == AgentLevel.state && _statesForRegion.isNotEmpty) ...[
+          const SizedBox(height: 14),
+          _Label('State'),
+          DropdownButtonFormField<String>(
+            initialValue: _statesForRegion.contains(_state) ? _state : null,
+            isExpanded: true,
+            decoration: shieldFieldDecoration(hint: 'Pick a state'),
+            items: [
+              for (final state in _statesForRegion)
+                DropdownMenuItem(value: state, child: Text(state)),
+            ],
+            // Fixed when the recruiter tapped a named "+ Kerala" slot.
+            onChanged: _stateLocked
+                ? null
+                : (state) => setState(() => _state = state),
+          ),
+          if (_submitted && _state == null)
             const Padding(
               padding: EdgeInsets.only(top: 6, left: 4),
               child: Text(
-                'Choose which region this agent heads',
+                'Choose which state this agent heads',
                 style: TextStyle(fontSize: 12.5, color: AppColors.danger),
               ),
             ),
