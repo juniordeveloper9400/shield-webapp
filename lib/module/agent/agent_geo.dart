@@ -41,11 +41,13 @@ class GeoHierarchy {
     required Map<AgentLevel, List<String>> namesByLevel,
     required Map<String, AgentLevel> levelByName,
     required Map<String, String> parentNameByChild,
+    required Map<String, AgentLevel> childLevelByParentName,
   })  : _childrenByParentName = childrenByParentName,
         _codeByName = codeByName,
         _namesByLevel = namesByLevel,
         _levelByName = levelByName,
-        _parentNameByChild = parentNameByChild;
+        _parentNameByChild = parentNameByChild,
+        _childLevelByParentName = childLevelByParentName;
 
   /// The six regions, in order — the slots directly under the national agent.
   final List<String> regionNames;
@@ -55,6 +57,7 @@ class GeoHierarchy {
   final Map<AgentLevel, List<String>> _namesByLevel;
   final Map<String, AgentLevel> _levelByName;
   final Map<String, String> _parentNameByChild;
+  final Map<String, AgentLevel> _childLevelByParentName;
 
   /// The tier [name] is a named slot of, or null when it is not a fixed slot
   /// anywhere (a free-text place).
@@ -63,6 +66,14 @@ class GeoHierarchy {
   /// The name of the slot one tier up from [name], or null at a region / for
   /// an unknown name.
   String? parentSlotOf(String name) => _parentNameByChild[name];
+
+  /// The tier of [parentName]'s children — normally the enum successor of
+  /// [parentName]'s own level, but read straight from the data so an
+  /// irregular branch is honoured (Varkala's wards sit directly under the
+  /// assembly, skipping the LSGD tier). Null when [parentName] has no
+  /// children.
+  AgentLevel? childLevelOf(String parentName) =>
+      _childLevelByParentName[parentName];
 
   /// The fixed slot names one tier below a [level] agent heading [area], or an
   /// empty list where that tier just doubles (a ward, or an unknown area).
@@ -118,11 +129,13 @@ class GeoHierarchy {
 
     final childrenByParentName = <String, List<String>>{};
     final parentNameByChild = <String, String>{};
+    final childLevelByParentName = <String, AgentLevel>{};
     for (final entry in byParent.entries) {
       final parent = byId[entry.key];
       if (parent == null) continue;
       final kids = entry.value..sort(order);
       childrenByParentName[parent.name] = [for (final k in kids) k.name];
+      childLevelByParentName[parent.name] = kids.first.level;
       for (final k in kids) {
         parentNameByChild[k.name] = parent.name;
       }
@@ -147,6 +160,7 @@ class GeoHierarchy {
       namesByLevel: namesByLevel,
       levelByName: {for (final n in nodes) n.name: n.level},
       parentNameByChild: parentNameByChild,
+      childLevelByParentName: childLevelByParentName,
     );
   }
 
@@ -347,6 +361,57 @@ const List<List<String>> _seedTvmAssemblies = [
   ['Thiruvananthapuram Corporation', 'TVC'],
 ];
 
+/// Varkala's (AC124) local bodies — six grama panchayats and the municipality
+/// that carries [_seedVarkalaMunicipalityWards]; every other assembly segment
+/// just gets three generic `<name> Panchayat n` LSGDs.
+const List<String> _seedVarkalaLsgds = [
+  'Chemmaruthy',
+  'Edava',
+  'Elakamon',
+  'Madavoor',
+  'Pallickal',
+  'Vettoor',
+  'Varkala Municipality',
+];
+
+/// The wards of Varkala Municipality, in order.
+const List<String> _seedVarkalaMunicipalityWards = [
+  'Vilakkulam',
+  'Idapparambu',
+  'Janathamukku',
+  'Karunilakode',
+  'Kallazhi',
+  'Pullannikode',
+  'Ayanikkuzhivila',
+  'Kannamba',
+  'Nadayara',
+  'Kanwasramam',
+  'Chaluvila',
+  'Kallamkonam',
+  'Cherukunnam',
+  'Sivagiri',
+  'Teachers Colony',
+  'Raghunathapuram',
+  'Puthenchantha',
+  'Thachankonam',
+  'Ramanthali',
+  'Panayil',
+  'Vallakkadavu',
+  'Perumkulam',
+  'Kottumoola',
+  'Maithanam',
+  'Municipal Office',
+  'Hospital',
+  'Temple',
+  'Janardhanapuram / Papanasam',
+  'Parayil / Mundayil',
+  'Jawahar Park',
+  'Punnamoodu',
+  'Parayil',
+  'Papanasam',
+  'Kurakkanni',
+];
+
 String _slug(String s) =>
     s.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
 
@@ -407,13 +472,22 @@ List<GeoNode> _seedNodes() {
             sort: ai + 1,
           ));
 
-          final isCorp = acode == 'TVC';
-          final lsgdCount = isCorp ? 1 : 3;
-          for (var li = 1; li <= lsgdCount; li++) {
-            final lsgd = isCorp
-                ? 'Thiruvananthapuram Municipal Corporation'
-                : '$aname Panchayat $li';
-            final lcode = isCorp ? 'TVC-L1' : '$acode-L$li';
+          // The LSGDs under this assembly segment: Varkala names its six
+          // grama panchayats + the municipality; the corporation segment is
+          // its own single body; every other segment gets three generic
+          // panchayats.
+          final List<String> lsgds;
+          if (acode == 'AC124') {
+            lsgds = _seedVarkalaLsgds;
+          } else if (acode == 'TVC') {
+            lsgds = const ['Thiruvananthapuram Municipal Corporation'];
+          } else {
+            lsgds = [for (var li = 1; li <= 3; li++) '$aname Panchayat $li'];
+          }
+
+          for (var li = 0; li < lsgds.length; li++) {
+            final lsgd = lsgds[li];
+            final lcode = acode == 'TVC' ? 'TVC-L1' : '$acode-L${li + 1}';
             final lsgdId = '$assemblyId/${_slug(lsgd)}';
             nodes.add(GeoNode(
               id: lsgdId,
@@ -421,18 +495,32 @@ List<GeoNode> _seedNodes() {
               level: AgentLevel.lsgd,
               name: lsgd,
               code: lcode,
-              sort: li,
+              sort: li + 1,
             ));
 
-            final wardCount = isCorp ? 100 : 12;
-            for (var wi = 1; wi <= wardCount; wi++) {
+            // Named wards for the two municipal bodies; generic numbered
+            // wards for the panchayats.
+            final List<String> wards;
+            if (lsgd == 'Varkala Municipality') {
+              wards = _seedVarkalaMunicipalityWards;
+            } else if (acode == 'TVC') {
+              wards = [
+                for (var wi = 1; wi <= 100; wi++) '$lsgd Ward ${_pad(wi, 2)}',
+              ];
+            } else {
+              wards = [
+                for (var wi = 1; wi <= 12; wi++) '$lsgd Ward ${_pad(wi, 2)}',
+              ];
+            }
+
+            for (var wi = 0; wi < wards.length; wi++) {
               nodes.add(GeoNode(
-                id: '$lsgdId/ward-${_pad(wi, 3)}',
+                id: '$lsgdId/ward-${_pad(wi + 1, 3)}',
                 parentId: lsgdId,
                 level: AgentLevel.ward,
-                name: '$lsgd Ward ${_pad(wi, 2)}',
-                code: '$lcode-W${_pad(wi, 3)}',
-                sort: wi,
+                name: wards[wi],
+                code: '$lcode-W${_pad(wi + 1, 3)}',
+                sort: wi + 1,
               ));
             }
           }

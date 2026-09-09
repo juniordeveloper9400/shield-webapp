@@ -371,13 +371,18 @@ class _MindNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = AgentService.instance;
     final children = service.childrenOf(agent.id);
-    final childLevel = agent.level.child;
 
     // The fixed named slots this agent's tier opens — the six zones under the
     // national agent, a zone's states under a region agent — or empty where
     // the tier just doubles. Named slots drive the capacity; otherwise it is
     // the plain childCapacity budget.
     final slotLabels = service.slotLabelsUnder(agent);
+    // Normally the enum successor, but read from the data so an irregular
+    // branch is honoured — Varkala's wards sit straight under the assembly.
+    final childLevel = (slotLabels.isEmpty
+            ? null
+            : AgentGeo.current.childLevelOf(agent.area)) ??
+        agent.level.child;
     final capacity =
         slotLabels.isNotEmpty ? slotLabels.length : agent.level.childCapacity;
     final canExpand = capacity > 0;
@@ -525,7 +530,6 @@ class _MindPlusNode extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final childLevel = level.child;
     final canExpand = level.childCapacity > 0;
     final isExpanded = canExpand && expanded.contains(slotId);
 
@@ -537,6 +541,12 @@ class _MindPlusNode extends StatelessWidget {
     );
     final previewCapacity =
         previewLabels.isNotEmpty ? previewLabels.length : level.childCapacity;
+    // The successor read from the data, so an irregular branch is honoured
+    // (falls back to the enum successor for the regular tiers).
+    final childLevel = (previewLabels.isEmpty || slotLabel == null
+            ? null
+            : AgentGeo.current.childLevelOf(slotLabel!)) ??
+        level.child;
 
     return _MindBranch(
       connectorColor: _connectorColor,
