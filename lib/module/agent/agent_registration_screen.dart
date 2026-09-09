@@ -91,13 +91,12 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   /// hands down.
   final Map<AgentLevel, String> _areaPick = {};
 
-  /// The named tiers, widest first — the levels [agentSlotLabelsUnder] can put
-  /// a fixed list of slots below.
+  /// The named tiers, widest first — the ones the placement cascade picks
+  /// through: the five [agentNamedTiers] that carry fixed child slots, plus
+  /// [AgentLevel.ward] itself (an LSGD's wards are the last named list).
   static const List<AgentLevel> _cascadeTiers = [
-    AgentLevel.region,
-    AgentLevel.state,
-    AgentLevel.district,
-    AgentLevel.assembly,
+    ...agentNamedTiers,
+    AgentLevel.ward,
   ];
 
   AgentLevel _initialLevel() {
@@ -127,70 +126,47 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   void initState() {
     super.initState();
     _otp.addListener(_clearErrorOnEdit);
+    // Make sure the geo hierarchy is (being) loaded — usually already done by
+    // the tree, but the form can also be opened from the agent detail screen.
+    AgentGeo.instance.ensureLoaded();
 
-    // A tapped "+ South" / "+ Kerala" / "+ Ernakulam" / "+ Kovalam" slot pins
+    // A tapped "+ South" / "+ Kerala" / "+ Kovalam" / "+ … Ward 05" slot pins
     // every tier at and above it — seed the whole chain from its name.
     final tapped = widget.initialArea;
-    final tappedLevel = tapped == null ? null : _namedLevelOf(tapped);
-    if (tapped != null && tappedLevel != null) {
-      _areaPick.addAll(_ancestryOf(tapped, tappedLevel));
+    if (tapped != null && _namedLevelOf(tapped) != null) {
+      _areaPick.addAll(_ancestryOf(tapped));
     }
   }
 
   /// The tier one step up from [tier] in the cascade, or null at the top.
-  static AgentLevel? _tierAbove(AgentLevel tier) =>
-      tier == AgentLevel.region ? null : tier.parent;
+  static AgentLevel? _tierAbove(AgentLevel tier) {
+    final i = _cascadeTiers.indexOf(tier);
+    return i <= 0 ? null : _cascadeTiers[i - 1];
+  }
 
-  /// The whole named chain that ends at [area] (which sits at [level]) — every
-  /// tier from [level] up to the widest named one, keyed by level.
-  static Map<AgentLevel, String> _ancestryOf(String area, AgentLevel level) {
+  /// The whole named chain that ends at [area] — every tier from [area]'s own
+  /// up to the widest named one, keyed by level. Read from the geo hierarchy,
+  /// so it tracks the database copy once that has loaded.
+  static Map<AgentLevel, String> _ancestryOf(String area) {
     final chain = <AgentLevel, String>{};
-    var name = area;
-    AgentLevel? tier = level;
-    while (tier != null) {
-      chain[tier] = name;
-      final up = _tierAbove(tier);
-      final upName = up == null ? null : _ownerOf(name, tier);
-      if (up == null || upName == null) {
+    String? name = area;
+    while (name != null) {
+      final level = _namedLevelOf(name);
+      if (level == null) {
         break;
       }
-      name = upName;
-      tier = up;
+      chain[level] = name;
+      name = AgentGeo.current.parentSlotOf(name);
     }
     return chain;
   }
 
-  /// The name one tier up that owns the [tier]-level slot [name] — the state a
-  /// district sits in, the district an assembly sits in, and so on.
-  static String? _ownerOf(String name, AgentLevel tier) => switch (tier) {
-    AgentLevel.state => _lookUp(agentRegionStates, name),
-    AgentLevel.district => _lookUp(agentStateDistricts, name),
-    AgentLevel.assembly => _lookUp(agentDistrictAssemblies, name),
-    _ => null,
-  };
-
-  static String? _lookUp(Map<String, List<String>> map, String value) {
-    for (final entry in map.entries) {
-      if (entry.value.contains(value)) {
-        return entry.key;
-      }
-    }
-    return null;
-  }
-
   /// Which named tier [area] is a slot of, or null when it is not a fixed
   /// slot anywhere (a free-text place).
-  static AgentLevel? _namedLevelOf(String area) {
-    if (agentRegions.contains(area)) return AgentLevel.region;
-    if (_lookUp(agentRegionStates, area) != null) return AgentLevel.state;
-    if (_lookUp(agentStateDistricts, area) != null) return AgentLevel.district;
-    if (_lookUp(agentDistrictAssemblies, area) != null) {
-      return AgentLevel.assembly;
-    }
-    return null;
-  }
+  static AgentLevel? _namedLevelOf(String area) =>
+      AgentGeo.current.levelOfSlot(area);
 
-  // ---- The region → state → district → assembly cascade ----
+  // ---- The region → state → district → assembly → lsgd → ward cascade ----
   //
   // Every named tier the new agent's level reaches gets a picker, unless the
   // parent it reports to — or the slot the recruiter tapped — already pins it.
@@ -205,22 +181,23 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     if (!_cascadeTiers.contains(p.level) || _namedLevelOf(p.area) != p.level) {
       return const {};
     }
-    return _ancestryOf(p.area, p.level);
+    return _ancestryOf(p.area);
   }
 
   /// The named chain the tapped "+ …" slot pins, keyed by level.
   Map<AgentLevel, String> get _tappedAncestry {
     final ia = widget.initialArea;
-    final level = ia == null ? null : _namedLevelOf(ia);
-    return level == null ? const {} : _ancestryOf(ia!, level);
+    return ia == null || _namedLevelOf(ia) == null
+        ? const {}
+        : _ancestryOf(ia);
   }
 
-  /// Whether the level being registered reaches down to [tier] — a district
-  /// agent reaches region, state and district; an assembly agent one further.
-  /// Levels past assembly (lsgd, ward) use a plain place and reach no tier.
+  /// Whether the level being registered reaches down to [tier]. A district
+  /// agent reaches region → state → district; a ward agent the whole chain.
+  /// A registration at a level with no named slots below it (there are none
+  /// past ward) reaches nothing.
   bool _levelReaches(AgentLevel tier) =>
-      _level.index >= tier.index &&
-      _level.index <= AgentLevel.assembly.index;
+      _cascadeTiers.contains(_level) && _level.index >= tier.index;
 
   /// The name in force at [tier] — the parent's, else the form pick.
   String? _areaAt(AgentLevel tier) =>
@@ -266,11 +243,12 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     }
   }
 
-  /// "Pick a region" / "Pick a state" / "Pick a district" / "Pick an
-  /// assembly" — the empty-state hint for the [tier] dropdown.
-  static String _pickHint(AgentLevel tier) => tier == AgentLevel.assembly
-      ? 'Pick an assembly'
-      : 'Pick a ${tier.label.toLowerCase()}';
+  /// The empty-state hint for the [tier] dropdown.
+  static String _pickHint(AgentLevel tier) => switch (tier) {
+        AgentLevel.assembly => 'Pick an assembly',
+        AgentLevel.lsgd => 'Pick an LSGD',
+        _ => 'Pick a ${tier.label.toLowerCase()}',
+      };
 
   /// One tier's dropdown, plus its label and the after-submit prompt when it
   /// is still empty. Spread into the details column.
@@ -307,6 +285,14 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             'Choose which ${tier.label.toLowerCase()} this agent '
             '${_level == tier ? 'heads' : 'sits under'}',
             style: const TextStyle(fontSize: 12.5, color: AppColors.danger),
+          ),
+        )
+      else if (value != null && agentSlotCode(value) != null)
+        Padding(
+          padding: const EdgeInsets.only(top: 6, left: 4),
+          child: Text(
+            'Code · ${agentSlotCode(value)}',
+            style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
         ),
     ];

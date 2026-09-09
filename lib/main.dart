@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'data/neon/neon_http.dart';
 import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
+import 'module/agent/agent_geo.dart';
 import 'module/catalogue/catalogue_service.dart';
 import 'module/home/customer_reviews_service.dart';
 import 'module/orders/purchase_service.dart';
@@ -67,6 +68,10 @@ Future<void> main() async {
   // the admin's own clips on first paint rather than the bundled fallback
   // flashing up first.
   unawaited(CustomerReviewsService.instance.ensureLoaded());
+
+  // Warm the agent geographic hierarchy (regions … wards) so "My Team" and
+  // the agent registration form draw the database copy, not the bundled seed.
+  unawaited(AgentGeo.instance.ensureLoaded());
 
   // One line at launch — via dart:developer so it survives a release build —
   // saying whether the Neon write-through is live. A build started without

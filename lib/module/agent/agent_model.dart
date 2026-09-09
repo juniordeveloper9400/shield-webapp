@@ -5,6 +5,13 @@ import 'package:flutter/material.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 
+// The geographic hierarchy (regions → … → wards) and its DB-backed loader.
+// Imported for this file's own use ([AgentLevel.childCapacity]) and
+// re-exported so the many files that already `import 'agent_model.dart'` keep
+// seeing `agentRegions`, `agentSlotLabelsUnder`, `agentSlotCode`, etc.
+import 'agent_geo.dart';
+export 'agent_geo.dart';
+
 /// The rungs of the field sales hierarchy, widest first.
 ///
 /// An agent heads one geographic tier and every agent below them in the tree
@@ -74,143 +81,10 @@ enum AgentLevel {
   };
 }
 
-/// The six zones the country is split into for the field hierarchy — every
-/// [AgentLevel.region] agent heads exactly one of these, so the registration
-/// form offers them as a fixed list rather than a free-text box.
-const List<String> agentRegions = <String>[
-  'North',
-  'South',
-  'East',
-  'West',
-  'Central',
-  'Northeast',
-];
-
-/// The states that sit under each zone — the fixed state slots below a region
-/// agent, the same way [agentRegions] are the fixed slots below the national
-/// one. A zone missing here (or a region agent whose area is not one of the
-/// six) falls back to the plain doubling shape.
-const Map<String, List<String>> agentRegionStates = <String, List<String>>{
-  'North': [
-    'Chandigarh',
-    'Delhi',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jammu & Kashmir',
-    'Ladakh',
-    'Punjab',
-    'Rajasthan',
-  ],
-  'South': [
-    'Andhra Pradesh',
-    'Karnataka',
-    'Kerala',
-    'Tamil Nadu',
-    'Telangana',
-  ],
-  'East': [
-    'Bihar',
-    'Jharkhand',
-    'Odisha',
-    'West Bengal',
-  ],
-  'West': [
-    'Chhattisgarh',
-    'Goa',
-    'Gujarat',
-    'Maharashtra',
-  ],
-  'Central': [
-    'Madhya Pradesh',
-    'Uttar Pradesh',
-    'Uttarakhand',
-  ],
-  'Northeast': [
-    'Arunachal Pradesh',
-    'Assam',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Sikkim',
-    'Tripura',
-  ],
-};
-
-/// The districts that sit under a state — the fixed district slots below a
-/// state agent, one tier further down from [agentRegionStates]. Only the
-/// states listed here use named slots; a state missing from the map (or a
-/// state agent whose area is not one of them) falls back to the plain
-/// doubling shape.
-const Map<String, List<String>> agentStateDistricts = <String, List<String>>{
-  'Kerala': [
-    'Thiruvananthapuram',
-    'Kollam',
-    'Pathanamthitta',
-    'Alappuzha',
-    'Kottayam',
-    'Idukki',
-    'Ernakulam',
-    'Thrissur',
-    'Palakkad',
-    'Malappuram',
-    'Kozhikode',
-    'Wayanad',
-    'Kannur',
-    'Kasaragod',
-  ],
-};
-
-/// The local bodies that sit under a district — the fixed slots below a
-/// district agent, one tier further down from [agentStateDistricts]. Only the
-/// districts listed here use named slots; Thiruvananthapuram splits into its
-/// thirteen assembly segments plus the city corporation.
-const Map<String, List<String>> agentDistrictAssemblies =
-    <String, List<String>>{
-  'Thiruvananthapuram': [
-    'Varkala',
-    'Attingal',
-    'Chirayinkeezhu',
-    'Nedumangad',
-    'Vamanapuram',
-    'Kazhakkoottam',
-    'Vattiyoorkavu',
-    'Nemom',
-    'Aruvikkara',
-    'Parassala',
-    'Kattakkada',
-    'Kovalam',
-    'Neyyattinkara',
-    'Thiruvananthapuram Corporation',
-  ],
-};
-
-/// The fixed slot names one level below [parent], or an empty list when this
-/// tier does not use named slots (assembly and below, or a region/state/
-/// district whose area is not one of the known ones).
-///
-/// national → the six [agentRegions]; a region agent heading a known zone →
-/// that zone's [agentRegionStates]; a state agent heading a known state →
-/// that state's [agentStateDistricts]; a district agent heading a known
-/// district → that district's [agentDistrictAssemblies].
-List<String> agentSlotLabelsUnder({
-  required AgentLevel level,
-  required String area,
-}) {
-  if (level == AgentLevel.national) {
-    return agentRegions;
-  }
-  if (level == AgentLevel.region) {
-    return agentRegionStates[area] ?? const <String>[];
-  }
-  if (level == AgentLevel.state) {
-    return agentStateDistricts[area] ?? const <String>[];
-  }
-  if (level == AgentLevel.district) {
-    return agentDistrictAssemblies[area] ?? const <String>[];
-  }
-  return const <String>[];
-}
+// The geographic slot data — `agentRegions`, `agentRegionStates`,
+// `agentStateDistricts`, `agentDistrictAssemblies`, `agentSlotLabelsUnder`,
+// `agentSlotCode` — now lives in `agent_geo.dart`, sourced from Neon
+// (`app.agent_geo_node`) with a bundled fallback, and is re-exported above.
 
 /// Whether the agent who recruited this one has signed off on them yet.
 ///

@@ -68,11 +68,20 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
+    // Pull the live geographic hierarchy (regions … wards) from Neon; the
+    // bundled seed is what shows until it lands. Rebuild when it does.
+    AgentGeo.instance.addListener(_onGeoChanged);
+    AgentGeo.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
+  }
+
+  void _onGeoChanged() {
+    if (mounted) setState(() {});
   }
 
   @override
   void dispose() {
+    AgentGeo.instance.removeListener(_onGeoChanged);
     _panController.dispose();
     _transform.dispose();
     super.dispose();
@@ -380,11 +389,9 @@ class _MindNode extends StatelessWidget {
         pillKey: keyFor(agent.id),
         boxKey: ValueKey('mind-pill-${agent.id}'),
         title: agent.name,
-        // A region agent's card names the zone they head, not just "Region".
-        subtitle: agent.level == AgentLevel.region &&
-                agentRegions.contains(agent.area)
-            ? '${agent.level.label} · ${agent.area}'
-            : agent.level.label,
+        // A slot agent's card names the place they head (the zone, or the
+        // ward's own code), not just the bare tier name.
+        subtitle: _slotSubtitle(agent),
         code: agent.agentCode,
         depth: depth,
         toggleLabel: agent.name,
@@ -398,6 +405,19 @@ class _MindNode extends StatelessWidget {
           ? _buildChildNodes(children, childLevel, slotLabels, capacity)
           : const [],
     );
+  }
+
+  /// "Region · South", "Ward · AC136-L1-W005", or just the bare tier name for
+  /// a slot with no code and no zone.
+  static String _slotSubtitle(Agent agent) {
+    final code = agentSlotCode(agent.area);
+    if (code != null) {
+      return '${agent.level.label} · $code';
+    }
+    if (agent.level == AgentLevel.region && agentRegions.contains(agent.area)) {
+      return '${agent.level.label} · ${agent.area}';
+    }
+    return agent.level.label;
   }
 
   _MindNode _child(Agent child) => _MindNode(
@@ -721,14 +741,31 @@ class _MindPlusPill extends StatelessWidget {
                       color: AppColors.textDark.withValues(alpha: 0.7),
                     ),
                     const SizedBox(width: 6),
-                    Text(
-                      slotLabel ?? level.label,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.2,
-                        color: AppColors.textDark.withValues(alpha: 0.75),
-                      ),
+                    Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          slotLabel ?? level.label,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                            color: AppColors.textDark.withValues(alpha: 0.75),
+                          ),
+                        ),
+                        if (slotLabel != null &&
+                            agentSlotCode(slotLabel!) != null)
+                          Text(
+                            agentSlotCode(slotLabel!)!,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.2,
+                              color: AppColors.textDark.withValues(alpha: 0.5),
+                            ),
+                          ),
+                      ],
                     ),
                   ],
                 ),
