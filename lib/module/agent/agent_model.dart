@@ -84,6 +84,75 @@ const List<String> agentRegions = <String>[
   'Northeast',
 ];
 
+/// The states that sit under each zone — the fixed state slots below a region
+/// agent, the same way [agentRegions] are the fixed slots below the national
+/// one. A zone missing here (or a region agent whose area is not one of the
+/// six) falls back to the plain doubling shape.
+const Map<String, List<String>> agentRegionStates = <String, List<String>>{
+  'North': [
+    'Chandigarh',
+    'Delhi',
+    'Haryana',
+    'Himachal Pradesh',
+    'Jammu & Kashmir',
+    'Ladakh',
+    'Punjab',
+    'Rajasthan',
+  ],
+  'South': [
+    'Andhra Pradesh',
+    'Karnataka',
+    'Kerala',
+    'Tamil Nadu',
+    'Telangana',
+  ],
+  'East': [
+    'Bihar',
+    'Jharkhand',
+    'Odisha',
+    'West Bengal',
+  ],
+  'West': [
+    'Chhattisgarh',
+    'Goa',
+    'Gujarat',
+    'Maharashtra',
+  ],
+  'Central': [
+    'Madhya Pradesh',
+    'Uttar Pradesh',
+    'Uttarakhand',
+  ],
+  'Northeast': [
+    'Arunachal Pradesh',
+    'Assam',
+    'Manipur',
+    'Meghalaya',
+    'Mizoram',
+    'Nagaland',
+    'Sikkim',
+    'Tripura',
+  ],
+};
+
+/// The fixed slot names one level below [parent], or an empty list when this
+/// tier does not use named slots (state and below, once past a known zone).
+///
+/// national → the six [agentRegions]; a region agent heading a known zone →
+/// that zone's [agentRegionStates].
+List<String> agentSlotLabelsUnder({
+  required AgentLevel level,
+  required String area,
+}) {
+  if (level == AgentLevel.national) {
+    return agentRegions;
+  }
+  if (level == AgentLevel.region) {
+    return agentRegionStates[area] ?? const <String>[];
+  }
+  return const <String>[];
+}
+
 /// Whether the agent who recruited this one has signed off on them yet.
 ///
 /// Separate from [Agent.active]: [active] is whether a working agent is

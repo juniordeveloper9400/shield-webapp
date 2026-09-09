@@ -157,15 +157,25 @@ class AgentService extends ChangeNotifier {
   List<AgentLevel> allowedChildLevels(Agent parent) =>
       AgentLevel.values.sublist(parent.level.index + 1);
 
+  /// The fixed named slots directly under [parent] — the six zones under a
+  /// national agent, or a zone's states under a region agent — or an empty
+  /// list where the tier just uses the plain doubling shape.
+  List<String> slotLabelsUnder(Agent parent) =>
+      agentSlotLabelsUnder(level: parent.level, area: parent.area);
+
   /// How many more agents [parent] can take on directly, before every
-  /// position [AgentLevel.childCapacity] opens up under them is filled — the
-  /// same budget of direct reports whatever tier each one actually ends up
-  /// registered at.
-  int openPositionsUnder(Agent parent) =>
-      (parent.level.childCapacity - childrenOf(parent.id).length).clamp(
-        0,
-        parent.level.childCapacity,
-      );
+  /// position under them is filled.
+  ///
+  /// Where the tier below is a fixed set of named slots ([slotLabelsUnder] —
+  /// the zones, or a zone's states) the budget is that set's size; otherwise
+  /// it is [AgentLevel.childCapacity], the same budget whatever tier each
+  /// direct report actually ends up registered at.
+  int openPositionsUnder(Agent parent) {
+    final labels = slotLabelsUnder(parent);
+    final capacity =
+        labels.isNotEmpty ? labels.length : parent.level.childCapacity;
+    return (capacity - childrenOf(parent.id).length).clamp(0, capacity);
+  }
 
   // ---- Customers ----
   // What "Direct sale" actually shows: not the agents someone recruited, but
@@ -302,7 +312,10 @@ class AgentService extends ChangeNotifier {
     required String pincode,
     required String place,
     required String accountNumber,
-    String? region,
+    /// The named slot this agent fills — a zone for a region agent, a state
+    /// for a state agent. Becomes their [Agent.area]; falls back to [place]
+    /// when the tier has no named slots.
+    String? area,
     Uint8List? photoBytes,
     bool active = true,
   }) {
@@ -317,7 +330,7 @@ class AgentService extends ChangeNotifier {
     }
     // A region agent heads one of the six fixed zones, picked from a list.
     if (level == AgentLevel.region &&
-        !agentRegions.contains((region ?? '').trim())) {
+        !agentRegions.contains((area ?? '').trim())) {
       return 'Choose which region this agent heads';
     }
 
@@ -344,9 +357,10 @@ class AgentService extends ChangeNotifier {
     final last = lastName.trim();
     final cleanPlace = place.trim();
 
-    // What the agent heads: a region agent's zone, everyone else's home place.
-    final area =
-        level == AgentLevel.region ? (region ?? '').trim() : cleanPlace;
+    // What the agent heads: the named slot they filled (a zone / a state),
+    // falling back to their home place where the tier has no named slots.
+    final slotArea = (area ?? '').trim();
+    final headArea = slotArea.isNotEmpty ? slotArea : cleanPlace;
 
     _added++;
     _agents.add(
@@ -358,7 +372,7 @@ class AgentService extends ChangeNotifier {
         level: level,
         active: active,
         parentId: parent.id,
-        area: area,
+        area: headArea,
         firstName: first,
         middleName: middle,
         lastName: last,

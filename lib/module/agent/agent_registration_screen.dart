@@ -38,11 +38,18 @@ class AgentRegistrationScreen extends StatefulWidget {
   /// below [initialParent].
   final AgentLevel? initialLevel;
 
+  /// The named slot the recruiter tapped — a zone ("South") for a region
+  /// position, a state ("Kerala") for a state position. Fixes the new agent's
+  /// area to it, and for a region position pre-selects and locks the zone
+  /// dropdown. Null when the flow is opened from the toolbar.
+  final String? initialArea;
+
   const AgentRegistrationScreen({
     super.key,
     required this.scopeRoot,
     required this.initialParent,
     this.initialLevel,
+    this.initialArea,
   });
 
   @override
@@ -109,7 +116,23 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   void initState() {
     super.initState();
     _otp.addListener(_clearErrorOnEdit);
+    // Tapping a named "+ South" slot fixes the zone — pre-select it.
+    if (_level == AgentLevel.region &&
+        widget.initialArea != null &&
+        agentRegions.contains(widget.initialArea)) {
+      _region = widget.initialArea;
+    }
   }
+
+  /// The zone dropdown is fixed (not a choice) when the recruiter came in
+  /// through a named "+ South" slot.
+  bool get _regionLocked =>
+      widget.initialArea != null && agentRegions.contains(widget.initialArea!);
+
+  /// The named slot this agent fills — the picked zone for a region agent,
+  /// else whatever slot the recruiter tapped in through.
+  String? get _slotArea =>
+      _level == AgentLevel.region ? _region : widget.initialArea;
 
   @override
   void dispose() {
@@ -271,7 +294,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       pincode: _pincode.text,
       place: _place.text,
       accountNumber: _account.text,
-      region: _region,
+      area: _slotArea,
       photoBytes: _photo,
     );
     if (failure != null) {
@@ -447,7 +470,10 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
               for (final region in agentRegions)
                 DropdownMenuItem(value: region, child: Text(region)),
             ],
-            onChanged: (region) => setState(() => _region = region),
+            // Fixed when the recruiter tapped a named "+ South" slot.
+            onChanged: _regionLocked
+                ? null
+                : (region) => setState(() => _region = region),
           ),
           if (_submitted && _region == null)
             const Padding(

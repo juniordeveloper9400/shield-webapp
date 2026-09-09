@@ -213,13 +213,18 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       ..forward().whenCompleteOrCancel(() => anim.removeListener(tick));
   }
 
-  Future<void> _addUnder(Agent parent, [AgentLevel? level]) async {
+  Future<void> _addUnder(
+    Agent parent, [
+    AgentLevel? level,
+    String? slotLabel,
+  ]) async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => AgentRegistrationScreen(
           scopeRoot: widget.root,
           initialParent: parent,
           initialLevel: level,
+          initialArea: slotLabel,
         ),
       ),
     );
@@ -341,7 +346,7 @@ class _MindNode extends StatelessWidget {
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
   final void Function(Agent agent) onOpen;
-  final void Function(Agent parent, AgentLevel level) onAdd;
+  final void Function(Agent parent, AgentLevel level, [String? slotLabel]) onAdd;
 
   const _MindNode({
     required this.agent,
@@ -357,8 +362,15 @@ class _MindNode extends StatelessWidget {
   Widget build(BuildContext context) {
     final service = AgentService.instance;
     final children = service.childrenOf(agent.id);
-    final capacity = agent.level.childCapacity;
     final childLevel = agent.level.child;
+
+    // The fixed named slots this agent's tier opens — the six zones under the
+    // national agent, a zone's states under a region agent — or empty where
+    // the tier just doubles. Named slots drive the capacity; otherwise it is
+    // the plain childCapacity budget.
+    final slotLabels = service.slotLabelsUnder(agent);
+    final capacity =
+        slotLabels.isNotEmpty ? slotLabels.length : agent.level.childCapacity;
     final canExpand = capacity > 0;
     final isExpanded = canExpand && expanded.contains(agent.id);
 
@@ -383,43 +395,71 @@ class _MindNode extends StatelessWidget {
             agent.isApproved ? null : _ApprovalTag(status: agent.approvalStatus),
       ),
       children: isExpanded
-          ? [
-              for (final child in children)
-                _MindNode(
-                  agent: child,
-                  depth: depth + 1,
-                  expanded: expanded,
-                  keyFor: keyFor,
-                  onToggle: onToggle,
-                  onOpen: onOpen,
-                  onAdd: onAdd,
-                ),
-              // The positions nobody has filled yet — shown as "+" cards that
-              // fan out into their own preview positions when tapped, all the
-              // way down to ward. Registering into any of them reports the
-              // new agent to [agent] directly, so a national agent can open a
-              // ward without a region between them.
-              for (var i = children.length; i < capacity; i++)
-                _MindPlusNode(
-                  level: childLevel!,
-                  depth: depth + 1,
-                  slotId: 'slot/${agent.id}/${childLevel.name}/$i',
-                  realParent: agent,
-                  // Name a national agent's open region slots after the six
-                  // zones, so the hierarchy reads North / South / East / … .
-                  slotLabel: childLevel == AgentLevel.region &&
-                          agent.level == AgentLevel.national &&
-                          i < agentRegions.length
-                      ? agentRegions[i]
-                      : null,
-                  expanded: expanded,
-                  keyFor: keyFor,
-                  onToggle: onToggle,
-                  onAdd: onAdd,
-                ),
-            ]
+          ? _buildChildNodes(children, childLevel, slotLabels, capacity)
           : const [],
     );
+  }
+
+  _MindNode _child(Agent child) => _MindNode(
+        agent: child,
+        depth: depth + 1,
+        expanded: expanded,
+        keyFor: keyFor,
+        onToggle: onToggle,
+        onOpen: onOpen,
+        onAdd: onAdd,
+      );
+
+  _MindPlusNode _slot(AgentLevel level, String slotId, {String? label}) =>
+      _MindPlusNode(
+        level: level,
+        depth: depth + 1,
+        slotId: slotId,
+        realParent: agent,
+        slotLabel: label,
+        expanded: expanded,
+        keyFor: keyFor,
+        onToggle: onToggle,
+        onAdd: onAdd,
+      );
+
+  /// The rows under an expanded agent: its filled reports, then the open
+  /// positions. With named slots ([slotLabels] — the zones, or a zone's
+  /// states) each slot is either the agent filling it (matched by area) or an
+  /// open "+ North" card; otherwise the plain "+ child" cards fill the
+  /// remaining [capacity].
+  List<Widget> _buildChildNodes(
+    List<Agent> children,
+    AgentLevel? childLevel,
+    List<String> slotLabels,
+    int capacity,
+  ) {
+    if (childLevel == null) {
+      return const [];
+    }
+    if (slotLabels.isEmpty) {
+      return [
+        for (final child in children) _child(child),
+        for (var i = children.length; i < capacity; i++)
+          _slot(childLevel, 'slot/${agent.id}/${childLevel.name}/$i'),
+      ];
+    }
+    final nodes = <Widget>[
+      for (final label in slotLabels)
+        if (children.where((c) => c.area == label).firstOrNull
+            case final Agent filled)
+          _child(filled)
+        else
+          _slot(
+            childLevel,
+            'slot/${agent.id}/${childLevel.name}/$label',
+            label: label,
+          ),
+      // Anyone whose area isn't one of the named slots still shows, after.
+      for (final child in children)
+        if (!slotLabels.contains(child.area)) _child(child),
+    ];
+    return nodes;
   }
 }
 
@@ -449,7 +489,7 @@ class _MindPlusNode extends StatelessWidget {
   final Set<String> expanded;
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
-  final void Function(Agent parent, AgentLevel level) onAdd;
+  final void Function(Agent parent, AgentLevel level, [String? slotLabel]) onAdd;
 
   const _MindPlusNode({
     required this.level,
@@ -469,6 +509,15 @@ class _MindPlusNode extends StatelessWidget {
     final canExpand = level.childCapacity > 0;
     final isExpanded = canExpand && expanded.contains(slotId);
 
+    // If this open slot itself names a zone, its own preview positions are
+    // that zone's named states rather than the plain doubling shape.
+    final previewLabels = agentSlotLabelsUnder(
+      level: level,
+      area: slotLabel ?? '',
+    );
+    final previewCapacity =
+        previewLabels.isNotEmpty ? previewLabels.length : level.childCapacity;
+
     return _MindBranch(
       connectorColor: _connectorColor,
       node: _MindPlusPill(
@@ -477,18 +526,19 @@ class _MindPlusNode extends StatelessWidget {
         depth: depth,
         toggleLabel: '${level.label} position',
         expanded: isExpanded,
-        onAdd: () => onAdd(realParent, level),
+        onAdd: () => onAdd(realParent, level, slotLabel),
         onToggle: canExpand ? () => onToggle(slotId) : null,
         slotLabel: slotLabel,
       ),
       children: isExpanded
           ? [
-              for (var i = 0; i < level.childCapacity; i++)
+              for (var i = 0; i < previewCapacity; i++)
                 _MindPlusNode(
                   level: childLevel!,
                   depth: depth + 1,
                   slotId: '$slotId/${childLevel.name}/$i',
                   realParent: realParent,
+                  slotLabel: previewLabels.isNotEmpty ? previewLabels[i] : null,
                   expanded: expanded,
                   keyFor: keyFor,
                   onToggle: onToggle,
