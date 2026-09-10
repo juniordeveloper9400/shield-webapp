@@ -37,11 +37,92 @@ class AgentRepository {
         return rows.map(_toAgent).toList();
       });
 
+  /// Every PENDING `app.agent_request` — an agent recruited in the app and
+  /// awaiting an admin's approval — mapped to a pending [Agent] so the team
+  /// tree can show it as a locked "Waiting for approval" card. Null when the
+  /// database is unavailable.
+  Future<List<Agent>?> fetchPendingRequests() => _run('fetchPendingRequests',
+      () async {
+        final rows = await NeonHttp.instance.query(r'''
+          SELECT r.id::text, r.name, r.phone, r.requested_level::text AS level,
+                 r.parent_agent_id::text AS parent_id, r.requested_area AS area,
+                 r.requested_area_id::text AS area_id,
+                 r.first_name, r.middle_name, r.last_name, r.dob::text,
+                 r.aadhaar, r.pan, r.address, r.pincode, r.place,
+                 r.account_number, r.status::text
+          FROM app.agent_request r
+          WHERE r.status = 'PENDING'
+          ORDER BY r.created_at
+        ''');
+        return rows.map(_toRequestAgent).toList();
+      });
+
+  /// Files an agent-registration request (`app.agent_request`, status PENDING)
+  /// for the admin console to approve. Returns the request row id, or null on
+  /// failure — best-effort like every write here.
+  Future<int?> insertAgentRequest({
+    required int? parentDbId,
+    required AgentLevel level,
+    required String name,
+    required String phone,
+    required String area,
+    String? areaId,
+    required String firstName,
+    String middleName = '',
+    required String lastName,
+    required DateTime dob,
+    required String aadhaar,
+    required String pan,
+    required String address,
+    required String pincode,
+    required String place,
+    required String accountNumber,
+  }) =>
+      _run('insertAgentRequest', () async {
+        final rows = await NeonHttp.instance.query(
+          r'''
+            INSERT INTO app.agent_request (
+              parent_agent_id, requested_level, requested_area, requested_area_id,
+              name, phone, first_name, middle_name, last_name, dob,
+              aadhaar, pan, address, pincode, place, account_number
+            )
+            VALUES (
+              $1, $2::app.agent_level, $3, $4::uuid,
+              $5, $6, $7, $8, $9, $10::date,
+              $11, $12, $13, $14, $15, $16
+            )
+            RETURNING id::text
+          ''',
+          [
+            parentDbId,
+            level.name.toUpperCase(),
+            area,
+            areaId,
+            name,
+            phone,
+            firstName,
+            middleName,
+            lastName,
+            _isoDate(dob),
+            aadhaar,
+            pan,
+            address,
+            pincode,
+            place,
+            accountNumber,
+          ],
+        );
+        return rows.isEmpty ? null : int.tryParse(rows.first['id'].toString());
+      });
+
   /// Inserts a new agent under [parentDbId] — the database id of the parent
   /// row, resolved by the caller ([AgentService]) since the parent might
   /// itself be the seed national persona (no row of its own yet) or an
   /// agent registered earlier this session (whose own insert might still be
   /// in flight). Returns the new row's database id, or null on failure.
+  ///
+  /// Used by the admin-approval path only — the app's own registration flow
+  /// files an [insertAgentRequest] instead and lets the console approve it.
   Future<int?> insertAgent({
     required int parentDbId,
     required AgentLevel level,
@@ -67,14 +148,12 @@ class AgentRepository {
             INSERT INTO app.agent (
               code, name, phone, level, parent_id, area, area_id,
               first_name, middle_name, last_name, dob, aadhaar, pan,
-              address, pincode, place, account_number,
-              approval_status, active
+              address, pincode, place, account_number, approval_status
             )
             VALUES (
               $1, $2, $3, $4::app.agent_level, $5, $6, $7::uuid,
               $8, $9, $10, $11::date, $12, $13,
-              $14, $15, $16, $17,
-              'PENDING', false
+              $14, $15, $16, $17, 'APPROVED'
             )
             RETURNING id::text
           ''',
@@ -196,6 +275,39 @@ class AgentRepository {
       accountNumber: str(row['account_number']),
       approvalStatus: _approvalByName[str(row['approval_status']).toUpperCase()] ??
           AgentApprovalStatus.approved,
+    );
+  }
+
+  /// One PENDING `app.agent_request` row → a pending [Agent]. The id is
+  /// `req-<id>` (distinct from a real agent's `db-<id>`), the figures are zero,
+  /// and [Agent.approvalStatus] is [AgentApprovalStatus.pending] so the tree
+  /// draws a locked "Waiting for approval" card rather than a working agent.
+  static Agent _toRequestAgent(Map<String, dynamic> row) {
+    String str(Object? v) => (v ?? '').toString();
+    final parentDbId = row['parent_id'];
+    return Agent(
+      id: 'req-${str(row['id'])}',
+      name: str(row['name']),
+      phone: str(row['phone']),
+      agentCode: '',
+      level: _levelByName[str(row['level']).toUpperCase()] ?? AgentLevel.ward,
+      active: false,
+      parentId: (parentDbId == null || str(parentDbId).isEmpty)
+          ? AgentDirectory.national.id
+          : 'db-${str(parentDbId)}',
+      area: str(row['area']),
+      areaId: str(row['area_id']).isEmpty ? null : str(row['area_id']),
+      firstName: str(row['first_name']),
+      middleName: str(row['middle_name']),
+      lastName: str(row['last_name']),
+      dob: DateTime.tryParse(str(row['dob'])),
+      aadhaar: str(row['aadhaar']),
+      pan: str(row['pan']),
+      address: str(row['address']),
+      pincode: str(row['pincode']),
+      place: str(row['place']),
+      accountNumber: str(row['account_number']),
+      approvalStatus: AgentApprovalStatus.pending,
     );
   }
 

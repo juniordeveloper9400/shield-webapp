@@ -836,6 +836,41 @@ ALTER TABLE app.wallet_card
     ADD CONSTRAINT wallet_card_sold_by_agent_fk
     FOREIGN KEY (sold_by_agent_id) REFERENCES app.agent(id) ON DELETE SET NULL;
 
+-- The agent-registration approval queue (migration 0011). A recruit submitted
+-- from the app lands here as PENDING; the admin console approves it into an
+-- app.agent row (at a confirmed level/parent/area) or rejects it with a reason.
+-- app.agent therefore only ever holds real, approved agents.
+CREATE TABLE app.agent_request (
+    id                bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    uuid              uuid NOT NULL DEFAULT gen_random_uuid(),
+    parent_agent_id   bigint REFERENCES app.agent(id) ON DELETE SET NULL,
+    requested_level   app.agent_level NOT NULL,
+    requested_area    text NOT NULL DEFAULT '',
+    requested_area_id uuid,
+    name              text NOT NULL,
+    phone             text NOT NULL,
+    first_name        text NOT NULL DEFAULT '',
+    middle_name       text NOT NULL DEFAULT '',
+    last_name         text NOT NULL DEFAULT '',
+    dob               date,
+    aadhaar           text NOT NULL DEFAULT '',
+    pan               text NOT NULL DEFAULT '',
+    address           text NOT NULL DEFAULT '',
+    pincode           text NOT NULL DEFAULT '',
+    place             text NOT NULL DEFAULT '',
+    account_number    text NOT NULL DEFAULT '',
+    photo_path        text,
+    status            app.agent_approval NOT NULL DEFAULT 'PENDING',
+    reviewer_note     text NOT NULL DEFAULT '',
+    reviewed_at       timestamptz,
+    agent_id          bigint REFERENCES app.agent(id) ON DELETE SET NULL,
+    created_at        timestamptz NOT NULL DEFAULT now(),
+    updated_at        timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX agent_request_status_idx ON app.agent_request(status, created_at DESC);
+CREATE INDEX agent_request_phone_idx  ON app.agent_request(phone);
+CREATE INDEX agent_request_parent_idx ON app.agent_request(parent_agent_id);
+
 -- A customer an agent personally sold privilege cards to ("Direct sale").
 CREATE TABLE app.agent_customer (
     id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

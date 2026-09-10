@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../data/neon/agent_repository.dart';
@@ -88,27 +90,36 @@ class AgentService extends ChangeNotifier {
 
   Future<void> _loadFromServer() async {
     try {
-      final remote = await AgentRepository.instance.fetchAll();
-      if (remote == null || remote.isEmpty) {
+      final approved = await AgentRepository.instance.fetchAll();
+      final pending = await AgentRepository.instance.fetchPendingRequests();
+      final remote = <Agent>[
+        if (approved != null) ...approved,
+        if (pending != null) ...pending,
+      ];
+      if (remote.isEmpty) {
         return;
       }
-      // Skip any row that is the seed root's own database counterpart —
-      // written the first time a registration under it needed one to
-      // parent under (see `_resolveDbId`) — so the national persona never
-      // shows twice.
-      final seedPhones = _agents.map((a) => a.phone).toSet();
-      final fresh = remote.where((a) => !seedPhones.contains(a.phone)).toList();
+      // Skip any approved row that is the seed root's own database counterpart
+      // — written the first time a registration under it needed one to parent
+      // under — so the national persona never shows twice. Pending requests
+      // keep their `req-` ids and never collide.
+      final have = _agents.map((a) => a.phone).toSet();
+      final ids = _agents.map((a) => a.id).toSet();
+      final fresh = remote
+          .where((a) => !ids.contains(a.id) && !have.contains(a.phone))
+          .toList();
       if (fresh.isEmpty) {
         return;
       }
       _agents.addAll(fresh);
-      // Every fetched row already has a real database id — cache it so a
-      // registration under one of them resolves its parent id immediately
-      // rather than treating it as still-unpersisted.
+      // Cache the real database id for every approved fetched row so a
+      // registration under one of them resolves its parent id immediately.
       for (final agent in fresh) {
-        final dbId = int.tryParse(agent.id.replaceFirst('db-', ''));
-        if (dbId != null) {
-          _dbId[agent.id] = Future.value(dbId);
+        if (agent.id.startsWith('db-')) {
+          final dbId = int.tryParse(agent.id.substring(3));
+          if (dbId != null) {
+            _dbId[agent.id] = Future.value(dbId);
+          }
         }
       }
       notifyListeners();
@@ -388,8 +399,13 @@ class AgentService extends ChangeNotifier {
     Uint8List? photoBytes,
     bool active = true,
   }) {
-    if (byId(parent.id) == null) {
+    final resolvedParent = byId(parent.id);
+    if (resolvedParent == null) {
       return 'That parent agent no longer exists';
+    }
+    if (resolvedParent.isPending) {
+      return '${resolvedParent.name} is still awaiting approval and cannot '
+          'recruit yet.';
     }
     // The national agent is the single seeded persona at the top of the tree.
     // There is only ever one, and nobody is registered *at* that tier.
@@ -485,13 +501,11 @@ class AgentService extends ChangeNotifier {
       approvalStatus: AgentApprovalStatus.pending,
     );
     _agents.add(newAgent);
-    // Kicked off (and cached under the new agent's own id) immediately,
-    // before the insert has necessarily finished — so a sub-agent
-    // registered under `newAgent` moments later, even before this one
-    // lands, awaits this exact write rather than treating it as never
-    // going to happen. Never awaited itself: the UI already has its
-    // answer (`null` — success) by the time this settles either way.
-    _dbId[newAgent.id] = _persistNew(newAgent, parent);
+    // Fire-and-forget the app.agent_request write. Not cached under the new
+    // agent's id: a pending recruit cannot be a parent (guarded above), and
+    // once the admin approves them they come back from fetchAll() with a real
+    // db-<id> anyway.
+    unawaited(_persistNew(newAgent, parent));
     notifyListeners();
     return null;
   }
@@ -544,20 +558,18 @@ class AgentService extends ChangeNotifier {
         : Future.value(null);
   }
 
-  /// Writes [agent] to `app.agent` under [parent]'s database row, resolving
-  /// (and, for the seed root, creating) that row first. Best-effort: a
-  /// missing `DATABASE_URL`, a network blip, or the parent's own write never
-  /// landing all just leave [agent] real in this session and absent from the
-  /// database — never surfaced to the UI, which already has its answer.
+  /// Files [agent] as an `app.agent_request` under [parent] for the admin
+  /// console to approve — the app never writes `app.agent` itself. Best-effort:
+  /// a missing `DATABASE_URL` or a network blip just leaves the request in this
+  /// session's roster (as a pending card) and absent from the database.
+  ///
+  /// The parent's own database id is passed through when known, but a null one
+  /// is fine — the admin confirms the parent on approval anyway.
   Future<int?> _persistNew(Agent agent, Agent parent) async {
     final parentDbId = await _dbIdFor(parent);
-    if (parentDbId == null) {
-      return null;
-    }
-    return AgentRepository.instance.insertAgent(
+    return AgentRepository.instance.insertAgentRequest(
       parentDbId: parentDbId,
       level: agent.level,
-      code: agent.agentCode,
       name: agent.name,
       phone: agent.phone,
       area: agent.area,
