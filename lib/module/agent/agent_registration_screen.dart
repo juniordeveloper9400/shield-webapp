@@ -210,30 +210,19 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
 
   /// The fixed slots to choose from at [tier], drawn from the slot one tier up.
   ///
-  /// For the tier this agent will *head* (`tier == _level`), a slot a sibling
-  /// under [_parent] already heads is dropped — each region, state, district …
-  /// seats exactly one agent, so a taken seat is never offered (and once all
-  /// six regions are taken this list is empty). Tiers the agent only *sits
-  /// under* keep every slot: those are shared across the branch.
+  /// Always the full list — every region, every state, and so on. Whether a
+  /// slot is already taken (one agent per region, six regions total) is the
+  /// admin console's call when it reviews the request, not the recruiter's to
+  /// see here.
   List<GeoSlot> _optionsFor(AgentLevel tier) {
-    final List<GeoSlot> all;
     if (tier == AgentLevel.region) {
-      all = AgentGeo.current.regions;
-    } else {
-      final above = _tierAbove(tier)!;
-      final aboveSlot = _areaAt(above);
-      all = aboveSlot == null
-          ? const <GeoSlot>[]
-          : AgentGeo.current.slotsUnder(above, aboveSlot.id);
+      return AgentGeo.current.regions;
     }
-    if (tier != _level) {
-      return all;
-    }
-    final taken = <String>{
-      for (final sibling in AgentService.instance.childrenOf(_parent.id))
-        if (sibling.areaId != null) sibling.areaId!,
-    };
-    return [for (final slot in all) if (!taken.contains(slot.id)) slot];
+    final above = _tierAbove(tier)!;
+    final aboveSlot = _areaAt(above);
+    return aboveSlot == null
+        ? const <GeoSlot>[]
+        : AgentGeo.current.slotsUnder(above, aboveSlot.id);
   }
 
   /// A picker shows for [tier] when the level reaches it, the parent has not
@@ -418,19 +407,8 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     final formOk = _formKey.currentState?.validate() ?? false;
     setState(() => _submitted = true);
 
-    // Every seat at the tier this agent would head is already filled — there is
-    // nothing to register them into. (All six regions taken, say.)
-    if (_cascadeTiers.contains(_level) &&
-        !_parentAncestry.containsKey(_level) &&
-        _optionsFor(_level).isEmpty) {
-      setState(() {
-        _error =
-            'Every ${_level.label.toLowerCase()} under ${_parent.name} already '
-            'has an agent — there is no open position to register into.';
-      });
-      return;
-    }
-
+    // The recruiter just has to *pick* a slot at each tier they reach — whether
+    // it is already taken is the admin's call at approval, not a block here.
     final slotMissing = _cascadeTiers.any(
       (tier) =>
           _showPicker(tier) && !_optionsFor(tier).contains(_areaPick[tier]),

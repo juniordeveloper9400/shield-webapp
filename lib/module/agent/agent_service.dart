@@ -416,28 +416,15 @@ class AgentService extends ChangeNotifier {
     if (level.index <= parent.level.index) {
       return '${level.label} is not below ${parent.level.label}';
     }
-    if (openPositionsUnder(parent) <= 0) {
-      if (parent.level == AgentLevel.national) {
-        return 'All regions already have an agent — there are no more region '
-            'positions to fill.';
-      }
-      return 'Every position under ${parent.name} is already filled';
-    }
     // A region agent heads one of the six fixed zones, picked from a list.
     if (level == AgentLevel.region &&
         !AgentGeo.current.regions.any((r) => r.id == slot?.id)) {
       return 'Choose which region this agent heads';
     }
-    // A named slot — a region, a state — seats exactly one agent. For regions
-    // this is also what caps the count at the six that exist: once every
-    // region slot is taken, openPositionsUnder above already reads zero.
-    if (slot != null &&
-        _slotHoldersUnder(parent.id)
-            .any((sibling) => sibling.areaId == slot.id)) {
-      final tier = level.label.toLowerCase();
-      return 'A $tier agent already heads ${slot.name}. '
-          'Each $tier can have only one agent.';
-    }
+    // Capacity and one-agent-per-slot are NOT checked here — the recruiter may
+    // request any region / any level, and the admin console decides on approval
+    // (which caps at one national + six regions and rejects a slot that is
+    // already taken). This screen only captures the request.
 
     final checks = <String?>[
       validateName(firstName, field: 'first name'),
