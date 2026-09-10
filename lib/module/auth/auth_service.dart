@@ -438,14 +438,25 @@ abstract class AuthGateway {
 /// Firebase Phone Auth. Holds the `verificationId` from [sendCode] and pairs
 /// it with the typed code in [confirmCode].
 class FirebaseAuthGateway implements AuthGateway {
-  FirebaseAuthGateway({this.onResolved});
+  FirebaseAuthGateway({
+    this.onResolved,
+    fb.FirebaseAuth? auth,
+    this.ephemeral = false,
+  }) : _auth = auth ?? fb.FirebaseAuth.instance;
 
   /// Called when Android instant verification or SMS auto-retrieval signs the
   /// member in before a code was ever typed, so [AuthService] can finish the
-  /// pending sign-in itself.
+  /// pending sign-in itself. Never fired when [ephemeral].
   final void Function()? onResolved;
 
-  final fb.FirebaseAuth _auth = fb.FirebaseAuth.instance;
+  /// When true this gateway is a throwaway number-checker, not a sign-in: a
+  /// successful [confirmCode] proves the caller holds the number and then
+  /// immediately signs out, leaving no session behind. Used by
+  /// [AgentOtpVerifier] on a secondary Firebase app so verifying a *new*
+  /// agent's number never disturbs the signed-in recruiter.
+  final bool ephemeral;
+
+  final fb.FirebaseAuth _auth;
 
   String? _verificationId;
   int? _resendToken;
@@ -500,7 +511,12 @@ class FirebaseAuthGateway implements AuthGateway {
           if (!result.isCompleted) {
             result.complete(null);
           }
-          onResolved?.call();
+          if (ephemeral) {
+            // Number proven; this gateway never keeps a session.
+            await _auth.signOut();
+          } else {
+            onResolved?.call();
+          }
         } catch (_) {
           // Fall through to the manual code path, which will surface any error.
         }
@@ -564,6 +580,9 @@ class FirebaseAuthGateway implements AuthGateway {
       try {
         await confirmation.confirm(code).timeout(_verifyDeadline);
         _webConfirmation = null;
+        if (ephemeral) {
+          await _auth.signOut();
+        }
         return null;
       } on TimeoutException {
         return OtpError.timeout;
@@ -585,6 +604,9 @@ class FirebaseAuthGateway implements AuthGateway {
       );
       await _auth.signInWithCredential(credential).timeout(_verifyDeadline);
       _verificationId = null;
+      if (ephemeral) {
+        await _auth.signOut();
+      }
       return null;
     } on TimeoutException {
       return OtpError.timeout;

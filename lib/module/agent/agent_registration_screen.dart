@@ -12,6 +12,7 @@ import '../auth/auth_service.dart';
 import '../auth/auth_widgets.dart';
 import '../auth/otp_field.dart';
 import 'agent_model.dart';
+import 'agent_otp_verifier.dart';
 import 'agent_photo_picker.dart';
 import 'agent_service.dart';
 
@@ -321,6 +322,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   @override
   void dispose() {
     _cooldown?.cancel();
+    AgentOtpVerifier.current.discard();
     for (final c in [
       _first,
       _middle,
@@ -441,8 +443,19 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       _busy = true;
       _error = null;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    // A real SMS, sent on a throwaway secondary Firebase app so it never
+    // touches the recruiter's own session (see [AgentOtpVerifier]).
+    final failure =
+        await AgentOtpVerifier.current.sendCode('+91${_phone.text.trim()}');
     if (!mounted) {
+      return;
+    }
+    if (failure != null) {
+      setState(() {
+        _busy = false;
+        _error = _otpErrorText(failure);
+      });
       return;
     }
 
@@ -455,14 +468,60 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     _announceCode();
   }
 
-  void _resend() {
-    if (_secondsLeft > 0) {
+  Future<void> _resend() async {
+    if (_secondsLeft > 0 || _busy) {
       return;
     }
-    _otp.clear();
-    setState(() => _error = null);
-    _startCooldown();
-    _announceCode();
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    final failure =
+        await AgentOtpVerifier.current.sendCode('+91${_phone.text.trim()}');
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _busy = false;
+      if (failure != null) {
+        _error = _otpErrorText(failure);
+      }
+    });
+    if (failure == null) {
+      _otp.clear();
+      _startCooldown();
+      _announceCode();
+    }
+  }
+
+  /// A one-line reason for an [OtpError] on this screen.
+  String _otpErrorText(OtpError error) {
+    switch (error) {
+      case OtpError.invalidPhone:
+        return 'That mobile number is not valid.';
+      case OtpError.wrongOtp:
+        return 'That code is incorrect. Check the SMS and try again.';
+      case OtpError.codeExpired:
+      case OtpError.noPendingRequest:
+        return 'That code has expired — tap Resend for a new one.';
+      case OtpError.tooManyRequests:
+      case OtpError.throttled:
+        return 'Too many code requests in a short time. Wait a few minutes and '
+            'try again.';
+      case OtpError.quotaExceeded:
+        return 'SMS verification is temporarily unavailable. Try again later.';
+      case OtpError.network:
+        return 'No connection. Check your network and try again.';
+      case OtpError.timeout:
+        return 'Verification timed out. Check your connection and tap Resend.';
+      case OtpError.unavailable:
+      case OtpError.configError:
+        return 'SMS verification is not available right now. Please contact '
+            'support.';
+      case OtpError.invalidName:
+      case OtpError.unknown:
+        return 'Could not verify the number. Please try again.';
+    }
   }
 
   Future<void> _verify([String? completed]) async {
@@ -477,15 +536,15 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       _busy = true;
       _error = null;
     });
-    await Future<void>.delayed(const Duration(milliseconds: 350));
+
+    final otpFailure = await AgentOtpVerifier.current.confirmCode(code.trim());
     if (!mounted) {
       return;
     }
-
-    if (code.trim() != AuthService.demoOtp) {
+    if (otpFailure != null) {
       setState(() {
         _busy = false;
-        _error = 'That code is incorrect. Check the SMS and try again.';
+        _error = _otpErrorText(otpFailure);
       });
       return;
     }
@@ -518,15 +577,44 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     }
 
     _cooldown?.cancel();
+    AgentOtpVerifier.current.discard();
     if (!mounted) {
       return;
     }
     ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    // The agent is saved as PENDING — an admin reviews the KYC and sets the
+    // position before they can work. Say so before dropping back to the tree,
+    // where the new card carries a "Pending approval" tag.
+    final name = [_first.text.trim(), _last.text.trim()]
+        .where((p) => p.isNotEmpty)
+        .join(' ');
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Sent for approval'),
+        content: Text(
+          '${name.isEmpty ? 'This agent' : name} has been submitted. An admin '
+          'will review the details and set the position — they get agent '
+          'access once approved.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) {
+      return;
+    }
     Navigator.of(context).pop(true);
   }
 
   void _backToDetails() {
     _cooldown?.cancel();
+    AgentOtpVerifier.current.discard();
     _otp.clear();
     setState(() {
       _step = _Step.details;
@@ -556,9 +644,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       ..showSnackBar(
         SnackBar(
           duration: const Duration(seconds: 3),
-          content: Text(
-            'OTP sent to +91 ${_phone.text} · demo code ${AuthService.demoOtp}',
-          ),
+          content: Text('OTP sent to +91 ${_phone.text.trim()}'),
         ),
       );
   }
@@ -870,23 +956,6 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
           label: 'Verify & submit',
           busy: _busy,
           onPressed: _verify,
-        ),
-        const SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: AppColors.offerTint,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-          child: Text(
-            'Demo mode · the code is ${AuthService.demoOtp}',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w600,
-              color: AppColors.brandBlue,
-            ),
-          ),
         ),
       ],
     );

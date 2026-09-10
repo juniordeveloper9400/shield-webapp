@@ -178,6 +178,13 @@ class AgentService extends ChangeNotifier {
   List<Agent> childrenOf(String id) =>
       _agents.where((agent) => agent.parentId == id).toList(growable: false);
 
+  /// [childrenOf], minus anyone an admin rejected — a rejected registration
+  /// gives its slot back, so it must not count against capacity or hold a
+  /// named position.
+  List<Agent> _slotHoldersUnder(String id) => childrenOf(id)
+      .where((a) => a.approvalStatus != AgentApprovalStatus.rejected)
+      .toList(growable: false);
+
   /// Every agent anywhere below [id] in the tree. [id] itself is not included.
   List<Agent> descendantsOf(String id) {
     final out = <Agent>[];
@@ -236,7 +243,7 @@ class AgentService extends ChangeNotifier {
     final slots = slotsUnder(parent);
     final capacity =
         slots.isNotEmpty ? slots.length : parent.level.childCapacity;
-    return (capacity - childrenOf(parent.id).length).clamp(0, capacity);
+    return (capacity - _slotHoldersUnder(parent.id).length).clamp(0, capacity);
   }
 
   // ---- Customers ----
@@ -409,7 +416,8 @@ class AgentService extends ChangeNotifier {
     // this is also what caps the count at the six that exist: once every
     // region slot is taken, openPositionsUnder above already reads zero.
     if (slot != null &&
-        childrenOf(parent.id).any((sibling) => sibling.areaId == slot.id)) {
+        _slotHoldersUnder(parent.id)
+            .any((sibling) => sibling.areaId == slot.id)) {
       final tier = level.label.toLowerCase();
       return 'A $tier agent already heads ${slot.name}. '
           'Each $tier can have only one agent.';
@@ -450,7 +458,10 @@ class AgentService extends ChangeNotifier {
       phone: phone.trim(),
       agentCode: _mintCode(level),
       level: level,
-      active: active,
+      // Off and pending until an admin reviews the KYC and sets the position
+      // in the console. `active` (the caller's arg) only takes effect once
+      // approved.
+      active: false,
       parentId: parent.id,
       area: headArea,
       areaId: slot?.id,
@@ -467,11 +478,11 @@ class AgentService extends ChangeNotifier {
       // The profile photo is captured here at registration and nowhere
       // else — the agent's own detail screen only ever shows it.
       photoBytes: photoBytes,
-      // Approved on the spot — registering someone is the recruiter's own
-      // decision, made with a live OTP check already behind it, so there
-      // is nothing further to gate them on. [Agent]'s own default already
-      // reads this way; spelled out here so it stays true on purpose.
-      approvalStatus: AgentApprovalStatus.approved,
+      // Pending: the recruit has proven their number over a real OTP, but an
+      // admin still reviews the KYC and fixes the level/position in the console
+      // before they can work. The card shows a "Pending approval" tag and every
+      // figure reads zero (see [Agent.displayEarned]) until then.
+      approvalStatus: AgentApprovalStatus.pending,
     );
     _agents.add(newAgent);
     // Kicked off (and cached under the new agent's own id) immediately,

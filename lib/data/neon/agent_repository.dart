@@ -67,12 +67,14 @@ class AgentRepository {
             INSERT INTO app.agent (
               code, name, phone, level, parent_id, area, area_id,
               first_name, middle_name, last_name, dob, aadhaar, pan,
-              address, pincode, place, account_number, approval_status
+              address, pincode, place, account_number,
+              approval_status, active
             )
             VALUES (
               $1, $2, $3, $4::app.agent_level, $5, $6, $7::uuid,
               $8, $9, $10, $11::date, $12, $13,
-              $14, $15, $16, $17, 'APPROVED'
+              $14, $15, $16, $17,
+              'PENDING', false
             )
             RETURNING id::text
           ''',
