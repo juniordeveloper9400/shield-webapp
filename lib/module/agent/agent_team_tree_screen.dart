@@ -70,8 +70,11 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     );
     // Pull the live geographic hierarchy (regions … wards) from Neon; the
     // bundled seed is what shows until it lands. Rebuild when it does.
+    // `force: true` — a fresh pull each time "My Team" opens, so an admin's
+    // edit shows on the next visit and a load that failed earlier in the
+    // session is retried rather than left on the stale seed.
     AgentGeo.instance.addListener(_onGeoChanged);
-    AgentGeo.instance.ensureLoaded();
+    AgentGeo.instance.ensureLoaded(force: true);
     WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
   }
 

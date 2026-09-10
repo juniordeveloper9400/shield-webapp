@@ -60,11 +60,23 @@ class GeoNode {
   }
 }
 
-/// Reads the agent geographic hierarchy — `app.agent_geo_node`, seeded and
-/// then maintained from the database — over the Neon HTTP SQL endpoint.
+/// Reads the agent geographic hierarchy over the Neon HTTP SQL endpoint.
+///
+/// The live shape is one table per tier — `app.region` / `app.state` /
+/// `app.district` / `app.assembly` / `app.lsgd` / `app.ward` (backend migration
+/// 0014), linked child -> parent by foreign key. The old single self-referential
+/// `app.agent_geo_node` table this used to read was dropped by that migration.
+/// This flattens the six tables back into the `(id, parent_id, level, name,
+/// code, sort)` rows [GeoNode.fromRow] expects — a region's `parent_id` is null,
+/// every deeper tier points at the row above it.
+///
+/// Loaded in two steps: the structure region..lsgd is one small query (~1200
+/// rows), then the ~21k wards are a second query merged in. If the ward query
+/// fails or times out on a poor connection, the tree still works down to LSGD
+/// rather than the whole load failing.
 ///
 /// Read-only and best-effort like the other Neon repositories: a missing
-/// `DATABASE_URL`, a network failure, or an empty table returns null, and the
+/// `DATABASE_URL`, a network failure, or empty tables return null, and the
 /// caller ([AgentGeo]) keeps the hierarchy bundled with the build.
 class AgentGeoRepository {
   const AgentGeoRepository._();
@@ -74,25 +86,57 @@ class AgentGeoRepository {
   bool get isAvailable => NeonHttp.isConfigured;
 
   /// Every geo node, ordered so a parent always precedes deeper tiers, or null
-  /// when the table cannot be read.
+  /// when the endpoint is not configured or the tables are empty.
   Future<List<GeoNode>?> fetchAll() async {
     if (!NeonHttp.isConfigured) {
       return null;
     }
     try {
-      final rows = await NeonHttp.instance.query(r'''
-        SELECT id, parent_id, level, name, code, sort
-        FROM app.agent_geo_node
-        ORDER BY
-          array_position(
-            ARRAY['region','state','district','assembly','lsgd','ward'], level
-          ),
-          sort,
-          name
+      // Step 1 — the structure, region down to LSGD. Small and quick.
+      final structure = await NeonHttp.instance.query(r'''
+        SELECT id::text AS id, NULL::text AS parent_id, 'region' AS level,
+               name, code, sort, 1 AS tier
+        FROM app.region
+        UNION ALL
+        SELECT id::text, region_id::text, 'state', name, code, sort, 2
+        FROM app.state
+        UNION ALL
+        SELECT id::text, state_id::text, 'district', name, code, sort, 3
+        FROM app.district
+        UNION ALL
+        SELECT id::text, district_id::text, 'assembly', name, code, sort, 4
+        FROM app.assembly
+        UNION ALL
+        SELECT id::text, assembly_id::text, 'lsgd', name, code, sort, 5
+        FROM app.lsgd
+        ORDER BY tier, sort, name
       ''');
-      final nodes =
-          rows.map(GeoNode.fromRow).whereType<GeoNode>().toList(growable: false);
-      return nodes.isEmpty ? null : nodes;
+      final nodes = structure
+          .map(GeoNode.fromRow)
+          .whereType<GeoNode>()
+          .toList(); // growable — wards are appended below
+      if (nodes.isEmpty) {
+        return null;
+      }
+
+      // Step 2 — the wards. Best effort: a failure here leaves the tree
+      // whole down to LSGD rather than dropping the entire hierarchy.
+      try {
+        final wards = await NeonHttp.instance.query(r'''
+          SELECT id::text AS id, lsgd_id::text AS parent_id, 'ward' AS level,
+                 name, code, sort
+          FROM app.ward
+          ORDER BY sort, name
+        ''');
+        nodes.addAll(wards.map(GeoNode.fromRow).whereType<GeoNode>());
+      } catch (error) {
+        NeonHttp.log(
+          'AgentGeoRepository: ward load failed — tree stops at LSGD',
+          error: error,
+        );
+      }
+
+      return nodes;
     } catch (error) {
       NeonHttp.log('AgentGeoRepository.fetchAll failed', error: error);
       return null;

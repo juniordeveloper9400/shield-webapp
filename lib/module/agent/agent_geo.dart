@@ -208,10 +208,16 @@ class AgentGeo extends ChangeNotifier {
       if (nodes != null && nodes.isNotEmpty) {
         _current = GeoHierarchy.fromNodes(nodes);
         _fromDatabase = true;
+        _loaded = true;
         notifyListeners();
       }
+      // Otherwise nothing came back — the endpoint is not configured, or the
+      // region…ward tables were still empty / unreachable. Leave [_loaded]
+      // false so the next `ensureLoaded()` retries rather than the session
+      // being stuck on the bundled seed until the app is relaunched.
+    } catch (error) {
+      debugPrint('AgentGeo: hierarchy load failed — $error');
     } finally {
-      _loaded = true;
       _inFlight = null;
     }
   }
