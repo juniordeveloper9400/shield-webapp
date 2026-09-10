@@ -7,11 +7,14 @@ import 'agent_model.dart' show AgentLevel;
 //  The agent geographic hierarchy — region → state → district → assembly →
 //  lsgd → ward.
 //
-//  The live shape comes from Neon (`app.agent_geo_node`, migration 0011): the
-//  pharmacy admin can add / rename / delete a ward, an LSGD or a whole
-//  district in the database and the app picks it up on the next "My Team"
-//  open. [_seed…] below is a byte-for-byte copy of that migration's seed,
-//  used offline and under test — whatever the database returns wins over it.
+//  The live shape comes from Neon — one table per tier, `app.region` …
+//  `app.ward` (migration 0014), read through [AgentGeoRepository]. The admin
+//  can add / rename / delete a ward, an LSGD or a whole district and the app
+//  picks it up on the next "My Team" open. Until that load lands (or when the
+//  database is unreachable) the hierarchy is empty — there is no bundled
+//  fallback and nothing in this file names a real place. Tests that need a
+//  full tree hand one in via [AgentGeo.useHierarchy] — see
+//  test/support/agent_geo_seed_fixture.dart.
 //
 //  Everything downstream (the tree, the registration form's placement
 //  cascade, `AgentService.openPositionsUnder`) reads this through the plain
@@ -30,27 +33,96 @@ const List<AgentLevel> agentNamedTiers = [
   AgentLevel.lsgd,
 ];
 
+/// One named slot in the hierarchy — a region, a state, a district, an
+/// assembly, an LSGD or a ward — carrying the [id] every real lookup and
+/// match is keyed on, plus what to show for it: [name] and, where the tier
+/// carries one, [code].
+///
+/// [id] is what makes a slot unique. Two different slots can and often do
+/// share a [name] — Kerala's real ward list alone repeats "Railway Station",
+/// "Market", "High School" and hundreds more across different LSGDs, and a
+/// handful of names (e.g. "Alappuzha") are used at more than one *tier*
+/// (both a district and, separately, an LSGD). [GeoHierarchy]'s id-keyed
+/// methods below are the only ones safe to build real navigation or
+/// agent-to-slot matching on; the legacy name-keyed methods above them exist
+/// for tests against the small, hand-curated, collision-free seed fixture
+/// only — never use them against live data.
+@immutable
+class GeoSlot {
+  final String id;
+  final String name;
+  final String code;
+  final AgentLevel level;
+
+  /// LSGD tier only — `corporation` / `municipality` / `grama_panchayat`.
+  /// Empty for every other tier. [typeLabel] turns it into display text.
+  final String type;
+
+  const GeoSlot({
+    required this.id,
+    required this.name,
+    required this.level,
+    this.code = '',
+    this.type = '',
+  });
+
+  /// "Corporation" / "Municipality" / "Grama Panchayat", or '' when this slot
+  /// is not an LSGD or its kind is unknown.
+  String get typeLabel => switch (type) {
+        'corporation' => 'Corporation',
+        'municipality' => 'Municipality',
+        'grama_panchayat' => 'Grama Panchayat',
+        _ => '',
+      };
+
+  @override
+  bool operator ==(Object other) => other is GeoSlot && other.id == id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
 /// An immutable snapshot of the whole hierarchy: which slot names sit under
 /// each parent, and the printed code each slot carries.
 @immutable
 class GeoHierarchy {
   const GeoHierarchy._({
     required this.regionNames,
+    required this.regions,
     required Map<String, List<String>> childrenByParentName,
     required Map<String, String> codeByName,
     required Map<AgentLevel, List<String>> namesByLevel,
     required Map<String, AgentLevel> levelByName,
     required Map<String, String> parentNameByChild,
     required Map<String, AgentLevel> childLevelByParentName,
-  })  : _childrenByParentName = childrenByParentName,
-        _codeByName = codeByName,
-        _namesByLevel = namesByLevel,
-        _levelByName = levelByName,
-        _parentNameByChild = parentNameByChild,
-        _childLevelByParentName = childLevelByParentName;
+    required Map<String, List<GeoSlot>> childrenByParentId,
+    required Map<String, String> codeById,
+    required Map<String, String> nameById,
+    required Map<String, AgentLevel> levelById,
+    required Map<String, String> parentIdByChildId,
+    required Map<String, AgentLevel> childLevelByParentId,
+  }) : _childrenByParentName = childrenByParentName,
+       _codeByName = codeByName,
+       _namesByLevel = namesByLevel,
+       _levelByName = levelByName,
+       _parentNameByChild = parentNameByChild,
+       _childLevelByParentName = childLevelByParentName,
+       _childrenByParentId = childrenByParentId,
+       _codeById = codeById,
+       _nameById = nameById,
+       _levelById = levelById,
+       _parentIdByChildId = parentIdByChildId,
+       _childLevelByParentId = childLevelByParentId;
 
   /// The six regions, in order — the slots directly under the national agent.
+  ///
+  /// Name-keyed, kept only for the tests written against the seed fixture
+  /// (see [GeoSlot]'s doc) — real code should use [regions] instead.
   final List<String> regionNames;
+
+  /// The six regions, in order — the slots directly under the national
+  /// agent. What real navigation and matching should use; see [GeoSlot].
+  final List<GeoSlot> regions;
 
   final Map<String, List<String>> _childrenByParentName;
   final Map<String, String> _codeByName;
@@ -58,6 +130,90 @@ class GeoHierarchy {
   final Map<String, AgentLevel> _levelByName;
   final Map<String, String> _parentNameByChild;
   final Map<String, AgentLevel> _childLevelByParentName;
+
+  // ---- id-keyed — what real navigation and agent-to-slot matching use ----
+  final Map<String, List<GeoSlot>> _childrenByParentId;
+  final Map<String, String> _codeById;
+  final Map<String, String> _nameById;
+  final Map<String, AgentLevel> _levelById;
+  final Map<String, String> _parentIdByChildId;
+  final Map<String, AgentLevel> _childLevelByParentId;
+
+  /// The tier [id] is a slot of, or null when [id] is not a real slot (a
+  /// free-text place has no id at all).
+  AgentLevel? levelOfId(String id) => _levelById[id];
+
+  /// The id of the slot one tier up from [id], or null at a region / for an
+  /// unknown id.
+  String? parentIdOf(String id) => _parentIdByChildId[id];
+
+  /// The tier of [parentId]'s children — normally the enum successor of
+  /// the parent's own level, but read straight from the data so an
+  /// irregular branch is honoured (a ward sitting directly under an
+  /// assembly, skipping the LSGD tier, say). Null when [parentId] has no
+  /// children.
+  AgentLevel? childLevelOfId(String parentId) =>
+      _childLevelByParentId[parentId];
+
+  /// The slots one tier below a [level] agent heading [parentId], or an
+  /// empty list where that tier just doubles (a ward heads nobody) or
+  /// [parentId] is null (an agent on a free-text place, not a real slot).
+  /// national ignores [parentId] — its children are always [regions].
+  List<GeoSlot> slotsUnder(AgentLevel level, String? parentId) {
+    if (level == AgentLevel.national) {
+      return regions;
+    }
+    if (parentId == null) {
+      return const <GeoSlot>[];
+    }
+    return _childrenByParentId[parentId] ?? const <GeoSlot>[];
+  }
+
+  /// The printed code for a slot that carries one (`AC136`, `TVC`,
+  /// `AC136-L1`, `AC136-L1-W005`), or null for a slot with no code — a zone,
+  /// a state, a district, or an unknown id.
+  String? codeForId(String id) => _codeById[id];
+
+  /// The display name for [id], or null when it is not a real slot.
+  String? nameForId(String id) => _nameById[id];
+
+  /// The full slot for [id] — its name, level and code — or null when [id]
+  /// is not a real slot.
+  GeoSlot? slotById(String id) {
+    final level = _levelById[id];
+    if (level == null) {
+      return null;
+    }
+    return GeoSlot(
+      id: id,
+      name: _nameById[id] ?? '',
+      level: level,
+      code: _codeById[id] ?? '',
+    );
+  }
+
+  /// Every slot at [level], as full [GeoSlot]s — a test/tooling convenience
+  /// for resolving "the slot named X at level Y" against the collision-free
+  /// seed fixture. Never use this against live data to look a slot up by
+  /// name — see [GeoSlot]'s doc.
+  @visibleForTesting
+  List<GeoSlot> slotsAtLevel(AgentLevel level) => [
+    for (final entry in _levelById.entries)
+      if (entry.value == level) slotById(entry.key)!,
+  ];
+
+  // ---- name-keyed legacy API — test fixtures only, see [GeoSlot] ----------
+  //
+  // Every method below matches purely on display name, with no id behind it.
+  // That is exactly correct against the small, hand-curated seed fixture
+  // (test/support/agent_geo_seed_fixture.dart) every name-keyed test in
+  // test/agent_portal_test.dart checks against — nothing there repeats a
+  // name. It silently does the wrong thing against the real, full-scale
+  // Kerala data (loaded via [GeoHierarchy.fromNodes] from Neon), which
+  // repeats thousands of ward names and a hundred-plus names across
+  // different tiers. Production code must use the id-keyed methods above
+  // instead: [levelOfId], [parentIdOf], [childLevelOfId], [slotsUnder],
+  // [codeForId], [nameForId].
 
   /// The tier [name] is a named slot of, or null when it is not a fixed slot
   /// anywhere (a free-text place).
@@ -97,20 +253,19 @@ class GeoHierarchy {
   /// that has named children — the shape the old `agentRegionStates` /
   /// `agentStateDistricts` / `agentDistrictAssemblies` maps had.
   Map<String, List<String>> childMapFor(AgentLevel parentLevel) => {
-        for (final name in namesAt(parentLevel))
-          if ((_childrenByParentName[name] ?? const <String>[]).isNotEmpty)
-            name: _childrenByParentName[name]!,
-      };
+    for (final name in namesAt(parentLevel))
+      if ((_childrenByParentName[name] ?? const <String>[]).isNotEmpty)
+        name: _childrenByParentName[name]!,
+  };
 
   /// Builds a hierarchy from a flat node list ([AgentGeoRepository.fetchAll] or
-  /// [_seedNodes]).
+  /// a test fixture).
   ///
-  /// Slot names are assumed globally unique — a registered agent is matched to
-  /// its slot by name ([Agent.area]), and the lookups here (`codeFor`,
-  /// `parentSlotOf`, `levelOfSlot`) are name-keyed. The seed and migration
-  /// 0011 both satisfy this (e.g. the corporation's LSGD is
-  /// "Thiruvananthapuram Municipal Corporation", distinct from the
-  /// "Thiruvananthapuram Corporation" assembly segment above it).
+  /// Builds both layers: the id-keyed one real navigation and agent-to-slot
+  /// matching should use (ids are the real Neon primary keys, or the
+  /// fixture's own synthetic-but-unique ones — either way genuinely unique),
+  /// and the name-keyed legacy one kept for tests written against the
+  /// collision-free seed fixture — see [GeoSlot].
   factory GeoHierarchy.fromNodes(List<GeoNode> nodes) {
     final byId = {for (final n in nodes) n.id: n};
     final byParent = <String, List<GeoNode>>{};
@@ -127,17 +282,31 @@ class GeoHierarchy {
         a.sort != b.sort ? a.sort.compareTo(b.sort) : a.name.compareTo(b.name);
     regions.sort(order);
 
+    GeoSlot toSlot(GeoNode n) => GeoSlot(
+          id: n.id,
+          name: n.name,
+          level: n.level,
+          code: n.code,
+          type: n.type,
+        );
+
     final childrenByParentName = <String, List<String>>{};
     final parentNameByChild = <String, String>{};
     final childLevelByParentName = <String, AgentLevel>{};
+    final childrenByParentId = <String, List<GeoSlot>>{};
+    final parentIdByChildId = <String, String>{};
+    final childLevelByParentId = <String, AgentLevel>{};
     for (final entry in byParent.entries) {
       final parent = byId[entry.key];
       if (parent == null) continue;
       final kids = entry.value..sort(order);
       childrenByParentName[parent.name] = [for (final k in kids) k.name];
       childLevelByParentName[parent.name] = kids.first.level;
+      childrenByParentId[parent.id] = [for (final k in kids) toSlot(k)];
+      childLevelByParentId[parent.id] = kids.first.level;
       for (final k in kids) {
         parentNameByChild[k.name] = parent.name;
+        parentIdByChildId[k.id] = parent.id;
       }
     }
 
@@ -152,6 +321,7 @@ class GeoHierarchy {
 
     return GeoHierarchy._(
       regionNames: [for (final r in regions) r.name],
+      regions: [for (final r in regions) toSlot(r)],
       childrenByParentName: childrenByParentName,
       codeByName: {
         for (final n in nodes)
@@ -161,11 +331,22 @@ class GeoHierarchy {
       levelByName: {for (final n in nodes) n.name: n.level},
       parentNameByChild: parentNameByChild,
       childLevelByParentName: childLevelByParentName,
+      childrenByParentId: childrenByParentId,
+      codeById: {
+        for (final n in nodes)
+          if (n.code.isNotEmpty) n.id: n.code,
+      },
+      nameById: {for (final n in nodes) n.id: n.name},
+      levelById: {for (final n in nodes) n.id: n.level},
+      parentIdByChildId: parentIdByChildId,
+      childLevelByParentId: childLevelByParentId,
     );
   }
 
-  /// The bundled hierarchy — an exact copy of migration 0011's seed.
-  factory GeoHierarchy.seed() => GeoHierarchy.fromNodes(_seedNodes());
+  /// An empty hierarchy — no regions, no slots. What the app shows until
+  /// [AgentGeo.ensureLoaded] has pulled the real tables (`app.region` …
+  /// `app.ward`, migration 0014). There is no bundled fallback any more.
+  factory GeoHierarchy.empty() => GeoHierarchy.fromNodes(const []);
 }
 
 /// Holds the hierarchy that is currently in force and swaps in the database
@@ -176,23 +357,35 @@ class AgentGeo extends ChangeNotifier {
 
   static final AgentGeo instance = AgentGeo._();
 
-  static GeoHierarchy _current = GeoHierarchy.seed();
+  static GeoHierarchy _current = GeoHierarchy.empty();
 
-  /// The hierarchy every accessor reads — the bundled seed until
-  /// [ensureLoaded] has pulled the database copy.
+  /// The hierarchy every accessor reads — empty until [ensureLoaded] has
+  /// pulled the database copy (`app.region` … `app.ward`).
   static GeoHierarchy get current => _current;
 
   bool _loaded = false;
   bool _fromDatabase = false;
+  bool _attempted = false;
+  Object? _lastError;
   Future<void>? _inFlight;
 
   /// Whether the database copy has replaced the bundled seed.
   bool get isFromDatabase => _fromDatabase;
 
+  /// True once a load has run to completion at least once — success, empty
+  /// tables, or failure. Lets a screen tell "still loading" from "loaded and
+  /// there is genuinely nothing".
+  bool get hasAttempted => _attempted;
+
+  /// The reason the last load failed (a transport / SQL error), or null when
+  /// it succeeded, is still running, or simply came back empty. "My Team"
+  /// surfaces this so an empty tree is explained rather than silent.
+  Object? get lastError => _lastError;
+
   /// Loads the hierarchy from Neon once (best-effort — a missing or
-  /// unreachable database just keeps the bundled seed). Safe to call from
-  /// every screen's `initState`; only the first call does any work unless
-  /// [force] is set.
+  /// unreachable database just leaves it empty). Safe to call from every
+  /// screen's `initState`; only the first call does any work unless [force]
+  /// is set.
   Future<void> ensureLoaded({bool force = false}) {
     if (force) {
       _loaded = false;
@@ -209,25 +402,30 @@ class AgentGeo extends ChangeNotifier {
         _current = GeoHierarchy.fromNodes(nodes);
         _fromDatabase = true;
         _loaded = true;
-        notifyListeners();
+        _lastError = null;
       }
       // Otherwise nothing came back — the endpoint is not configured, or the
-      // region…ward tables were still empty / unreachable. Leave [_loaded]
-      // false so the next `ensureLoaded()` retries rather than the session
-      // being stuck on the bundled seed until the app is relaunched.
+      // region…ward tables were still empty. Leave [_loaded] false so the next
+      // `ensureLoaded()` retries rather than the session being stuck on an
+      // empty tree until the app is relaunched.
     } catch (error) {
+      _lastError = error;
       debugPrint('AgentGeo: hierarchy load failed — $error');
     } finally {
+      _attempted = true;
       _inFlight = null;
+      notifyListeners();
     }
   }
 
-  /// Test hook — drop back to the bundled seed and forget any load.
+  /// Test hook — drop back to an empty hierarchy and forget any load.
   @visibleForTesting
-  void resetToSeed() {
-    _current = GeoHierarchy.seed();
+  void reset() {
+    _current = GeoHierarchy.empty();
     _loaded = false;
     _fromDatabase = false;
+    _attempted = false;
+    _lastError = null;
     _inFlight = null;
   }
 
@@ -238,6 +436,8 @@ class AgentGeo extends ChangeNotifier {
     _current = hierarchy;
     _loaded = true;
     _fromDatabase = true;
+    _attempted = true;
+    _lastError = null;
     _inFlight = null;
     notifyListeners();
   }
@@ -283,257 +483,8 @@ Map<String, List<String>> get agentLsgdWards =>
 List<String> agentSlotLabelsUnder({
   required AgentLevel level,
   required String area,
-}) =>
-    AgentGeo.current.slotLabelsUnder(level, area);
+}) => AgentGeo.current.slotLabelsUnder(level, area);
 
 /// The printed code for a named slot that carries one (`AC136`, `TVC`,
 /// `AC136-L1`, `AC136-L1-W005`), or null otherwise.
 String? agentSlotCode(String name) => AgentGeo.current.codeFor(name);
-
-// ---------------------------------------------------------------------------
-//  Bundled seed — a byte-for-byte copy of migration 0011's generated shape.
-//  Keep the two in lockstep: a change here needs the same change there.
-// ---------------------------------------------------------------------------
-
-const List<String> _seedRegions = [
-  'North',
-  'South',
-  'East',
-  'West',
-  'Central',
-  'Northeast',
-];
-
-const Map<String, List<String>> _seedRegionStates = {
-  'North': [
-    'Chandigarh',
-    'Delhi',
-    'Haryana',
-    'Himachal Pradesh',
-    'Jammu & Kashmir',
-    'Ladakh',
-    'Punjab',
-    'Rajasthan',
-  ],
-  'South': ['Andhra Pradesh', 'Karnataka', 'Kerala', 'Tamil Nadu', 'Telangana'],
-  'East': ['Bihar', 'Jharkhand', 'Odisha', 'West Bengal'],
-  'West': ['Chhattisgarh', 'Goa', 'Gujarat', 'Maharashtra'],
-  'Central': ['Madhya Pradesh', 'Uttar Pradesh', 'Uttarakhand'],
-  'Northeast': [
-    'Arunachal Pradesh',
-    'Assam',
-    'Manipur',
-    'Meghalaya',
-    'Mizoram',
-    'Nagaland',
-    'Sikkim',
-    'Tripura',
-  ],
-};
-
-const List<String> _seedKeralaDistricts = [
-  'Thiruvananthapuram',
-  'Kollam',
-  'Pathanamthitta',
-  'Alappuzha',
-  'Kottayam',
-  'Idukki',
-  'Ernakulam',
-  'Thrissur',
-  'Palakkad',
-  'Malappuram',
-  'Kozhikode',
-  'Wayanad',
-  'Kannur',
-  'Kasaragod',
-];
-
-/// Thiruvananthapuram's thirteen assembly segments plus the city corporation,
-/// each with its printed code — the order is the seed's `sort`.
-const List<List<String>> _seedTvmAssemblies = [
-  ['Varkala', 'AC124'],
-  ['Attingal', 'AC125'],
-  ['Chirayinkeezhu', 'AC126'],
-  ['Nedumangad', 'AC127'],
-  ['Vamanapuram', 'AC128'],
-  ['Kazhakkoottam', 'AC129'],
-  ['Vattiyoorkavu', 'AC130'],
-  ['Nemom', 'AC132'],
-  ['Aruvikkara', 'AC133'],
-  ['Parassala', 'AC134'],
-  ['Kattakkada', 'AC135'],
-  ['Kovalam', 'AC136'],
-  ['Neyyattinkara', 'AC137'],
-  ['Thiruvananthapuram Corporation', 'TVC'],
-];
-
-/// Varkala's (AC124) local bodies — six grama panchayats and the municipality
-/// that carries [_seedVarkalaMunicipalityWards]; every other assembly segment
-/// just gets three generic `<name> Panchayat n` LSGDs.
-const List<String> _seedVarkalaLsgds = [
-  'Chemmaruthy',
-  'Edava',
-  'Elakamon',
-  'Madavoor',
-  'Pallickal',
-  'Vettoor',
-  'Varkala Municipality',
-];
-
-/// The wards of Varkala Municipality, in order.
-const List<String> _seedVarkalaMunicipalityWards = [
-  'Vilakkulam',
-  'Idapparambu',
-  'Janathamukku',
-  'Karunilakode',
-  'Kallazhi',
-  'Pullannikode',
-  'Ayanikkuzhivila',
-  'Kannamba',
-  'Nadayara',
-  'Kanwasramam',
-  'Chaluvila',
-  'Kallamkonam',
-  'Cherukunnam',
-  'Sivagiri',
-  'Teachers Colony',
-  'Raghunathapuram',
-  'Puthenchantha',
-  'Thachankonam',
-  'Ramanthali',
-  'Panayil',
-  'Vallakkadavu',
-  'Perumkulam',
-  'Kottumoola',
-  'Maithanam',
-  'Municipal Office',
-  'Hospital',
-  'Temple',
-  'Janardhanapuram / Papanasam',
-  'Parayil / Mundayil',
-  'Jawahar Park',
-  'Punnamoodu',
-  'Parayil',
-  'Papanasam',
-  'Kurakkanni',
-];
-
-String _slug(String s) =>
-    s.trim().toLowerCase().replaceAll(RegExp('[^a-z0-9]+'), '-');
-
-String _pad(int n, int width) => n.toString().padLeft(width, '0');
-
-/// Rebuilds migration 0011's rows in memory.
-List<GeoNode> _seedNodes() {
-  final nodes = <GeoNode>[];
-
-  for (var ri = 0; ri < _seedRegions.length; ri++) {
-    final region = _seedRegions[ri];
-    final regionId = 'geo/${_slug(region)}';
-    nodes.add(GeoNode(
-      id: regionId,
-      parentId: null,
-      level: AgentLevel.region,
-      name: region,
-      sort: ri + 1,
-    ));
-
-    final states = _seedRegionStates[region] ?? const <String>[];
-    for (var si = 0; si < states.length; si++) {
-      final state = states[si];
-      final stateId = '$regionId/${_slug(state)}';
-      nodes.add(GeoNode(
-        id: stateId,
-        parentId: regionId,
-        level: AgentLevel.state,
-        name: state,
-        sort: si + 1,
-      ));
-
-      if (state != 'Kerala') continue;
-
-      for (var di = 0; di < _seedKeralaDistricts.length; di++) {
-        final district = _seedKeralaDistricts[di];
-        final districtId = '$stateId/${_slug(district)}';
-        nodes.add(GeoNode(
-          id: districtId,
-          parentId: stateId,
-          level: AgentLevel.district,
-          name: district,
-          sort: di + 1,
-        ));
-
-        if (district != 'Thiruvananthapuram') continue;
-
-        for (var ai = 0; ai < _seedTvmAssemblies.length; ai++) {
-          final aname = _seedTvmAssemblies[ai][0];
-          final acode = _seedTvmAssemblies[ai][1];
-          final assemblyId = '$districtId/${_slug(aname)}';
-          nodes.add(GeoNode(
-            id: assemblyId,
-            parentId: districtId,
-            level: AgentLevel.assembly,
-            name: aname,
-            code: acode,
-            sort: ai + 1,
-          ));
-
-          // The LSGDs under this assembly segment: Varkala names its six
-          // grama panchayats + the municipality; the corporation segment is
-          // its own single body; every other segment gets three generic
-          // panchayats.
-          final List<String> lsgds;
-          if (acode == 'AC124') {
-            lsgds = _seedVarkalaLsgds;
-          } else if (acode == 'TVC') {
-            lsgds = const ['Thiruvananthapuram Municipal Corporation'];
-          } else {
-            lsgds = [for (var li = 1; li <= 3; li++) '$aname Panchayat $li'];
-          }
-
-          for (var li = 0; li < lsgds.length; li++) {
-            final lsgd = lsgds[li];
-            final lcode = acode == 'TVC' ? 'TVC-L1' : '$acode-L${li + 1}';
-            final lsgdId = '$assemblyId/${_slug(lsgd)}';
-            nodes.add(GeoNode(
-              id: lsgdId,
-              parentId: assemblyId,
-              level: AgentLevel.lsgd,
-              name: lsgd,
-              code: lcode,
-              sort: li + 1,
-            ));
-
-            // Named wards for the two municipal bodies; generic numbered
-            // wards for the panchayats.
-            final List<String> wards;
-            if (lsgd == 'Varkala Municipality') {
-              wards = _seedVarkalaMunicipalityWards;
-            } else if (acode == 'TVC') {
-              wards = [
-                for (var wi = 1; wi <= 100; wi++) '$lsgd Ward ${_pad(wi, 2)}',
-              ];
-            } else {
-              wards = [
-                for (var wi = 1; wi <= 12; wi++) '$lsgd Ward ${_pad(wi, 2)}',
-              ];
-            }
-
-            for (var wi = 0; wi < wards.length; wi++) {
-              nodes.add(GeoNode(
-                id: '$lsgdId/ward-${_pad(wi + 1, 3)}',
-                parentId: lsgdId,
-                level: AgentLevel.ward,
-                name: wards[wi],
-                code: '$lcode-W${_pad(wi + 1, 3)}',
-                sort: wi + 1,
-              ));
-            }
-          }
-        }
-      }
-    }
-  }
-
-  return nodes;
-}

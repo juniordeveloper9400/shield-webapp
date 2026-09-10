@@ -128,7 +128,21 @@ class Agent {
   final String? parentId;
 
   /// The place this agent heads — a region name, a ward number, and so on.
+  /// Display only; do not match on this. Two different slots anywhere in
+  /// the real hierarchy can share this exact text (see [GeoSlot]) — [areaId]
+  /// is what actually identifies which one.
   final String area;
+
+  /// The real slot's unique id behind [area] — an `app.region` … `app.ward`
+  /// row's id, or a test fixture's own synthetic-but-unique one. Null for
+  /// the national agent (heads no single slot) and for an agent placed on a
+  /// free-text [place] rather than a fixed slot (the tiers below have no
+  /// named list, so [area] just carries that typed-in place with nothing to
+  /// give it an id). Everything that needs to know "is this the same slot
+  /// as that one" — the tree matching a registered agent to their position,
+  /// the registration cascade resolving a tapped slot's ancestry — compares
+  /// this, never [area].
+  final String? areaId;
 
   /// Lifetime commission credited to this agent.
   final int earned;
@@ -186,6 +200,7 @@ class Agent {
     required this.active,
     required this.parentId,
     required this.area,
+    this.areaId,
     this.earned = 0,
     this.redeemed = 0,
     this.personalSales = 0,
@@ -222,6 +237,7 @@ class Agent {
         active: active,
         parentId: parentId,
         area: area,
+        areaId: areaId,
         earned: earned,
         redeemed: redeemed,
         personalSales: personalSales,

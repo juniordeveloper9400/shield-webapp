@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import '../../data/neon/neon_http.dart';
 import '../../theme/app_colors.dart';
 import 'agent_detail_screen.dart';
 import 'agent_model.dart';
@@ -58,8 +59,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   /// True once the map has been positioned at least once.
   bool _fitted = false;
 
-  GlobalKey _keyFor(String id) =>
-      _pillKeys.putIfAbsent(id, () => GlobalKey());
+  GlobalKey _keyFor(String id) => _pillKeys.putIfAbsent(id, () => GlobalKey());
 
   @override
   void initState() {
@@ -69,12 +69,18 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       duration: const Duration(milliseconds: 420),
     );
     // Pull the live geographic hierarchy (regions … wards) from Neon; the
-    // bundled seed is what shows until it lands. Rebuild when it does.
-    // `force: true` — a fresh pull each time "My Team" opens, so an admin's
-    // edit shows on the next visit and a load that failed earlier in the
-    // session is retried rather than left on the stale seed.
+    // tree is empty until it lands. Rebuild when it does. `force: true` — a
+    // fresh pull every time "My Team" is opened, so an admin's edit to a
+    // district or ward shows on the next visit, and a load that failed
+    // earlier in the session is retried rather than left stuck.
     AgentGeo.instance.addListener(_onGeoChanged);
     AgentGeo.instance.ensureLoaded(force: true);
+    // Same for the roster itself — every agent already registered in
+    // app.agent, so a fresh app launch (or a second device) shows who is
+    // really on the team rather than just the national seed persona.
+    // AgentService is already a ListenableBuilder above, so no separate
+    // listener is needed here.
+    AgentService.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
   }
 
@@ -93,8 +99,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   /// Where the screen opens: the root's card centred across the top, with the
   /// rest of the map free to fan out below it as branches are opened.
   void _openOnRoot() {
-    final chartBox =
-        _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (chartBox == null || !chartBox.hasSize || _viewportSize.isEmpty) {
       return;
     }
@@ -125,8 +130,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   /// down to a single overview, however far the open branches have grown.
   void _fitToScreen() {
     _panController.stop();
-    final chartBox =
-        _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (chartBox == null || !chartBox.hasSize || _viewportSize.isEmpty) {
       return;
     }
@@ -139,8 +143,10 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     final scaleY = (_viewportSize.height - 60) / chartSize.height;
     final scale = math.min(math.min(scaleX, scaleY), 1.0);
 
-    final dx =
-        math.max(24.0, (_viewportSize.width - chartSize.width * scale) / 2);
+    final dx = math.max(
+      24.0,
+      (_viewportSize.width - chartSize.width * scale) / 2,
+    );
     final dy = math.max(
       24.0,
       (_viewportSize.height - chartSize.height * scale) / 2,
@@ -157,8 +163,17 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   void _toggle(String id) {
     final opening = !_expanded.contains(id);
     setState(() {
-      if (!_expanded.remove(id)) {
+      if (opening) {
+        // Accordion: only one branch per tier stays open. Opening a card
+        // collapses everything that is not one of its own ancestors — its
+        // open siblings and their subtrees, and any other branch left open
+        // elsewhere — then opens this card.
+        final keep = _ancestorsOf(id);
+        _expanded.removeWhere((e) => !keep.contains(e));
         _expanded.add(id);
+      } else {
+        // Collapsing a card collapses everything beneath it too.
+        _expanded.removeWhere((e) => e == id || _ancestorsOf(e).contains(id));
       }
     });
     // Opening a card glides down to the tier it just revealed; closing one
@@ -166,6 +181,19 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // direction it points.
     final focus = opening ? id : (_parentId(id) ?? id);
     WidgetsBinding.instance.addPostFrameCallback((_) => _flowTo(focus));
+  }
+
+  /// Every id on the path from [id] up to the root, not including [id] itself.
+  /// Drives the accordion in [_toggle]: an id is kept open only while the card
+  /// being opened sits somewhere beneath it.
+  Set<String> _ancestorsOf(String id) {
+    final chain = <String>{};
+    var current = _parentId(id);
+    var guard = 0;
+    while (current != null && chain.add(current) && guard++ < 64) {
+      current = _parentId(current);
+    }
+    return chain;
   }
 
   /// The card a collapse should glide back to: a real agent's parent (or the
@@ -190,8 +218,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   void _flowTo(String id) {
     final pillBox =
         _pillKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
-    final chartBox =
-        _chartKey.currentContext?.findRenderObject() as RenderBox?;
+    final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (pillBox == null ||
         chartBox == null ||
         !pillBox.hasSize ||
@@ -203,7 +230,8 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     final topLeft = pillBox.localToGlobal(Offset.zero, ancestor: chartBox);
     final scale = _transform.value.getMaxScaleOnAxis();
 
-    final targetX = _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;
+    final targetX =
+        _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;
     final targetY = _flowTopInset - topLeft.dy * scale;
 
     final target = Matrix4.identity()
@@ -228,7 +256,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   Future<void> _addUnder(
     Agent parent, [
     AgentLevel? level,
-    String? slotLabel,
+    GeoSlot? slot,
   ]) async {
     final added = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
@@ -236,16 +264,16 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
           scopeRoot: widget.root,
           initialParent: parent,
           initialLevel: level,
-          initialArea: slotLabel,
+          initialSlot: slot,
         ),
       ),
     );
     if (added != true || !mounted) {
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Agent registered')),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Agent registered')));
   }
 
   @override
@@ -283,46 +311,159 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      body: ListenableBuilder(
-        listenable: AgentService.instance,
-        builder: (context, _) => LayoutBuilder(
-          builder: (context, constraints) {
-            _viewportSize = constraints.biggest;
-            return ClipRect(
-              child: AnimatedOpacity(
-                opacity: _fitted ? 1 : 0,
-                duration: const Duration(milliseconds: 180),
-                child: InteractiveViewer(
-                  transformationController: _transform,
-                  constrained: false,
-                  boundaryMargin: const EdgeInsets.all(600),
-                  minScale: 0.1,
-                  maxScale: 3.5,
-                  child: Padding(
-                    key: _chartKey,
-                    padding: const EdgeInsets.fromLTRB(40, 16, 40, 96),
-                    child: _MindNode(
-                      // Re-read rather than trusting widget.root as-is: a
-                      // photo added to the root from its own detail screen
-                      // would otherwise never show here.
-                      agent: AgentService.instance.byId(widget.root.id) ??
-                          widget.root,
-                      depth: 0,
-                      expanded: _expanded,
-                      keyFor: _keyFor,
-                      onToggle: _toggle,
-                      onOpen: (agent) => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => AgentDetailScreen(agent: agent),
+      // The whole tree hangs off the geographic hierarchy (regions … wards).
+      // When it has not loaded, say why and offer a retry rather than showing
+      // a lone, dead-end root card.
+      body: AgentGeo.current.regions.isEmpty
+          ? _HierarchyStatus(
+              attempted: AgentGeo.instance.hasAttempted,
+              error: AgentGeo.instance.lastError,
+              configured: NeonHttp.isConfigured,
+              onRetry: () {
+                setState(() {});
+                AgentGeo.instance.ensureLoaded(force: true);
+              },
+            )
+          : ListenableBuilder(
+              listenable: AgentService.instance,
+              builder: (context, _) => LayoutBuilder(
+                builder: (context, constraints) {
+                  _viewportSize = constraints.biggest;
+                  return ClipRect(
+                    child: AnimatedOpacity(
+                      opacity: _fitted ? 1 : 0,
+                      duration: const Duration(milliseconds: 180),
+                      child: InteractiveViewer(
+                        transformationController: _transform,
+                        constrained: false,
+                        boundaryMargin: const EdgeInsets.all(600),
+                        minScale: 0.1,
+                        maxScale: 3.5,
+                        child: Padding(
+                          key: _chartKey,
+                          padding: const EdgeInsets.fromLTRB(40, 16, 40, 96),
+                          child: _MindNode(
+                            // Re-read rather than trusting widget.root as-is: a
+                            // photo added to the root from its own detail screen
+                            // would otherwise never show here.
+                            agent:
+                                AgentService.instance.byId(widget.root.id) ??
+                                widget.root,
+                            depth: 0,
+                            expanded: _expanded,
+                            keyFor: _keyFor,
+                            onToggle: _toggle,
+                            onOpen: (agent) => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => AgentDetailScreen(agent: agent),
+                              ),
+                            ),
+                            onAdd: _addUnder,
+                          ),
                         ),
                       ),
-                      onAdd: _addUnder,
                     ),
-                  ),
-                ),
+                  );
+                },
               ),
-            );
-          },
+            ),
+    );
+  }
+}
+
+/// Shown in place of the tree while the geographic hierarchy (`app.region` …
+/// `app.ward`) has not loaded — a spinner on the first attempt, then a plain
+/// reason and a retry once an attempt has finished with nothing.
+class _HierarchyStatus extends StatelessWidget {
+  final bool attempted;
+  final Object? error;
+  final bool configured;
+  final VoidCallback onRetry;
+
+  const _HierarchyStatus({
+    required this.attempted,
+    required this.error,
+    required this.configured,
+    required this.onRetry,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (!attempted) {
+      return const Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 26,
+              height: 26,
+              child: CircularProgressIndicator(strokeWidth: 2.4),
+            ),
+            SizedBox(height: 14),
+            Text(
+              'Loading the team hierarchy…',
+              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final String reason;
+    if (!configured) {
+      reason =
+          'This build has no database connection.\n'
+          'Run it with --dart-define-from-file=.env';
+    } else if (error != null) {
+      reason = 'Could not reach the database.\n$error';
+    } else {
+      reason =
+          'The region … ward tables are empty.\n'
+          'Seed them (migrations 0014–0016, then the Kerala geo import) '
+          'and retry.';
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.account_tree_outlined,
+              size: 40,
+              color: AppColors.textMuted,
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'The team hierarchy is not available yet',
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              reason,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.4,
+                color: AppColors.textMuted,
+              ),
+            ),
+            const SizedBox(height: 18),
+            FilledButton.icon(
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh_rounded, size: 18),
+              label: const Text('Retry'),
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.brandBlue,
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -358,7 +499,7 @@ class _MindNode extends StatelessWidget {
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
   final void Function(Agent agent) onOpen;
-  final void Function(Agent parent, AgentLevel level, [String? slotLabel]) onAdd;
+  final void Function(Agent parent, AgentLevel level, [GeoSlot? slot]) onAdd;
 
   const _MindNode({
     required this.agent,
@@ -378,16 +519,22 @@ class _MindNode extends StatelessWidget {
     // The fixed named slots this agent's tier opens — the six zones under the
     // national agent, a zone's states under a region agent — or empty where
     // the tier just doubles. Named slots drive the capacity; otherwise it is
-    // the plain childCapacity budget.
-    final slotLabels = service.slotLabelsUnder(agent);
+    // the plain childCapacity budget. Id-keyed — see [Agent.areaId].
+    final slots = service.slotsUnder(agent);
     // Normally the enum successor, but read from the data so an irregular
-    // branch is honoured — Varkala's wards sit straight under the assembly.
-    final childLevel = (slotLabels.isEmpty
+    // branch is honoured — a ward sitting straight under an assembly, say.
+    // Never for the national agent itself, though: it heads no single real
+    // slot ([Agent.areaId] is null for it), so there is nothing to look up.
+    final childLevel =
+        (agent.level == AgentLevel.national ||
+                agent.areaId == null ||
+                slots.isEmpty
             ? null
-            : AgentGeo.current.childLevelOf(agent.area)) ??
+            : AgentGeo.current.childLevelOfId(agent.areaId!)) ??
         agent.level.child;
-    final capacity =
-        slotLabels.isNotEmpty ? slotLabels.length : agent.level.childCapacity;
+    final capacity = slots.isNotEmpty
+        ? slots.length
+        : agent.level.childCapacity;
     final canExpand = capacity > 0;
     final isExpanded = canExpand && expanded.contains(agent.id);
 
@@ -406,11 +553,12 @@ class _MindNode extends StatelessWidget {
         expanded: isExpanded,
         onTap: () => onOpen(agent),
         onToggle: canExpand ? () => onToggle(agent.id) : null,
-        badge:
-            agent.isApproved ? null : _ApprovalTag(status: agent.approvalStatus),
+        badge: agent.isApproved
+            ? null
+            : _ApprovalTag(status: agent.approvalStatus),
       ),
       children: isExpanded
-          ? _buildChildNodes(children, childLevel, slotLabels, capacity)
+          ? _buildChildNodes(children, childLevel, slots, capacity)
           : const [],
     );
   }
@@ -418,33 +566,35 @@ class _MindNode extends StatelessWidget {
   /// "Region · South", "Ward · AC136-L1-W005", or just the bare tier name for
   /// a slot with no code and no zone.
   static String _slotSubtitle(Agent agent) {
-    final code = agentSlotCode(agent.area);
+    final code = agent.areaId == null
+        ? null
+        : AgentGeo.current.codeForId(agent.areaId!);
     if (code != null) {
       return '${agent.level.label} · $code';
     }
-    if (agent.level == AgentLevel.region && agentRegions.contains(agent.area)) {
+    if (agent.level == AgentLevel.region && agent.areaId != null) {
       return '${agent.level.label} · ${agent.area}';
     }
     return agent.level.label;
   }
 
   _MindNode _child(Agent child) => _MindNode(
-        agent: child,
-        depth: depth + 1,
-        expanded: expanded,
-        keyFor: keyFor,
-        onToggle: onToggle,
-        onOpen: onOpen,
-        onAdd: onAdd,
-      );
+    agent: child,
+    depth: depth + 1,
+    expanded: expanded,
+    keyFor: keyFor,
+    onToggle: onToggle,
+    onOpen: onOpen,
+    onAdd: onAdd,
+  );
 
-  _MindPlusNode _slot(AgentLevel level, String slotId, {String? label}) =>
+  _MindPlusNode _slot(AgentLevel level, String slotId, {GeoSlot? slot}) =>
       _MindPlusNode(
         level: level,
         depth: depth + 1,
         slotId: slotId,
         realParent: agent,
-        slotLabel: label,
+        slot: slot,
         expanded: expanded,
         keyFor: keyFor,
         onToggle: onToggle,
@@ -452,20 +602,20 @@ class _MindNode extends StatelessWidget {
       );
 
   /// The rows under an expanded agent: its filled reports, then the open
-  /// positions. With named slots ([slotLabels] — the zones, or a zone's
-  /// states) each slot is either the agent filling it (matched by area) or an
-  /// open "+ North" card; otherwise the plain "+ child" cards fill the
+  /// positions. With named slots ([slots] — the zones, or a zone's states)
+  /// each slot is either the agent filling it (matched by [Agent.areaId]) or
+  /// an open "+ North" card; otherwise the plain "+ child" cards fill the
   /// remaining [capacity].
   List<Widget> _buildChildNodes(
     List<Agent> children,
     AgentLevel? childLevel,
-    List<String> slotLabels,
+    List<GeoSlot> slots,
     int capacity,
   ) {
     if (childLevel == null) {
       return const [];
     }
-    if (slotLabels.isEmpty) {
+    if (slots.isEmpty) {
       return [
         for (final child in children) _child(child),
         for (var i = children.length; i < capacity; i++)
@@ -473,19 +623,19 @@ class _MindNode extends StatelessWidget {
       ];
     }
     final nodes = <Widget>[
-      for (final label in slotLabels)
-        if (children.where((c) => c.area == label).firstOrNull
+      for (final slot in slots)
+        if (children.where((c) => c.areaId == slot.id).firstOrNull
             case final Agent filled)
           _child(filled)
         else
           _slot(
             childLevel,
-            'slot/${agent.id}/${childLevel.name}/$label',
-            label: label,
+            'slot/${agent.id}/${childLevel.name}/${slot.id}',
+            slot: slot,
           ),
-      // Anyone whose area isn't one of the named slots still shows, after.
+      // Anyone whose slot isn't one of the named ones still shows, after.
       for (final child in children)
-        if (!slotLabels.contains(child.area)) _child(child),
+        if (!slots.any((s) => s.id == child.areaId)) _child(child),
     ];
     return nodes;
   }
@@ -510,14 +660,16 @@ class _MindPlusNode extends StatelessWidget {
   /// reports to.
   final Agent realParent;
 
-  /// The zone this slot stands for, when it is one of a national agent's six
-  /// region positions — shown on the card in place of "Region".
-  final String? slotLabel;
+  /// The named slot this position stands for — a region, a ward, and so on
+  /// — when it is one of a real parent's fixed named slots rather than a
+  /// plain doubling position. Shown on the card in place of the bare tier
+  /// name, and what a registration into it is placed against.
+  final GeoSlot? slot;
 
   final Set<String> expanded;
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
-  final void Function(Agent parent, AgentLevel level, [String? slotLabel]) onAdd;
+  final void Function(Agent parent, AgentLevel level, [GeoSlot? slot]) onAdd;
 
   const _MindPlusNode({
     required this.level,
@@ -528,27 +680,27 @@ class _MindPlusNode extends StatelessWidget {
     required this.keyFor,
     required this.onToggle,
     required this.onAdd,
-    this.slotLabel,
+    this.slot,
   });
 
   @override
   Widget build(BuildContext context) {
+    final slot = this.slot;
     final canExpand = level.childCapacity > 0;
     final isExpanded = canExpand && expanded.contains(slotId);
 
-    // If this open slot itself names a zone, its own preview positions are
-    // that zone's named states rather than the plain doubling shape.
-    final previewLabels = agentSlotLabelsUnder(
-      level: level,
-      area: slotLabel ?? '',
-    );
-    final previewCapacity =
-        previewLabels.isNotEmpty ? previewLabels.length : level.childCapacity;
+    // If this open slot itself names a place, its own preview positions are
+    // that place's named children rather than the plain doubling shape.
+    final previewSlots = AgentGeo.current.slotsUnder(level, slot?.id);
+    final previewCapacity = previewSlots.isNotEmpty
+        ? previewSlots.length
+        : level.childCapacity;
     // The successor read from the data, so an irregular branch is honoured
     // (falls back to the enum successor for the regular tiers).
-    final childLevel = (previewLabels.isEmpty || slotLabel == null
+    final childLevel =
+        (previewSlots.isEmpty || slot == null
             ? null
-            : AgentGeo.current.childLevelOf(slotLabel!)) ??
+            : AgentGeo.current.childLevelOfId(slot.id)) ??
         level.child;
 
     return _MindBranch(
@@ -559,9 +711,16 @@ class _MindPlusNode extends StatelessWidget {
         depth: depth,
         toggleLabel: '${level.label} position',
         expanded: isExpanded,
-        onAdd: () => onAdd(realParent, level, slotLabel),
+        onAdd: () => onAdd(realParent, level, slot),
         onToggle: canExpand ? () => onToggle(slotId) : null,
-        slotLabel: slotLabel,
+        slotLabel: slot?.name,
+        // For an LSGD show its kind (Corporation / Municipality / Grama
+        // Panchayat); every other tier shows its printed code.
+        slotCode: slot == null
+            ? null
+            : (slot.typeLabel.isNotEmpty
+                ? slot.typeLabel
+                : (slot.code.isNotEmpty ? slot.code : null)),
       ),
       children: isExpanded
           ? [
@@ -571,7 +730,7 @@ class _MindPlusNode extends StatelessWidget {
                   depth: depth + 1,
                   slotId: '$slotId/${childLevel.name}/$i',
                   realParent: realParent,
-                  slotLabel: previewLabels.isNotEmpty ? previewLabels[i] : null,
+                  slot: previewSlots.isNotEmpty ? previewSlots[i] : null,
                   expanded: expanded,
                   keyFor: keyFor,
                   onToggle: onToggle,
@@ -672,10 +831,7 @@ class _MindPill extends StatelessWidget {
                       color: AppColors.textDark.withValues(alpha: 0.45),
                     ),
                   ),
-                  if (badge != null) ...[
-                    const SizedBox(height: 6),
-                    badge!,
-                  ],
+                  if (badge != null) ...[const SizedBox(height: 6), badge!],
                 ],
               ),
             ),
@@ -711,6 +867,12 @@ class _MindPlusPill extends StatelessWidget {
   /// zones on a national agent's open region slots ("North", "South", …).
   final String? slotLabel;
 
+  /// The slot's own printed code (`AC136`, `TVC-L1`), passed straight from
+  /// the [GeoSlot] the caller already has — never re-derived from
+  /// [slotLabel] here, since a bare name is not enough to find the right
+  /// slot back out of the real hierarchy (see [Agent.areaId]).
+  final String? slotCode;
+
   const _MindPlusPill({
     required this.pillKey,
     required this.level,
@@ -720,6 +882,7 @@ class _MindPlusPill extends StatelessWidget {
     required this.onAdd,
     required this.onToggle,
     this.slotLabel,
+    this.slotCode,
   });
 
   @override
@@ -739,8 +902,10 @@ class _MindPlusPill extends StatelessWidget {
               onTap: onAdd,
               borderRadius: BorderRadius.circular(10),
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 11,
+                ),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: tint),
@@ -767,10 +932,9 @@ class _MindPlusPill extends StatelessWidget {
                             color: AppColors.textDark.withValues(alpha: 0.75),
                           ),
                         ),
-                        if (slotLabel != null &&
-                            agentSlotCode(slotLabel!) != null)
+                        if (slotCode != null && slotCode!.isNotEmpty)
                           Text(
-                            agentSlotCode(slotLabel!)!,
+                            slotCode!,
                             style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w600,
@@ -885,7 +1049,10 @@ class _MindBranch extends MultiChildRenderObjectWidget {
       _RenderMindBranch(connectorColor: connectorColor);
 
   @override
-  void updateRenderObject(BuildContext context, _RenderMindBranch renderObject) {
+  void updateRenderObject(
+    BuildContext context,
+    _RenderMindBranch renderObject,
+  ) {
     renderObject.connectorColor = connectorColor;
   }
 }

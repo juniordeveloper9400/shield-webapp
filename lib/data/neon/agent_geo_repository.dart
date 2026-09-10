@@ -18,6 +18,10 @@ class GeoNode {
   /// `AC136-L1-W005`. Empty for the tiers with no code (region, state,
   /// district).
   final String code;
+
+  /// LSGD tier only — `corporation` / `municipality` / `grama_panchayat`
+  /// (`app.lsgd.type`). Empty for every other tier.
+  final String type;
   final int sort;
 
   const GeoNode({
@@ -26,6 +30,7 @@ class GeoNode {
     required this.level,
     required this.name,
     this.code = '',
+    this.type = '',
     this.sort = 0,
   });
 
@@ -55,6 +60,7 @@ class GeoNode {
       level: level,
       name: name,
       code: str(row['code']),
+      type: str(row['type']),
       sort: int.tryParse(str(row['sort'])) ?? 0,
     );
   }
@@ -66,18 +72,19 @@ class GeoNode {
 /// `app.district` / `app.assembly` / `app.lsgd` / `app.ward` (backend migration
 /// 0014), linked child -> parent by foreign key. The old single self-referential
 /// `app.agent_geo_node` table this used to read was dropped by that migration.
-/// This flattens the six tables back into the `(id, parent_id, level, name,
-/// code, sort)` rows [GeoNode.fromRow] expects — a region's `parent_id` is null,
-/// every deeper tier points at the row above it.
+/// This flattens the six tables back into `(id, parent_id, level, name, code,
+/// type, sort)` rows — a region's `parent_id` is null, every deeper tier points
+/// at the row above it, and `type` carries the LSGD kind (corporation /
+/// municipality / grama_panchayat).
 ///
-/// Loaded in two steps: the structure region..lsgd is one small query (~1200
+/// Loaded in two steps: the structure region..lsgd is one small query (~1,200
 /// rows), then the ~21k wards are a second query merged in. If the ward query
-/// fails or times out on a poor connection, the tree still works down to LSGD
+/// fails or times out on a poor connection the tree still works down to LSGD
 /// rather than the whole load failing.
 ///
-/// Read-only and best-effort like the other Neon repositories: a missing
-/// `DATABASE_URL`, a network failure, or empty tables return null, and the
-/// caller ([AgentGeo]) keeps the hierarchy bundled with the build.
+/// Read-only and best-effort: a missing `DATABASE_URL` or empty tables return
+/// null; a transport / SQL failure on the structure query is rethrown so the
+/// caller ([AgentGeo._load]) can show why "My Team" is empty.
 class AgentGeoRepository {
   const AgentGeoRepository._();
 
@@ -91,55 +98,53 @@ class AgentGeoRepository {
     if (!NeonHttp.isConfigured) {
       return null;
     }
-    try {
-      // Step 1 — the structure, region down to LSGD. Small and quick.
-      final structure = await NeonHttp.instance.query(r'''
+
+    // Step 1 — the structure, region down to LSGD. Small and quick. Every
+    // SELECT carries a `type` column so the UNION lines up; only LSGD fills it.
+    final structure = await NeonHttp.instance.query(r'''
         SELECT id::text AS id, NULL::text AS parent_id, 'region' AS level,
-               name, code, sort, 1 AS tier
+               name, code, '' AS type, sort, 1 AS tier
         FROM app.region
         UNION ALL
-        SELECT id::text, region_id::text, 'state', name, code, sort, 2
+        SELECT id::text, region_id::text, 'state', name, code, '', sort, 2
         FROM app.state
         UNION ALL
-        SELECT id::text, state_id::text, 'district', name, code, sort, 3
+        SELECT id::text, state_id::text, 'district', name, code, '', sort, 3
         FROM app.district
         UNION ALL
-        SELECT id::text, district_id::text, 'assembly', name, code, sort, 4
+        SELECT id::text, district_id::text, 'assembly', name, code, '', sort, 4
         FROM app.assembly
         UNION ALL
-        SELECT id::text, assembly_id::text, 'lsgd', name, code, sort, 5
+        SELECT id::text, assembly_id::text, 'lsgd', name, code,
+               type::text, sort, 5
         FROM app.lsgd
         ORDER BY tier, sort, name
       ''');
-      final nodes = structure
-          .map(GeoNode.fromRow)
-          .whereType<GeoNode>()
-          .toList(); // growable — wards are appended below
-      if (nodes.isEmpty) {
-        return null;
-      }
+    final nodes = structure
+        .map(GeoNode.fromRow)
+        .whereType<GeoNode>()
+        .toList(); // growable — wards appended below
+    if (nodes.isEmpty) {
+      return null;
+    }
 
-      // Step 2 — the wards. Best effort: a failure here leaves the tree
-      // whole down to LSGD rather than dropping the entire hierarchy.
-      try {
-        final wards = await NeonHttp.instance.query(r'''
+    // Step 2 — the wards. Best effort: a failure here leaves the tree whole
+    // down to LSGD rather than dropping the entire hierarchy.
+    try {
+      final wards = await NeonHttp.instance.query(r'''
           SELECT id::text AS id, lsgd_id::text AS parent_id, 'ward' AS level,
-                 name, code, sort
+                 name, code, '' AS type, sort
           FROM app.ward
           ORDER BY sort, name
         ''');
-        nodes.addAll(wards.map(GeoNode.fromRow).whereType<GeoNode>());
-      } catch (error) {
-        NeonHttp.log(
-          'AgentGeoRepository: ward load failed — tree stops at LSGD',
-          error: error,
-        );
-      }
-
-      return nodes;
+      nodes.addAll(wards.map(GeoNode.fromRow).whereType<GeoNode>());
     } catch (error) {
-      NeonHttp.log('AgentGeoRepository.fetchAll failed', error: error);
-      return null;
+      NeonHttp.log(
+        'AgentGeoRepository: ward load failed — tree stops at LSGD',
+        error: error,
+      );
     }
+
+    return nodes;
   }
 }

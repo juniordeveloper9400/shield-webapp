@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../data/neon/agent_repository.dart';
 import '../../money.dart';
 import '../auth/auth_service.dart';
 import '../wallet/wallet_service.dart';
@@ -8,15 +9,16 @@ import 'agent_customer_directory.dart';
 import 'agent_directory.dart';
 import 'agent_model.dart';
 
-/// The live, in-memory agent roster plus the withdrawal ledger.
+/// The live agent roster plus the withdrawal ledger.
 ///
 /// Modelled on [ChangeNotifier] the same way `RegistrationService` is — a
 /// single instance, getters for the derived figures, mutators that call
 /// `notifyListeners()`, and a `@visibleForTesting` [reset]. The roster starts
-/// as a copy of [AgentDirectory.seed]; agents added from the portal
-/// ([addAgent]) live here until the app restarts. A backend would replace this
-/// wholesale: [addAgent] becomes the create call, [requestWithdrawal] the
-/// payout call, and the tree getters become downline queries.
+/// as a copy of [AgentDirectory.seed] and [ensureLoaded] folds in every real
+/// row already in `app.agent` on top of that; [registerAgent] writes new
+/// ones there too ([AgentRepository]), best-effort — the in-memory list here
+/// is what the UI actually reads, and stays correct even if the database
+/// write never lands.
 class AgentService extends ChangeNotifier {
   AgentService._();
 
@@ -33,6 +35,19 @@ class AgentService extends ChangeNotifier {
 
   /// Bumped for every added agent so ids and placeholder numbers stay unique.
   int _added = 0;
+
+  bool _remoteLoaded = false;
+  Future<void>? _remoteLoadInFlight;
+
+  /// The database row id behind each agent already known to have one —
+  /// [AgentDirectory.national] once the first registration under it has
+  /// needed one, and every agent registered this session. A `Future` (not
+  /// just the resolved id) so a grandchild registered moments after its
+  /// parent — before the parent's own insert has actually landed — awaits
+  /// the very same in-flight write rather than racing it: [_dbIdFor]
+  /// caches and returns this before the insert it wraps has necessarily
+  /// finished.
+  final Map<String, Future<int?>> _dbId = {};
 
   /// Requests raised in this session, keyed by agent id, oldest first.
   final Map<String, List<WithdrawalRequest>> _requests = {};
@@ -59,6 +74,50 @@ class AgentService extends ChangeNotifier {
     return null;
   }
 
+  /// Loads every agent already in `app.agent`, folding them into the roster
+  /// below the seed national persona — best-effort, matching
+  /// `AgentGeo.ensureLoaded`'s contract (a missing `DATABASE_URL` or a
+  /// network blip just leaves the seed-only roster in place). Safe to call
+  /// from every screen's `initState`; only the first call does any work.
+  Future<void> ensureLoaded() {
+    if (_remoteLoaded) {
+      return Future<void>.value();
+    }
+    return _remoteLoadInFlight ??= _loadFromServer();
+  }
+
+  Future<void> _loadFromServer() async {
+    try {
+      final remote = await AgentRepository.instance.fetchAll();
+      if (remote == null || remote.isEmpty) {
+        return;
+      }
+      // Skip any row that is the seed root's own database counterpart —
+      // written the first time a registration under it needed one to
+      // parent under (see `_resolveDbId`) — so the national persona never
+      // shows twice.
+      final seedPhones = _agents.map((a) => a.phone).toSet();
+      final fresh = remote.where((a) => !seedPhones.contains(a.phone)).toList();
+      if (fresh.isEmpty) {
+        return;
+      }
+      _agents.addAll(fresh);
+      // Every fetched row already has a real database id — cache it so a
+      // registration under one of them resolves its parent id immediately
+      // rather than treating it as still-unpersisted.
+      for (final agent in fresh) {
+        final dbId = int.tryParse(agent.id.replaceFirst('db-', ''));
+        if (dbId != null) {
+          _dbId[agent.id] = Future.value(dbId);
+        }
+      }
+      notifyListeners();
+    } finally {
+      _remoteLoaded = true;
+      _remoteLoadInFlight = null;
+    }
+  }
+
   /// Sets [agent]'s profile photo, replacing their roster entry with a copy
   /// carrying it. A no-op if the agent is no longer on the roster.
   void setPhoto(Agent agent, Uint8List bytes) {
@@ -68,6 +127,21 @@ class AgentService extends ChangeNotifier {
     }
     _agents[index] = _agents[index].withPhoto(bytes);
     notifyListeners();
+  }
+
+  /// The agent for [phone], or null when the number is not an agent's. Only
+  /// the seed national agent carries a real number.
+  Agent? agentForPhone(String? phone) {
+    if (phone == null) {
+      return null;
+    }
+    final clean = phone.trim();
+    for (final agent in _agents) {
+      if (agent.phone == clean) {
+        return agent;
+      }
+    }
+    return null;
   }
 
   /// The phone of the agent row applied from Neon by `PersonaService` (a member
@@ -98,21 +172,6 @@ class AgentService extends ChangeNotifier {
     if (changed) {
       notifyListeners();
     }
-  }
-
-  /// The agent for [phone], or null when the number is not an agent's. Only
-  /// the seed national agent carries a real number.
-  Agent? agentForPhone(String? phone) {
-    if (phone == null) {
-      return null;
-    }
-    final clean = phone.trim();
-    for (final agent in _agents) {
-      if (agent.phone == clean) {
-        return agent;
-      }
-    }
-    return null;
   }
 
   /// The agents reporting directly to [id], in insertion order.
@@ -160,20 +219,23 @@ class AgentService extends ChangeNotifier {
   /// The fixed named slots directly under [parent] — the six zones under a
   /// national agent, or a zone's states under a region agent — or an empty
   /// list where the tier just uses the plain doubling shape.
-  List<String> slotLabelsUnder(Agent parent) =>
-      agentSlotLabelsUnder(level: parent.level, area: parent.area);
+  ///
+  /// Id-keyed ([GeoSlot], not a bare name) — see the doc on [Agent.areaId]
+  /// for why matching on name alone breaks against the real Kerala data.
+  List<GeoSlot> slotsUnder(Agent parent) =>
+      AgentGeo.current.slotsUnder(parent.level, parent.areaId);
 
   /// How many more agents [parent] can take on directly, before every
   /// position under them is filled.
   ///
-  /// Where the tier below is a fixed set of named slots ([slotLabelsUnder] —
-  /// the zones, or a zone's states) the budget is that set's size; otherwise
-  /// it is [AgentLevel.childCapacity], the same budget whatever tier each
+  /// Where the tier below is a fixed set of named slots ([slotsUnder] — the
+  /// zones, or a zone's states) the budget is that set's size; otherwise it
+  /// is [AgentLevel.childCapacity], the same budget whatever tier each
   /// direct report actually ends up registered at.
   int openPositionsUnder(Agent parent) {
-    final labels = slotLabelsUnder(parent);
+    final slots = slotsUnder(parent);
     final capacity =
-        labels.isNotEmpty ? labels.length : parent.level.childCapacity;
+        slots.isNotEmpty ? slots.length : parent.level.childCapacity;
     return (capacity - childrenOf(parent.id).length).clamp(0, capacity);
   }
 
@@ -313,25 +375,44 @@ class AgentService extends ChangeNotifier {
     required String place,
     required String accountNumber,
     /// The named slot this agent fills — a zone for a region agent, a state
-    /// for a state agent. Becomes their [Agent.area]; falls back to [place]
-    /// when the tier has no named slots.
-    String? area,
+    /// for a state agent. Becomes their [Agent.area] / [Agent.areaId]; falls
+    /// back to [place] (with no id) when the tier has no named slots.
+    GeoSlot? slot,
     Uint8List? photoBytes,
     bool active = true,
   }) {
     if (byId(parent.id) == null) {
       return 'That parent agent no longer exists';
     }
+    // The national agent is the single seeded persona at the top of the tree.
+    // There is only ever one, and nobody is registered *at* that tier.
+    if (level == AgentLevel.national) {
+      return 'There is already a national agent — only one is allowed. '
+          'Register this person at region level or below.';
+    }
     if (level.index <= parent.level.index) {
       return '${level.label} is not below ${parent.level.label}';
     }
     if (openPositionsUnder(parent) <= 0) {
+      if (parent.level == AgentLevel.national) {
+        return 'All regions already have an agent — there are no more region '
+            'positions to fill.';
+      }
       return 'Every position under ${parent.name} is already filled';
     }
     // A region agent heads one of the six fixed zones, picked from a list.
     if (level == AgentLevel.region &&
-        !agentRegions.contains((area ?? '').trim())) {
+        !AgentGeo.current.regions.any((r) => r.id == slot?.id)) {
       return 'Choose which region this agent heads';
+    }
+    // A named slot — a region, a state — seats exactly one agent. For regions
+    // this is also what caps the count at the six that exist: once every
+    // region slot is taken, openPositionsUnder above already reads zero.
+    if (slot != null &&
+        childrenOf(parent.id).any((sibling) => sibling.areaId == slot.id)) {
+      final tier = level.label.toLowerCase();
+      return 'A $tier agent already heads ${slot.name}. '
+          'Each $tier can have only one agent.';
     }
 
     final checks = <String?>[
@@ -358,41 +439,48 @@ class AgentService extends ChangeNotifier {
     final cleanPlace = place.trim();
 
     // What the agent heads: the named slot they filled (a zone / a state),
-    // falling back to their home place where the tier has no named slots.
-    final slotArea = (area ?? '').trim();
-    final headArea = slotArea.isNotEmpty ? slotArea : cleanPlace;
+    // falling back to their home place — with no id, since it names nothing
+    // in the hierarchy — where the tier has no named slots.
+    final headArea = slot?.name ?? cleanPlace;
 
     _added++;
-    _agents.add(
-      Agent(
-        id: 'add-$_added',
-        name: [first, middle, last].where((p) => p.isNotEmpty).join(' '),
-        phone: phone.trim(),
-        agentCode: _mintCode(level),
-        level: level,
-        active: active,
-        parentId: parent.id,
-        area: headArea,
-        firstName: first,
-        middleName: middle,
-        lastName: last,
-        dob: dob,
-        aadhaar: aadhaar.replaceAll(' ', ''),
-        pan: pan.trim().toUpperCase(),
-        address: address.trim(),
-        pincode: pincode.trim(),
-        place: cleanPlace,
-        accountNumber: accountNumber.trim(),
-        // The profile photo is captured here at registration and nowhere
-        // else — the agent's own detail screen only ever shows it.
-        photoBytes: photoBytes,
-        // Approved on the spot — registering someone is the recruiter's own
-        // decision, made with a live OTP check already behind it, so there
-        // is nothing further to gate them on. [Agent]'s own default already
-        // reads this way; spelled out here so it stays true on purpose.
-        approvalStatus: AgentApprovalStatus.approved,
-      ),
+    final newAgent = Agent(
+      id: 'add-$_added',
+      name: [first, middle, last].where((p) => p.isNotEmpty).join(' '),
+      phone: phone.trim(),
+      agentCode: _mintCode(level),
+      level: level,
+      active: active,
+      parentId: parent.id,
+      area: headArea,
+      areaId: slot?.id,
+      firstName: first,
+      middleName: middle,
+      lastName: last,
+      dob: dob,
+      aadhaar: aadhaar.replaceAll(' ', ''),
+      pan: pan.trim().toUpperCase(),
+      address: address.trim(),
+      pincode: pincode.trim(),
+      place: cleanPlace,
+      accountNumber: accountNumber.trim(),
+      // The profile photo is captured here at registration and nowhere
+      // else — the agent's own detail screen only ever shows it.
+      photoBytes: photoBytes,
+      // Approved on the spot — registering someone is the recruiter's own
+      // decision, made with a live OTP check already behind it, so there
+      // is nothing further to gate them on. [Agent]'s own default already
+      // reads this way; spelled out here so it stays true on purpose.
+      approvalStatus: AgentApprovalStatus.approved,
     );
+    _agents.add(newAgent);
+    // Kicked off (and cached under the new agent's own id) immediately,
+    // before the insert has necessarily finished — so a sub-agent
+    // registered under `newAgent` moments later, even before this one
+    // lands, awaits this exact write rather than treating it as never
+    // going to happen. Never awaited itself: the UI already has its
+    // answer (`null` — success) by the time this settles either way.
+    _dbId[newAgent.id] = _persistNew(newAgent, parent);
     notifyListeners();
     return null;
   }
@@ -427,6 +515,53 @@ class AgentService extends ChangeNotifier {
       }
     }
     return '$prefix${(highest + 1).toString().padLeft(3, '0')}';
+  }
+
+  /// The database row id for [agent] — resolving (and caching, via [_dbId])
+  /// it the first time anything needs it. The seed national persona has no
+  /// row of its own until the first registration under it asks for one
+  /// ([AgentRepository.ensureNationalRow]); every other agent already has
+  /// one cached — a fetched row from [_loadFromServer], or its own
+  /// [_persistNew] future kicked off at the moment it was registered.
+  Future<int?> _dbIdFor(Agent agent) {
+    return _dbId[agent.id] ??= agent.id == AgentDirectory.national.id
+        ? AgentRepository.instance.ensureNationalRow(
+            phone: agent.phone,
+            name: agent.name,
+            code: agent.agentCode,
+          )
+        : Future.value(null);
+  }
+
+  /// Writes [agent] to `app.agent` under [parent]'s database row, resolving
+  /// (and, for the seed root, creating) that row first. Best-effort: a
+  /// missing `DATABASE_URL`, a network blip, or the parent's own write never
+  /// landing all just leave [agent] real in this session and absent from the
+  /// database — never surfaced to the UI, which already has its answer.
+  Future<int?> _persistNew(Agent agent, Agent parent) async {
+    final parentDbId = await _dbIdFor(parent);
+    if (parentDbId == null) {
+      return null;
+    }
+    return AgentRepository.instance.insertAgent(
+      parentDbId: parentDbId,
+      level: agent.level,
+      code: agent.agentCode,
+      name: agent.name,
+      phone: agent.phone,
+      area: agent.area,
+      areaId: agent.areaId,
+      firstName: agent.firstName,
+      middleName: agent.middleName,
+      lastName: agent.lastName,
+      dob: agent.dob!,
+      aadhaar: agent.aadhaar,
+      pan: agent.pan,
+      address: agent.address,
+      pincode: agent.pincode,
+      place: agent.place,
+      accountNumber: agent.accountNumber,
+    );
   }
 
   // ---- Withdrawals ----
@@ -545,6 +680,9 @@ class AgentService extends ChangeNotifier {
       ..clear()
       ..addAll(AgentCustomerDirectory.seed);
     _added = 0;
+    _dbId.clear();
+    _remoteLoaded = false;
+    _remoteLoadInFlight = null;
     notifyListeners();
   }
 }

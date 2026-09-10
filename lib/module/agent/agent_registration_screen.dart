@@ -42,14 +42,14 @@ class AgentRegistrationScreen extends StatefulWidget {
   /// position, a state ("Kerala") for a state position. Fixes the new agent's
   /// area to it, and for a region position pre-selects and locks the zone
   /// dropdown. Null when the flow is opened from the toolbar.
-  final String? initialArea;
+  final GeoSlot? initialSlot;
 
   const AgentRegistrationScreen({
     super.key,
     required this.scopeRoot,
     required this.initialParent,
     this.initialLevel,
-    this.initialArea,
+    this.initialSlot,
   });
 
   @override
@@ -89,7 +89,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   /// (or pinned outright by a tapped "+ Kovalam" slot); a tier is absent until
   /// it has a value. Never typed — always chosen from the list a tier above
   /// hands down.
-  final Map<AgentLevel, String> _areaPick = {};
+  final Map<AgentLevel, GeoSlot> _areaPick = {};
 
   /// The named tiers, widest first — the ones the placement cascade picks
   /// through: the five [agentNamedTiers] that carry fixed child slots, plus
@@ -131,10 +131,10 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     AgentGeo.instance.ensureLoaded();
 
     // A tapped "+ South" / "+ Kerala" / "+ Kovalam" / "+ … Ward 05" slot pins
-    // every tier at and above it — seed the whole chain from its name.
-    final tapped = widget.initialArea;
-    if (tapped != null && _namedLevelOf(tapped) != null) {
-      _areaPick.addAll(_ancestryOf(tapped));
+    // every tier at and above it — seed the whole chain from its id.
+    final tapped = widget.initialSlot;
+    if (tapped != null && _namedLevelOf(tapped.id) != null) {
+      _areaPick.addAll(_ancestryOf(tapped.id));
     }
   }
 
@@ -144,27 +144,29 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     return i <= 0 ? null : _cascadeTiers[i - 1];
   }
 
-  /// The whole named chain that ends at [area] — every tier from [area]'s own
-  /// up to the widest named one, keyed by level. Read from the geo hierarchy,
-  /// so it tracks the database copy once that has loaded.
-  static Map<AgentLevel, String> _ancestryOf(String area) {
-    final chain = <AgentLevel, String>{};
-    String? name = area;
-    while (name != null) {
-      final level = _namedLevelOf(name);
-      if (level == null) {
+  /// The whole named chain that ends at slot [id] — every tier from that
+  /// slot's own up to the widest named one, keyed by level. Read from the
+  /// geo hierarchy by id ([Agent.areaId]'s own doc explains why — a bare
+  /// name is not enough against the real Kerala data), so it tracks the
+  /// database copy once that has loaded.
+  static Map<AgentLevel, GeoSlot> _ancestryOf(String id) {
+    final chain = <AgentLevel, GeoSlot>{};
+    String? current = id;
+    while (current != null) {
+      final slot = AgentGeo.current.slotById(current);
+      if (slot == null) {
         break;
       }
-      chain[level] = name;
-      name = AgentGeo.current.parentSlotOf(name);
+      chain[slot.level] = slot;
+      current = AgentGeo.current.parentIdOf(current);
     }
     return chain;
   }
 
-  /// Which named tier [area] is a slot of, or null when it is not a fixed
-  /// slot anywhere (a free-text place).
-  static AgentLevel? _namedLevelOf(String area) =>
-      AgentGeo.current.levelOfSlot(area);
+  /// Which named tier slot [id] belongs to, or null when it is not a real
+  /// slot (a free-text place has no id at all).
+  static AgentLevel? _namedLevelOf(String id) =>
+      AgentGeo.current.levelOfId(id);
 
   // ---- The region → state → district → assembly → lsgd → ward cascade ----
   //
@@ -176,20 +178,22 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   /// parent whose own level is a named tier and whose area is a real slot at
   /// that tier pins anything — a national agent (or one placed on a free-text
   /// place) pins nothing.
-  Map<AgentLevel, String> get _parentAncestry {
+  Map<AgentLevel, GeoSlot> get _parentAncestry {
     final p = _parent;
-    if (!_cascadeTiers.contains(p.level) || _namedLevelOf(p.area) != p.level) {
+    if (!_cascadeTiers.contains(p.level) ||
+        p.areaId == null ||
+        _namedLevelOf(p.areaId!) != p.level) {
       return const {};
     }
-    return _ancestryOf(p.area);
+    return _ancestryOf(p.areaId!);
   }
 
   /// The named chain the tapped "+ …" slot pins, keyed by level.
-  Map<AgentLevel, String> get _tappedAncestry {
-    final ia = widget.initialArea;
-    return ia == null || _namedLevelOf(ia) == null
+  Map<AgentLevel, GeoSlot> get _tappedAncestry {
+    final ia = widget.initialSlot;
+    return ia == null || _namedLevelOf(ia.id) == null
         ? const {}
-        : _ancestryOf(ia);
+        : _ancestryOf(ia.id);
   }
 
   /// Whether the level being registered reaches down to [tier]. A district
@@ -199,20 +203,36 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   bool _levelReaches(AgentLevel tier) =>
       _cascadeTiers.contains(_level) && _level.index >= tier.index;
 
-  /// The name in force at [tier] — the parent's, else the form pick.
-  String? _areaAt(AgentLevel tier) =>
+  /// The slot in force at [tier] — the parent's, else the form pick.
+  GeoSlot? _areaAt(AgentLevel tier) =>
       _parentAncestry[tier] ?? _areaPick[tier];
 
-  /// The fixed slots to choose from at [tier], drawn from the name one tier up.
-  List<String> _optionsFor(AgentLevel tier) {
+  /// The fixed slots to choose from at [tier], drawn from the slot one tier up.
+  ///
+  /// For the tier this agent will *head* (`tier == _level`), a slot a sibling
+  /// under [_parent] already heads is dropped — each region, state, district …
+  /// seats exactly one agent, so a taken seat is never offered (and once all
+  /// six regions are taken this list is empty). Tiers the agent only *sits
+  /// under* keep every slot: those are shared across the branch.
+  List<GeoSlot> _optionsFor(AgentLevel tier) {
+    final List<GeoSlot> all;
     if (tier == AgentLevel.region) {
-      return agentRegions;
+      all = AgentGeo.current.regions;
+    } else {
+      final above = _tierAbove(tier)!;
+      final aboveSlot = _areaAt(above);
+      all = aboveSlot == null
+          ? const <GeoSlot>[]
+          : AgentGeo.current.slotsUnder(above, aboveSlot.id);
     }
-    final above = _tierAbove(tier)!;
-    final aboveArea = _areaAt(above);
-    return aboveArea == null
-        ? const <String>[]
-        : agentSlotLabelsUnder(level: above, area: aboveArea);
+    if (tier != _level) {
+      return all;
+    }
+    final taken = <String>{
+      for (final sibling in AgentService.instance.childrenOf(_parent.id))
+        if (sibling.areaId != null) sibling.areaId!,
+    };
+    return [for (final slot in all) if (!taken.contains(slot.id)) slot];
   }
 
   /// A picker shows for [tier] when the level reaches it, the parent has not
@@ -225,10 +245,10 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   /// The [tier] picker is fixed (not a choice) when the tapped slot pins it.
   bool _pickerLocked(AgentLevel tier) => _tappedAncestry.containsKey(tier);
 
-  /// The named slot this agent fills — its own tier's name, falling back to a
-  /// tapped slot name for the tiers with no picker (lsgd, ward).
-  String? get _slotArea =>
-      _cascadeTiers.contains(_level) ? _areaAt(_level) : widget.initialArea;
+  /// The named slot this agent fills — its own tier's slot, falling back to a
+  /// tapped slot for the tiers with no picker (lsgd, ward).
+  GeoSlot? get _slot =>
+      _cascadeTiers.contains(_level) ? _areaAt(_level) : widget.initialSlot;
 
   /// Drops any pick a higher change has invalidated — walked top-down so a
   /// cleared zone cascades to its state, district and assembly.
@@ -258,13 +278,13 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     return [
       const SizedBox(height: 14),
       _Label(tier.label),
-      DropdownButtonFormField<String>(
+      DropdownButtonFormField<GeoSlot>(
         initialValue: value,
         isExpanded: true,
         decoration: shieldFieldDecoration(hint: _pickHint(tier)),
         items: [
           for (final option in options)
-            DropdownMenuItem(value: option, child: Text(option)),
+            DropdownMenuItem(value: option, child: Text(option.name)),
         ],
         // Fixed when the recruiter tapped a named slot that pins this tier.
         onChanged: _pickerLocked(tier)
@@ -287,11 +307,11 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             style: const TextStyle(fontSize: 12.5, color: AppColors.danger),
           ),
         )
-      else if (value != null && agentSlotCode(value) != null)
+      else if (value != null && value.code.isNotEmpty)
         Padding(
           padding: const EdgeInsets.only(top: 6, left: 4),
           child: Text(
-            'Code · ${agentSlotCode(value)}',
+            'Code · ${value.code}',
             style: const TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
         ),
@@ -395,6 +415,20 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     FocusManager.instance.primaryFocus?.unfocus();
     final formOk = _formKey.currentState?.validate() ?? false;
     setState(() => _submitted = true);
+
+    // Every seat at the tier this agent would head is already filled — there is
+    // nothing to register them into. (All six regions taken, say.)
+    if (_cascadeTiers.contains(_level) &&
+        !_parentAncestry.containsKey(_level) &&
+        _optionsFor(_level).isEmpty) {
+      setState(() {
+        _error =
+            'Every ${_level.label.toLowerCase()} under ${_parent.name} already '
+            'has an agent — there is no open position to register into.';
+      });
+      return;
+    }
+
     final slotMissing = _cascadeTiers.any(
       (tier) =>
           _showPicker(tier) && !_optionsFor(tier).contains(_areaPick[tier]),
@@ -470,7 +504,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       pincode: _pincode.text,
       place: _place.text,
       accountNumber: _account.text,
-      area: _slotArea,
+      slot: _slot,
       photoBytes: _photo,
     );
     if (failure != null) {
