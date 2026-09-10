@@ -281,16 +281,20 @@ class AgentRepository {
   /// One PENDING `app.agent_request` row → a pending [Agent]. The id is
   /// `req-<id>` (distinct from a real agent's `db-<id>`), the figures are zero,
   /// and [Agent.approvalStatus] is [AgentApprovalStatus.pending] so the tree
-  /// draws a locked "Waiting for approval" card rather than a working agent.
+  /// draws a locked card rather than a working agent. [Agent.agentCode] is a
+  /// reference number (`SHD-DIS-R7`) — the real code is minted by the console
+  /// on approval.
   static Agent _toRequestAgent(Map<String, dynamic> row) {
     String str(Object? v) => (v ?? '').toString();
     final parentDbId = row['parent_id'];
+    final level =
+        _levelByName[str(row['level']).toUpperCase()] ?? AgentLevel.ward;
     return Agent(
       id: 'req-${str(row['id'])}',
       name: str(row['name']),
       phone: str(row['phone']),
-      agentCode: '',
-      level: _levelByName[str(row['level']).toUpperCase()] ?? AgentLevel.ward,
+      agentCode: 'SHD-${level.code}-R${str(row['id'])}',
+      level: level,
       active: false,
       parentId: (parentDbId == null || str(parentDbId).isEmpty)
           ? AgentDirectory.national.id

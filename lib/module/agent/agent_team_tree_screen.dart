@@ -535,7 +535,11 @@ class _MindNode extends StatelessWidget {
     final capacity = slots.isNotEmpty
         ? slots.length
         : agent.level.childCapacity;
-    final canExpand = capacity > 0;
+    // A recruit still awaiting an admin's approval heads nobody yet: their
+    // card is locked — name and reference code only, no chevron to fan a
+    // tier out under them — until the console approves or removes them.
+    final locked = !agent.isApproved;
+    final canExpand = capacity > 0 && !locked;
     final isExpanded = canExpand && expanded.contains(agent.id);
 
     return _MindBranch(
@@ -551,6 +555,7 @@ class _MindNode extends StatelessWidget {
         depth: depth,
         toggleLabel: agent.name,
         expanded: isExpanded,
+        locked: locked,
         onTap: () => onOpen(agent),
         onToggle: canExpand ? () => onToggle(agent.id) : null,
         badge: agent.isApproved
@@ -757,6 +762,10 @@ class _MindPill extends StatelessWidget {
   final int depth;
   final String toggleLabel;
   final bool expanded;
+
+  /// A recruit awaiting approval: draw a lock by the name and skip the
+  /// chevron, so the card reads as a held place rather than a working agent.
+  final bool locked;
   final VoidCallback onTap;
   final VoidCallback? onToggle;
   final Widget? badge;
@@ -772,6 +781,7 @@ class _MindPill extends StatelessWidget {
     required this.expanded,
     required this.onTap,
     required this.onToggle,
+    this.locked = false,
     this.badge,
   });
 
@@ -797,16 +807,34 @@ class _MindPill extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      height: 1.2,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
-                    ),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (locked) ...[
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1, right: 4),
+                          child: Icon(
+                            Icons.lock_outline,
+                            size: 13,
+                            color: AppColors.textDark.withValues(alpha: 0.55),
+                          ),
+                        ),
+                      ],
+                      Flexible(
+                        child: Text(
+                          title,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.2,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 2),
                   Text(
