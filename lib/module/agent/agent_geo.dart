@@ -407,7 +407,14 @@ class AgentGeo extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      final nodes = await AgentGeoRepository.instance.fetchAll();
+      // Belt-and-suspenders on top of NeonHttp's own per-query timeout: this
+      // guarantees the load reaches a terminal state (success, empty, or
+      // error) within a bounded time no matter what, so "My Team" can never
+      // sit on "Loading the team hierarchy…" forever — it always ends up
+      // showing either the real tree or a Retry button.
+      final nodes = await AgentGeoRepository.instance
+          .fetchAll()
+          .timeout(const Duration(seconds: 30));
       if (nodes != null && nodes.isNotEmpty) {
         _current = GeoHierarchy.fromNodes(nodes);
         _fromDatabase = true;

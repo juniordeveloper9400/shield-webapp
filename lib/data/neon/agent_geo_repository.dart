@@ -94,14 +94,20 @@ class AgentGeoRepository {
 
   /// Every geo node, ordered so a parent always precedes deeper tiers, or null
   /// when the endpoint is not configured or the tables are empty.
+  ///
+  /// The structure (region…LSGD) and the ~21k wards are fired off together
+  /// rather than one after the other — on a slow connection, waiting for two
+  /// sequential round-trips (each already capped at 20s by [NeonHttp]) can
+  /// leave "My Team" showing its loading state for the best part of 40
+  /// seconds; running them concurrently caps it at whichever one is slower.
   Future<List<GeoNode>?> fetchAll() async {
     if (!NeonHttp.isConfigured) {
       return null;
     }
 
-    // Step 1 — the structure, region down to LSGD. Small and quick. Every
-    // SELECT carries a `type` column so the UNION lines up; only LSGD fills it.
-    final structure = await NeonHttp.instance.query(r'''
+    // Structure — region down to LSGD. Every SELECT carries a `type` column
+    // so the UNION lines up; only LSGD fills it.
+    final structureFuture = NeonHttp.instance.query(r'''
         SELECT id::text AS id, NULL::text AS parent_id, 'region' AS level,
                name, code, '' AS type, sort, 1 AS tier
         FROM app.region
@@ -120,31 +126,35 @@ class AgentGeoRepository {
         FROM app.lsgd
         ORDER BY tier, sort, name
       ''');
-    final nodes = structure
+
+    // Wards — best effort: a failure here leaves the tree whole down to LSGD
+    // rather than dropping the entire hierarchy. Caught right here, not left
+    // to propagate into the `await` below, so a ward-only failure never
+    // fails the structure half sitting alongside it.
+    final wardsFuture = NeonHttp.instance
+        .query(r'''
+          SELECT id::text AS id, lsgd_id::text AS parent_id, 'ward' AS level,
+                 name, code, '' AS type, sort
+          FROM app.ward
+          ORDER BY sort, name
+        ''')
+        .catchError((Object error) {
+      NeonHttp.log(
+        'AgentGeoRepository: ward load failed — tree stops at LSGD',
+        error: error,
+      );
+      return const <Map<String, dynamic>>[];
+    });
+
+    final results = await Future.wait([structureFuture, wardsFuture]);
+    final nodes = results[0]
         .map(GeoNode.fromRow)
         .whereType<GeoNode>()
         .toList(); // growable — wards appended below
     if (nodes.isEmpty) {
       return null;
     }
-
-    // Step 2 — the wards. Best effort: a failure here leaves the tree whole
-    // down to LSGD rather than dropping the entire hierarchy.
-    try {
-      final wards = await NeonHttp.instance.query(r'''
-          SELECT id::text AS id, lsgd_id::text AS parent_id, 'ward' AS level,
-                 name, code, '' AS type, sort
-          FROM app.ward
-          ORDER BY sort, name
-        ''');
-      nodes.addAll(wards.map(GeoNode.fromRow).whereType<GeoNode>());
-    } catch (error) {
-      NeonHttp.log(
-        'AgentGeoRepository: ward load failed — tree stops at LSGD',
-        error: error,
-      );
-    }
-
+    nodes.addAll(results[1].map(GeoNode.fromRow).whereType<GeoNode>());
     return nodes;
   }
 }
