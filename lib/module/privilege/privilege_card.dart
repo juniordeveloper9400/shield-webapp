@@ -63,7 +63,7 @@ class _PrivilegeCallToActivate extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Activate your Privilege Programme',
+                          'Activate your Health Pass Programme',
                           style: TextStyle(
                             fontSize: 15.5,
                             height: 1.25,

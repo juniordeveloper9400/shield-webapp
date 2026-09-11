@@ -122,7 +122,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
               ..showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Please complete registration to activate the Privilege Programme',
+                    'Please complete registration to activate the Health Pass Programme',
                   ),
                 ),
               );
@@ -142,7 +142,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
             storeSelectable: true,
             order: CheckoutOrder(
               title: load.name,
-              subtitle: 'Privilege Programme activation',
+              subtitle: 'Health Pass Programme activation',
               amount: load.amount.toDouble(),
               reference:
                   'PV-${DateTime.now().millisecondsSinceEpoch.remainder(100000)}',
@@ -238,7 +238,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
         surfaceTintColor: AppColors.white,
         elevation: 0,
         title: const Text(
-          'Privilege Programme',
+          'Health Pass Programme',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,

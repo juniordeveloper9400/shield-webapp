@@ -117,7 +117,7 @@ class PrivilegeCardFace extends StatelessWidget {
         const Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _Label('Privilege', ' card')),
+            Expanded(child: _Label('Health Pass', ' card')),
             SizedBox(width: 8),
             PrivilegeIssuerMark(),
           ],

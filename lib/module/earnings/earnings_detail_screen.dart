@@ -364,7 +364,7 @@ class EarningsDetailScreen extends StatelessWidget {
               if (plans.isNotEmpty) ...[
                 const SizedBox(height: 22),
                 const Text(
-                  'Privilege Plan Bonus',
+                  'Health Pass Plan Bonus',
                   style: TextStyle(
                     fontSize: 17,
                     fontWeight: FontWeight.w700,
@@ -485,7 +485,7 @@ class EarningsDetailScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Earnings add up the direct savings on every SHIELD order — printed MRP less the discounted member price you paid — and the 10% bonus SHIELD credits when you activate a privilege plan.',
+                        'Earnings add up the direct savings on every SHIELD order — printed MRP less the discounted member price you paid — and the 10% bonus SHIELD credits when you activate a Health Pass plan.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.4,

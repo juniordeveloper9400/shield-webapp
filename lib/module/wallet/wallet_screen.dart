@@ -427,7 +427,7 @@ class _LockedWalletCard extends StatelessWidget {
               onPressed: onActivate,
               icon: const Icon(Icons.workspace_premium_rounded, size: 19),
               label: const Text(
-                'Activate your Privilege Card',
+                'Activate your Health Pass Card',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               style: FilledButton.styleFrom(
@@ -469,7 +469,7 @@ class _TopUpAction extends StatelessWidget {
           onPressed: onTopUp,
           icon: const Icon(Icons.workspace_premium_rounded, size: 20),
           label: const Text(
-            'Top up your Privilege Programme',
+            'Top up your Health Pass Programme',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
           ),
           style: FilledButton.styleFrom(
@@ -525,7 +525,7 @@ class _ActivatePanel extends StatelessWidget {
           // reaches for before it reads either button.
           Semantics(
             button: true,
-            label: 'See the privilege cards',
+            label: 'See the Health Pass cards',
             child: GestureDetector(
               onTap: onOpen,
               behavior: HitTestBehavior.opaque,
@@ -534,7 +534,7 @@ class _ActivatePanel extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const Text(
-            'Activate your Privilege Card',
+            'Activate your Health Pass Card',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,

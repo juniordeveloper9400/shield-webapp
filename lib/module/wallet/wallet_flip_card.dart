@@ -204,8 +204,8 @@ class _WalletFlipCardState extends State<WalletFlipCard>
                   // card. Outside it, a screen reader would go on offering
                   // the balance long after the cards had come round.
                   label: back
-                      ? 'Your privilege cards. Tap to see your balance.'
-                      : 'Wallet balance. Tap to see your privilege cards.',
+                      ? 'Your Health Pass cards. Tap to see your balance.'
+                      : 'Wallet balance. Tap to see your Health Pass cards.',
                   child: Transform(
                     alignment: Alignment.center,
                     // A little perspective, so the far edge of the card
