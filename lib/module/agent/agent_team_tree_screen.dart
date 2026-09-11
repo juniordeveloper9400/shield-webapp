@@ -312,11 +312,19 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         ),
       ),
       // The whole tree hangs off the geographic hierarchy (regions … wards).
-      // When it has not loaded, say why and offer a retry rather than showing
-      // a lone, dead-end root card.
-      body: AgentGeo.current.regions.isEmpty
+      // `initState` force-reloads it every time this screen opens, so a card
+      // an admin renamed or moved shows up on the next visit — but that
+      // means a *stale* copy from an earlier visit can still be sitting in
+      // [AgentGeo.current] while this visit's own reload is in flight. Wait
+      // for that reload rather than drawing the tree off whatever was on
+      // hand before it started: a slot rendered as the generic tier name
+      // ("+ District") while the real one ("+ Thiruvananthapuram") is a
+      // network round-trip away looks exactly like a placement that
+      // genuinely has no name, not like a page still catching up.
+      body: (AgentGeo.instance.isLoading || AgentGeo.current.regions.isEmpty)
           ? _HierarchyStatus(
-              attempted: AgentGeo.instance.hasAttempted,
+              attempted:
+                  AgentGeo.instance.hasAttempted && !AgentGeo.instance.isLoading,
               error: AgentGeo.instance.lastError,
               configured: NeonHttp.isConfigured,
               onRetry: () {

@@ -377,6 +377,16 @@ class AgentGeo extends ChangeNotifier {
   /// there is genuinely nothing".
   bool get hasAttempted => _attempted;
 
+  /// True while a fetch is actually in flight — including a forced re-fetch
+  /// triggered by reopening "My Team" after [hasAttempted] is already true
+  /// from an earlier visit. Without this, [ensureLoaded]'s `force: true`
+  /// silently re-fetches in the background while the screen keeps showing
+  /// whatever [current] held before the reload started; a card can look
+  /// like a real, final answer (a named slot, or the generic doubling
+  /// fallback) when it is really just what was on hand before this visit's
+  /// own fetch had landed.
+  bool get isLoading => _inFlight != null;
+
   /// The reason the last load failed (a transport / SQL error), or null when
   /// it succeeded, is still running, or simply came back empty. "My Team"
   /// surfaces this so an empty tree is explained rather than silent.
