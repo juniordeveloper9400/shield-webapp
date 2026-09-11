@@ -11,6 +11,14 @@ class RemoteAgent {
   final String level;
   final bool active;
   final String area;
+
+  /// The real slot id (`app.region`/`state`/`district`/`assembly`/`lsgd`/
+  /// `ward`) that [area] names on display — see [Agent.areaId]'s doc. Null
+  /// for the national agent or one on a free-text place. Without this, the
+  /// "My Team" tree has no way to tell which of a region's states (say)
+  /// this agent heads, and falls back to showing every position under them
+  /// as an unnamed, generic open slot.
+  final String? areaId;
   final int earned;
   final int redeemed;
   final int personalSales;
@@ -25,6 +33,7 @@ class RemoteAgent {
     required this.level,
     required this.active,
     required this.area,
+    required this.areaId,
     required this.earned,
     required this.redeemed,
     required this.personalSales,
@@ -109,6 +118,7 @@ class PersonaRepository {
     final rows = await NeonHttp.instance.query(
       r'''
         SELECT a.code, a.name, a.phone, a.level, a.active, a.area,
+               a.area_id::text AS area_id,
                a.earned, a.redeemed, a.personal_sales,
                pa.code AS parent_code
         FROM app.agent a
@@ -122,6 +132,7 @@ class PersonaRepository {
       return null;
     }
     final r = rows.first;
+    final areaId = (r['area_id'] as Object?)?.toString();
     return RemoteAgent(
       code: (r['code'] ?? '').toString(),
       name: (r['name'] ?? '').toString(),
@@ -129,6 +140,7 @@ class PersonaRepository {
       level: (r['level'] ?? 'ward').toString().toLowerCase(),
       active: _bool(r['active'], true),
       area: (r['area'] ?? '').toString(),
+      areaId: (areaId == null || areaId.isEmpty) ? null : areaId,
       earned: _int(r['earned']),
       redeemed: _int(r['redeemed']),
       personalSales: _int(r['personal_sales']),

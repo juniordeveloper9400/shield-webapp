@@ -131,6 +131,7 @@ class PersonaService extends ChangeNotifier {
         active: r.active,
         parentId: r.parentCode,
         area: r.area,
+        areaId: r.areaId,
         earned: r.earned,
         redeemed: r.redeemed,
         personalSales: r.personalSales,
