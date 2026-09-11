@@ -724,8 +724,8 @@ class _MindPlusNode extends StatelessWidget {
         slotCode: slot == null
             ? null
             : (slot.typeLabel.isNotEmpty
-                ? slot.typeLabel
-                : (slot.code.isNotEmpty ? slot.code : null)),
+                  ? slot.typeLabel
+                  : (slot.code.isNotEmpty ? slot.code : null)),
       ),
       children: isExpanded
           ? [
@@ -747,10 +747,25 @@ class _MindPlusNode extends StatelessWidget {
   }
 }
 
+/// What a locked card's body tap shows instead of opening the detail screen.
+void _showLockedNotice(BuildContext context) {
+  ScaffoldMessenger.of(context)
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      const SnackBar(
+        content: Text(
+          "Not yet approved — this agent's details open once the admin "
+          'approves the registration.',
+        ),
+      ),
+    );
+}
+
 /// A filled agent card: a rounded pill in its depth's tint carrying the name
 /// and tier, with — when the agent heads a tier — a round chevron button
-/// under it. The pill body opens the agent's detail; the button fans the
-/// tier below in or out.
+/// under it. The pill body opens the agent's detail (unless [locked] — a
+/// recruit still awaiting approval shows a notice instead); the button fans
+/// the tier below in or out.
 class _MindPill extends StatelessWidget {
   final Key pillKey;
   final Key boxKey;
@@ -797,7 +812,12 @@ class _MindPill extends StatelessWidget {
           color: tint,
           borderRadius: BorderRadius.circular(10),
           child: InkWell(
-            onTap: onTap,
+            // A locked (not-yet-approved) card does not open its detail
+            // screen — there is nothing to review there until the console
+            // has approved or rejected the registration; a lock icon plus
+            // this tap tells the recruiter why, instead of the card silently
+            // opening as if it were a working agent.
+            onTap: locked ? () => _showLockedNotice(context) : onTap,
             borderRadius: BorderRadius.circular(10),
             child: Container(
               key: boxKey,

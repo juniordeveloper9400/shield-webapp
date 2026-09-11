@@ -140,15 +140,19 @@ class AgentService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// The agent for [phone], or null when the number is not an agent's. Only
-  /// the seed national agent carries a real number.
+  /// The agent for [phone], or null when the number is not an **approved**
+  /// agent's. This is what decides whether a signed-in member sees agent-facing
+  /// UI (the home screen's Agent Portal card, the menu's "Agent portal" row) —
+  /// so a number with a pending or rejected registration is not matched: only
+  /// someone the admin has actually approved is an agent as far as the rest of
+  /// the app is concerned.
   Agent? agentForPhone(String? phone) {
     if (phone == null) {
       return null;
     }
     final clean = phone.trim();
     for (final agent in _agents) {
-      if (agent.phone == clean) {
+      if (agent.phone == clean && agent.isApproved) {
         return agent;
       }
     }

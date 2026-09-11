@@ -102,9 +102,8 @@ class _TeamRosterState extends State<_TeamRoster> {
     // One entry per tier that actually has members, top of the chain first.
     final groups = <MapEntry<AgentLevel, List<Agent>>>[];
     for (final level in AgentLevel.values) {
-      final members =
-          all.where((agent) => agent.level == level).toList()
-            ..sort((a, b) => a.name.compareTo(b.name));
+      final members = all.where((agent) => agent.level == level).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
       if (members.isNotEmpty) {
         groups.add(MapEntry(level, members));
       }
@@ -346,9 +345,23 @@ class _TableDataRow extends StatelessWidget {
     return Material(
       color: AppColors.transparent,
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => AgentDetailScreen(agent: agent)),
-        ),
+        // A recruit still awaiting admin approval has nothing to show here
+        // yet — open their detail screen only once approved; otherwise say
+        // why instead of opening it as if they were a working agent.
+        onTap: () => agent.isApproved
+            ? Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => AgentDetailScreen(agent: agent),
+                ),
+              )
+            : ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    "Not yet approved — this agent's details open once the "
+                    'admin approves the registration.',
+                  ),
+                ),
+              ),
         child: Container(
           decoration: const BoxDecoration(
             border: Border(bottom: BorderSide(color: AppColors.border)),
