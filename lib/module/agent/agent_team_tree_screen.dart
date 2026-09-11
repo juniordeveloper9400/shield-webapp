@@ -85,7 +85,20 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   }
 
   void _onGeoChanged() {
-    if (mounted) setState(() {});
+    if (!mounted) return;
+    setState(() {});
+    if (!_fitted) {
+      // The tree (and _chartKey, which _openOnRoot measures) only mounts
+      // once the hierarchy actually has data -- while it is still loading,
+      // the body shows _HierarchyStatus instead. initState's one-shot
+      // _openOnRoot attempt runs straight after the very first frame, so on
+      // a cold load it finds no chart to measure and gives up for good,
+      // leaving the tree permanently at opacity 0 once it does mount (see
+      // the AnimatedOpacity below) -- a blank "My Team" with nothing wrong
+      // in the data at all. This rebuild is what puts the real tree on
+      // screen for the first time, so retry positioning after it.
+      WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
+    }
   }
 
   @override
@@ -96,11 +109,25 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     super.dispose();
   }
 
+  /// Guards [_openOnRoot]'s self-retry below from looping forever in some
+  /// pathological case (a viewport that never gets a real size, say).
+  int _openOnRootAttempts = 0;
+
   /// Where the screen opens: the root's card centred across the top, with the
   /// rest of the map free to fan out below it as branches are opened.
   void _openOnRoot() {
     final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (chartBox == null || !chartBox.hasSize || _viewportSize.isEmpty) {
+      // Nothing to measure yet -- most commonly the geo hierarchy (or the
+      // roster) was still loading and the tree, with it, hadn't mounted.
+      // [_onGeoChanged] already retries once real data lands; this is a
+      // bounded safety net for any other reason a frame goes by with
+      // nothing laid out yet, so the tree can never get stuck at opacity 0
+      // (see the AnimatedOpacity below) with real content sitting right
+      // there unfitted.
+      if (mounted && !_fitted && _openOnRootAttempts++ < 20) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
+      }
       return;
     }
     final chartSize = chartBox.size;
