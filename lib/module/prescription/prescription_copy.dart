@@ -49,6 +49,9 @@ class PrescriptionCopy {
   final String patientHint;
   final String durationHeading;
   final String durationIntro;
+  final String optionalTag;
+  final String photoOptionalNote;
+  final String noFileAttached;
   final String customDays;
   final String customDaysHint;
   final String keepInMind;
@@ -132,6 +135,9 @@ class PrescriptionCopy {
     required this.patientHint,
     required this.durationHeading,
     required this.durationIntro,
+    required this.optionalTag,
+    required this.photoOptionalNote,
+    required this.noFileAttached,
     required this.customDays,
     required this.customDaysHint,
     required this.keepInMind,
@@ -209,6 +215,11 @@ class PrescriptionCopy {
     durationIntro:
         'We dispense up to this much, or up to what the prescription '
         'allows — whichever is less.',
+    optionalTag: 'Optional',
+    photoOptionalNote:
+        "Can't upload right now? Skip it — our pharmacist will call you to "
+        'check the details.',
+    noFileAttached: 'No file attached',
     customDays: 'Custom days',
     customDaysHint: 'Enter number of days',
     keepInMind: 'Please keep in mind:',
@@ -326,6 +337,11 @@ class PrescriptionCopy {
     durationIntro:
         'ഇത്രയും വരെ, അല്ലെങ്കിൽ കുറിപ്പടി അനുവദിക്കുന്നത്ര — ഇതിൽ ഏതാണോ '
         'കുറവ്, അത്രയും ഞങ്ങൾ നൽകും.',
+    optionalTag: 'ഐച്ഛികം',
+    photoOptionalNote:
+        'ഇപ്പോൾ അപ്‌ലോഡ് ചെയ്യാൻ കഴിയുന്നില്ലേ? ഒഴിവാക്കാം — വിശദാംശങ്ങൾ '
+        'പരിശോധിക്കാൻ ഞങ്ങളുടെ ഫാർമസിസ്റ്റ് വിളിക്കും.',
+    noFileAttached: 'ഫയൽ അറ്റാച്ച് ചെയ്തിട്ടില്ല',
     customDays: 'ദിവസം നൽകുക',
     customDaysHint: 'എത്ര ദിവസമെന്ന് ടൈപ്പ് ചെയ്യുക',
     keepInMind: 'ശ്രദ്ധിക്കുക:',

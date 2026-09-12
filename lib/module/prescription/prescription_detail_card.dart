@@ -56,7 +56,7 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Header(record: record, ready: ready),
+          _Header(record: record, ready: ready, copy: copy),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(
@@ -116,8 +116,13 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
 class _Header extends StatelessWidget {
   final PrescriptionRecord record;
   final bool ready;
+  final PrescriptionCopy copy;
 
-  const _Header({required this.record, required this.ready});
+  const _Header({
+    required this.record,
+    required this.ready,
+    required this.copy,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +142,9 @@ class _Header extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  record.fileName,
+                  record.fileName.isEmpty
+                      ? copy.noFileAttached
+                      : record.fileName,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
@@ -178,9 +185,7 @@ class _Header extends StatelessWidget {
                   fontSize: 11.5,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 0.4,
-                  color: ready
-                      ? AppColors.brandGreenDark
-                      : AppColors.textMuted,
+                  color: ready ? AppColors.brandGreenDark : AppColors.textMuted,
                 ),
               ),
             ),
@@ -315,8 +320,7 @@ class _IntakeSection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final count = record.medicines.length;
-    final noun =
-        count == 1 ? copy.medicineSingular : copy.medicinePlural;
+    final noun = count == 1 ? copy.medicineSingular : copy.medicinePlural;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,

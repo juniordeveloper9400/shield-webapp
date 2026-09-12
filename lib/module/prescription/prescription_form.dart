@@ -73,14 +73,13 @@ class PrescriptionFormController extends ChangeNotifier {
   bool get dueDateIsBackwards =>
       isRecurring && !neverExpires && until != null && !until!.isAfter(from);
 
-  // A prescription that does not say who it is for, or how much to dispense,
-  // cannot be filled. Both are as required as the file itself.
-  bool get isComplete =>
-      file != null &&
-      !tooLarge &&
-      patient != null &&
-      hasDuration &&
-      hasSchedule;
+  // Only who it is for is actually required — the pharmacist can read the
+  // dispense quantity off the script itself, or off a call, so a member with
+  // no photo to hand yet and no fixed idea of how much they need can still
+  // send the prescription and have both filled in for them. A file that was
+  // picked still has to be under the size cap, and a recurring order still
+  // needs a real schedule once switched on.
+  bool get isComplete => !tooLarge && patient != null && hasSchedule;
 
   String get supplyLabel {
     if (isCustomDuration && customDays != null && customDays! > 0) {
@@ -162,7 +161,10 @@ class PrescriptionFormController extends ChangeNotifier {
   PrescriptionRecord addTo(PrescriptionBook book) {
     final record = book.add(
       patient: patient!,
-      fileName: file!.name,
+      // '' when no photo was attached — the pharmacist fills the script in
+      // from the call instead. [PrescriptionDetailCard] shows a placeholder
+      // for the empty case rather than a blank title line.
+      fileName: file?.name ?? '',
       duration: isCustomDuration ? null : duration,
       customDays: isCustomDuration ? customDays : null,
       recurring: schedule,
@@ -171,7 +173,10 @@ class PrescriptionFormController extends ChangeNotifier {
     return record;
   }
 
-  Future<void> _persist(PrescriptionBook book, PrescriptionRecord record) async {
+  Future<void> _persist(
+    PrescriptionBook book,
+    PrescriptionRecord record,
+  ) async {
     final user = AuthService.instance.currentUser.value;
     if (user == null) {
       return;
@@ -179,7 +184,8 @@ class PrescriptionFormController extends ChangeNotifier {
     final patient = record.patient;
     // A readable, collision-safe code for a row that outlives the session
     // counter behind [PrescriptionRecord.number].
-    final code = 'RX-'
+    final code =
+        'RX-'
         '${DateTime.now().millisecondsSinceEpoch.remainder(100000000).toString().padLeft(8, '0')}';
     // The script itself, so the pharmacy console can read it and build the
     // intake card from it. Try a small re-encoded JPEG first; if the image
@@ -194,7 +200,8 @@ class PrescriptionFormController extends ChangeNotifier {
       } catch (error) {
         debugPrint('prescription: could not encode the script image — $error');
       }
-      if ((image == null || image.isEmpty) && rawImage.length <= 4 * 1024 * 1024) {
+      if ((image == null || image.isEmpty) &&
+          rawImage.length <= 4 * 1024 * 1024) {
         final mime = _mimeForName(file?.name ?? '');
         image = 'data:$mime;base64,${base64Encode(rawImage)}';
       }
@@ -406,6 +413,26 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
                 ],
               ),
             ),
+            if (_form.file == null) ...[
+              const SizedBox(height: 10),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _OptionalTag(label: copy.optionalTag),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      copy.photoOptionalNote,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        height: 1.35,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
             if (_form.file != null) ...[
               const SizedBox(height: 18),
               UploadedFileCard(
@@ -755,6 +782,34 @@ class _GuidanceBox extends StatelessWidget {
   }
 }
 
+/// A small neutral pill marking a section of the form as not required —
+/// shared by the two sections a member can skip and still send the
+/// prescription: the photo and how much to dispense.
+class _OptionalTag extends StatelessWidget {
+  final String label;
+
+  const _OptionalTag({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: AppColors.chipSlateTint,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textMuted,
+        ),
+      ),
+    );
+  }
+}
+
 /// How long a supply the prescription should be filled for.
 class _DurationPicker extends StatelessWidget {
   final PrescriptionCopy copy;
@@ -780,13 +835,22 @@ class _DurationPicker extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          copy.durationHeading,
-          style: const TextStyle(
-            fontSize: 15.5,
-            fontWeight: FontWeight.w700,
-            color: AppColors.textDark,
-          ),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Text(
+                copy.durationHeading,
+                style: const TextStyle(
+                  fontSize: 15.5,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            _OptionalTag(label: copy.optionalTag),
+          ],
         ),
         const SizedBox(height: 3),
         Text(
