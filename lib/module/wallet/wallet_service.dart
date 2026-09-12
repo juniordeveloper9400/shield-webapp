@@ -361,6 +361,26 @@ class WalletService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops a submission that never reached Neon — the optimistic local card
+  /// [submitPending] added up front, now known to be fake because the real
+  /// write failed (no `DATABASE_URL`, or the request errored). Matched by
+  /// [submittedAt] the same way [attachPendingRemoteId] finds its row, since a
+  /// failed write never gets a `remoteId` to match on instead.
+  ///
+  /// Without this, a failed submission left a "waiting for approval" card
+  /// sitting in the wallet forever — nothing on Neon for the console to ever
+  /// approve, so it could never move and the member had no way to tell it
+  /// apart from a real one still pending review.
+  void discardPending(DateTime submittedAt) {
+    final before = _pending.length;
+    _pending.removeWhere(
+      (card) => card.remoteId == null && card.submittedAt == submittedAt,
+    );
+    if (_pending.length != before) {
+      notifyListeners();
+    }
+  }
+
   /// Merges what the console has decided into the wallet: approves credit the
   /// balance and become real cards, rejections carry their reason, and a
   /// pending row the app had lost (a restart before approval) is re-created.

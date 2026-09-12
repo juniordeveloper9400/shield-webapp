@@ -170,10 +170,13 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
                 store: StoreDirectory.byId(receipt.storeId),
                 on: submittedAt,
               );
-              // The durable copy on Neon. Best-effort — a build with no
-              // DATABASE_URL, or an unreachable database, must not stop the
-              // submission. AuthFlow.guard above has ensured someone is signed
-              // in. Awaited only to pin the row's uuid onto the pending card.
+              // The durable copy on Neon — the only copy the console can ever
+              // see. AuthFlow.guard above has ensured someone is signed in.
+              // Tracked rather than fire-and-forget: a build with no
+              // DATABASE_URL, an unreachable database, or a request that
+              // errors must not be reported to the member as "submitted" —
+              // that would leave them thinking the counter has it when the
+              // console has nothing at all to approve. See _reachedDatabase.
               final user = AuthService.instance.currentUser.value;
               if (user != null) {
                 final uuid =
@@ -192,6 +195,14 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
                 if (uuid != null) {
                   WalletService.instance
                       .attachPendingRemoteId(submittedAt, uuid);
+                } else if (WalletRepository.instance.isAvailable) {
+                  // The database is configured and reachable in principle,
+                  // but this particular write came back empty — a real
+                  // failure, not a build with nothing to write to. Drop the
+                  // optimistic local card rather than leave the member
+                  // looking at a "pending" plan the console will never see.
+                  WalletService.instance.discardPending(submittedAt);
+                  _reachedDatabase = false;
                 }
               }
               // Pin the branch chosen on the checkout to the account, so every
@@ -212,6 +223,27 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
         return;
       }
 
+      if (!_reachedDatabase) {
+        // Reset for the next attempt — this flag only ever means "the most
+        // recent submission", never a lasting error state.
+        _reachedDatabase = true;
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Could not reach the server to file this receipt. Check '
+                'your connection and submit it again — nothing has gone '
+                'to the counter yet.',
+              ),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        // Stay on the privilege screen rather than popping on a failure —
+        // popping reads as "done", and this is the opposite of done.
+        return;
+      }
+
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -226,6 +258,15 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
       Navigator.of(context).pop();
     });
   }
+
+  /// Whether the most recent submission's write to `app.wallet_card` actually
+  /// reached Neon. Set to `false` inside the checkout's `onComplete` when a
+  /// configured, reachable database still comes back with nothing written;
+  /// read right after the checkout route returns, since `onComplete` is
+  /// always awaited before it pops. Left `true` — meaning "nothing went
+  /// wrong" — for a build with no database at all, which behaves as it always
+  /// has: a local-only submission with no console to reach.
+  bool _reachedDatabase = true;
 
   @override
   Widget build(BuildContext context) {
