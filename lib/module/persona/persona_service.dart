@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 
 import '../../data/neon/persona_repository.dart';
+import '../agent/agent_directory.dart';
 import '../agent/agent_model.dart';
 import '../agent/agent_service.dart';
 import '../auth/auth_service.dart';
@@ -119,8 +120,12 @@ class PersonaService extends ChangeNotifier {
     notifyListeners();
   }
 
+  // 'db-<id>' — the exact scheme AgentRepository.fetchAll uses for every
+  // other agent in the roster (see RemoteAgent.id's own doc for why this
+  // has to match: AgentService.byId looks the signed-in agent up by this
+  // id to find their real roster entry, with correct children/downline).
   static Agent _toAgent(RemoteAgent r) => Agent(
-        id: r.code,
+        id: 'db-${r.id}',
         name: r.name,
         phone: r.phone,
         agentCode: r.code,
@@ -129,7 +134,9 @@ class PersonaService extends ChangeNotifier {
           orElse: () => AgentLevel.ward,
         ),
         active: r.active,
-        parentId: r.parentCode,
+        parentId: r.parentId == null
+            ? AgentDirectory.national.id
+            : 'db-${r.parentId}',
         area: r.area,
         areaId: r.areaId,
         earned: r.earned,

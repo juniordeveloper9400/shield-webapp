@@ -200,8 +200,23 @@ class AgentService extends ChangeNotifier {
       .where((a) => a.approvalStatus != AgentApprovalStatus.rejected)
       .toList(growable: false);
 
-  /// Every agent anywhere below [id] in the tree. [id] itself is not included.
+  /// Every agent anywhere below [id] in the tree. [id] itself is not
+  /// included.
+  ///
+  /// A national agent is meant to be the one root everyone eventually
+  /// reports up to — but real data can leave someone unreachable by a plain
+  /// parent-chain walk (an agent an admin converted with no parent chosen,
+  /// say), so a national agent's own downline is simply every other
+  /// non-national agent, not just whoever a correct chain of `parentId`
+  /// happens to connect back to them. Below national, this still walks the
+  /// real chain — a region or state agent only ever sees what actually
+  /// reports to them.
   List<Agent> descendantsOf(String id) {
+    if (byId(id)?.level == AgentLevel.national) {
+      return _agents
+          .where((a) => a.id != id && a.level != AgentLevel.national)
+          .toList(growable: false);
+    }
     final out = <Agent>[];
     final queue = <String>[id];
     while (queue.isNotEmpty) {

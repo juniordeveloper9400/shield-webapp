@@ -3,6 +3,17 @@ import 'neon_http.dart';
 /// The `app.agent` row an admin created for a member, flattened to what the app
 /// needs to build an `Agent`.
 class RemoteAgent {
+  /// `app.agent.id` (bigint), as text — the row's real database id, not its
+  /// printed [code]. [PersonaService] builds [Agent.id] as `'db-<id>'` from
+  /// this, the same scheme [AgentRepository] uses for every other agent
+  /// fetched into the roster. Building it from [code] instead (as this used
+  /// to) meant the signed-in agent's own [Agent.id] never matched the entry
+  /// [AgentRepository.fetchAll] had already put in the roster for the same
+  /// row — so `AgentService.byId` never found it, `childrenOf`/`descendantsOf`
+  /// ran against the wrong id, and a national or region agent's own "My
+  /// Team" could show an empty downline no matter how many real agents sat
+  /// underneath them.
+  final String id;
   final String code;
   final String name;
   final String phone;
@@ -23,10 +34,12 @@ class RemoteAgent {
   final int redeemed;
   final int personalSales;
 
-  /// The parent agent's `code`, or null at the top of the tree.
-  final String? parentCode;
+  /// The parent agent's own `app.agent.id` (bigint, as text), or null at the
+  /// top of the tree. Also `'db-<id>'`-scheme, same reasoning as [id] itself.
+  final String? parentId;
 
   const RemoteAgent({
+    required this.id,
     required this.code,
     required this.name,
     required this.phone,
@@ -37,7 +50,7 @@ class RemoteAgent {
     required this.earned,
     required this.redeemed,
     required this.personalSales,
-    required this.parentCode,
+    required this.parentId,
   });
 }
 
@@ -117,12 +130,11 @@ class PersonaRepository {
   Future<RemoteAgent?> _agentFor(String phone) async {
     final rows = await NeonHttp.instance.query(
       r'''
-        SELECT a.code, a.name, a.phone, a.level, a.active, a.area,
-               a.area_id::text AS area_id,
+        SELECT a.id::text AS id, a.code, a.name, a.phone, a.level, a.active,
+               a.area, a.area_id::text AS area_id,
                a.earned, a.redeemed, a.personal_sales,
-               pa.code AS parent_code
+               a.parent_id::text AS parent_id
         FROM app.agent a
-        LEFT JOIN app.agent pa ON pa.id = a.parent_id
         WHERE a.phone = $1
         LIMIT 1
       ''',
@@ -133,7 +145,9 @@ class PersonaRepository {
     }
     final r = rows.first;
     final areaId = (r['area_id'] as Object?)?.toString();
+    final parentId = (r['parent_id'] as Object?)?.toString();
     return RemoteAgent(
+      id: (r['id'] ?? '').toString(),
       code: (r['code'] ?? '').toString(),
       name: (r['name'] ?? '').toString(),
       phone: (r['phone'] ?? phone).toString(),
@@ -144,7 +158,7 @@ class PersonaRepository {
       earned: _int(r['earned']),
       redeemed: _int(r['redeemed']),
       personalSales: _int(r['personal_sales']),
-      parentCode: (r['parent_code'] as Object?)?.toString(),
+      parentId: (parentId == null || parentId.isEmpty) ? null : parentId,
     );
   }
 
