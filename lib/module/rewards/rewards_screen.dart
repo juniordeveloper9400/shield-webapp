@@ -443,9 +443,7 @@ class _OfferCoupon extends StatelessWidget {
   void _run(BuildContext context) {
     switch (action) {
       case _OfferAction.refer:
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReferEarnScreen()),
-        );
+        ReferEarnScreen.open(context);
       case _OfferAction.shop:
         Navigator.of(context).push(
           MaterialPageRoute(builder: (_) => const CategoriesScreen()),
@@ -752,9 +750,7 @@ class _ReferCard extends StatelessWidget {
       color: AppColors.white,
       borderRadius: BorderRadius.circular(16),
       child: InkWell(
-        onTap: () => Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => const ReferEarnScreen()),
-        ),
+        onTap: () => ReferEarnScreen.open(context),
         borderRadius: BorderRadius.circular(16),
         child: Container(
           decoration: BoxDecoration(

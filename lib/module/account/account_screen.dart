@@ -134,9 +134,7 @@ class AccountScreen extends StatelessWidget {
               _MenuItem(
                 icon: Icons.card_giftcard_rounded,
                 label: 'Refer & Earn',
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const ReferEarnScreen()),
-                ),
+                onTap: () => ReferEarnScreen.open(context),
               ),
               _MenuItem(
                 icon: Icons.headset_mic_outlined,

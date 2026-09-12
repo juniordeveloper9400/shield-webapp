@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../refer/refer_earn_screen.dart';
 import '../refer/referral_level.dart';
+import '../refer/referral_service.dart';
 
 /// Home entry point into the refer-and-earn journey.
 class ReferEarnCard extends StatelessWidget {
@@ -10,8 +11,18 @@ class ReferEarnCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Listens so a referral that lands (or finishes loading) while the
+    // member is sitting on the home tab updates the teaser without a
+    // pull-to-refresh.
+    return ListenableBuilder(
+      listenable: ReferralService.instance,
+      builder: (context, _) => _build(context),
+    );
+  }
+
+  Widget _build(BuildContext context) {
     const levels = ReferralLadder.levels;
-    const progress = ReferralLadder.sampleProgress;
+    final progress = ReferralService.instance.progress;
     final cleared = progress.currentLevel(levels);
     final next = progress.nextLevel(levels);
 
@@ -23,9 +34,7 @@ class ReferEarnCard extends StatelessWidget {
         color: AppColors.transparent,
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
-          onTap: () => Navigator.of(
-            context,
-          ).push(MaterialPageRoute(builder: (_) => const ReferEarnScreen())),
+          onTap: () => ReferEarnScreen.open(context),
           borderRadius: BorderRadius.circular(14),
           child: Container(
             decoration: BoxDecoration(

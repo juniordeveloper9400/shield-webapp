@@ -149,7 +149,10 @@ class MenuDrawer extends StatelessWidget {
                         _MenuRow(
                           label: 'Refer & earn',
                           transparent: true,
-                          onTap: () => _push(context, const ReferEarnScreen()),
+                          onTap: () {
+                            Navigator.of(context).pop();
+                            ReferEarnScreen.open(context);
+                          },
                         ),
                         // Orders is a destination now, so the row switches to
                         // it rather than stacking a second copy on top of the

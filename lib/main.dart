@@ -11,6 +11,7 @@ import 'module/catalogue/catalogue_service.dart';
 import 'module/home/customer_reviews_service.dart';
 import 'module/orders/purchase_service.dart';
 import 'module/persona/persona_service.dart';
+import 'module/refer/referral_service.dart';
 import 'module/rewards/rewards_service.dart';
 import 'screens/root_screen.dart';
 import 'theme/app_colors.dart';
@@ -52,6 +53,11 @@ Future<void> main() async {
   // sign-in, clear it on sign-out. The header coin, rewards screen and menu
   // read RewardsService.balance from here.
   RewardsService.instance.attach();
+
+  // Follow the session for the refer-and-earn standing: load it on sign-in,
+  // clear it on sign-out. The home card and the refer & earn screen both
+  // read ReferralService.progress / .code.
+  ReferralService.instance.attach();
 
   // Follow the session for the member's real order history: load it from
   // app."order" on sign-in, clear it on sign-out. The "Your savings" card and

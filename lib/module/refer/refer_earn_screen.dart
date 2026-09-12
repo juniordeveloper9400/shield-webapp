@@ -6,19 +6,44 @@ import '../../theme/app_colors.dart';
 import '../privilege/privilege_tier.dart';
 import 'journey_map.dart';
 import 'referral_level.dart';
+import 'referral_service.dart';
 import 'reward_graph.dart';
 
 /// Refer & earn: current standing, the shareable code, and the level ladder
 /// drawn as a journey map.
+///
+/// A plain, prop-driven screen — [progress] and [code] are exactly what it
+/// renders, nothing more — so it stays trivial to pin to a fixture in a test.
+/// The real app never constructs it directly: [ReferEarnScreen.open] pushes
+/// it wired to [ReferralService], the signed-in member's actual standing.
 class ReferEarnScreen extends StatelessWidget {
   final ReferralProgress progress;
+  final String code;
 
   const ReferEarnScreen({
     super.key,
     this.progress = ReferralLadder.sampleProgress,
+    this.code = ReferralLadder.fallbackCode,
   });
 
-  static const String referralCode = 'SHIELD-RN4821';
+  /// Pushes the screen wired to the signed-in member's real standing —
+  /// refreshed on the way in, and followed live while the screen stays open,
+  /// so a referral that lands mid-visit updates the figures without a trip
+  /// back out and in again.
+  static void open(BuildContext context) {
+    ReferralService.instance.ensureLoaded();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ListenableBuilder(
+          listenable: ReferralService.instance,
+          builder: (context, _) => ReferEarnScreen(
+            progress: ReferralService.instance.progress,
+            code: ReferralService.instance.code,
+          ),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -66,7 +91,7 @@ class ReferEarnScreen extends StatelessWidget {
           const SizedBox(height: 14),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _CodeCard(code: referralCode, accent: standing.accent),
+            child: _CodeCard(code: code, accent: standing.accent),
           ),
           const SizedBox(height: 24),
           const Padding(
