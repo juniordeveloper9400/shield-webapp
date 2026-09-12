@@ -351,7 +351,8 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       body: (AgentGeo.instance.isLoading || AgentGeo.current.regions.isEmpty)
           ? _HierarchyStatus(
               attempted:
-                  AgentGeo.instance.hasAttempted && !AgentGeo.instance.isLoading,
+                  AgentGeo.instance.hasAttempted &&
+                  !AgentGeo.instance.isLoading,
               error: AgentGeo.instance.lastError,
               configured: NeonHttp.isConfigured,
               onRetry: () {
@@ -407,8 +408,9 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
 }
 
 /// Shown in place of the tree while the geographic hierarchy (`app.region` …
-/// `app.ward`) has not loaded — a spinner on the first attempt, then a plain
-/// reason and a retry once an attempt has finished with nothing.
+/// `app.ward`) has not loaded — a skeleton shaped like the mind-map on the
+/// first attempt, then a plain reason and a retry once an attempt has
+/// finished with nothing.
 class _HierarchyStatus extends StatelessWidget {
   final bool attempted;
   final Object? error;
@@ -425,23 +427,7 @@ class _HierarchyStatus extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (!attempted) {
-      return const Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            SizedBox(
-              width: 26,
-              height: 26,
-              child: CircularProgressIndicator(strokeWidth: 2.4),
-            ),
-            SizedBox(height: 14),
-            Text(
-              'Loading the team hierarchy…',
-              style: TextStyle(color: AppColors.textMuted, fontSize: 13),
-            ),
-          ],
-        ),
-      );
+      return const _HierarchySkeleton();
     }
 
     final String reason;
@@ -499,6 +485,93 @@ class _HierarchyStatus extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A pulsing placeholder shaped like the tree it is about to become — a root
+/// card over a fanned-out row of three — so the first-load wait reads as the
+/// same mind-map settling in rather than a bare spinner.
+class _HierarchySkeleton extends StatefulWidget {
+  const _HierarchySkeleton();
+
+  @override
+  State<_HierarchySkeleton> createState() => _HierarchySkeletonState();
+}
+
+class _HierarchySkeletonState extends State<_HierarchySkeleton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  late final Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1100),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(
+      begin: 0.45,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  static const Color _bone = Color(0xFFE3E6F0);
+
+  Widget _pill({required double width, required double height}) => Container(
+    width: width,
+    height: height,
+    decoration: BoxDecoration(
+      color: _bone,
+      borderRadius: BorderRadius.circular(10),
+    ),
+  );
+
+  Widget _dot() => Container(
+    width: 26,
+    height: 26,
+    decoration: const BoxDecoration(color: _bone, shape: BoxShape.circle),
+  );
+
+  Widget _branch() => Column(
+    children: [_pill(width: 92, height: 58), const SizedBox(height: 8), _dot()],
+  );
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: FadeTransition(
+        opacity: _pulse,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 8, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _pill(width: 150, height: 54),
+              const SizedBox(height: 10),
+              _dot(),
+              const SizedBox(height: 32),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _branch(),
+                  const SizedBox(width: 20),
+                  _branch(),
+                  const SizedBox(width: 20),
+                  _branch(),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
