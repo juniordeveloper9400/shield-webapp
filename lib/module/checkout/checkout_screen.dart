@@ -877,6 +877,7 @@ class _LastMinuteTile extends StatelessWidget {
                   pack: product.pack,
                   price: product.price,
                   mrp: product.mrp,
+                  productId: product.backendId,
                   image: product.image,
                 ),
               ],

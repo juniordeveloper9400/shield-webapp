@@ -2,9 +2,9 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/registration_repository.dart';
 import '../../dates.dart' as dates;
 import '../rewards/rewards_service.dart';
-import 'member_repository.dart';
 import 'shield_store.dart';
 
 /// How a member describes themselves. Kept short and with an opt-out, because
@@ -113,8 +113,9 @@ class RegistrationService extends ChangeNotifier {
   static final RegistrationService instance = RegistrationService._();
 
   /// Credited once, on the first completed registration — the figure the
-  /// registration screens quote. The real credit is a ledger row written by
-  /// [RewardsService.awardRegistrationBonus]; this constant is only the copy.
+  /// registration screens quote. The real credit happens automatically on
+  /// the backend, inside `PATCH /v1/member/me`; this constant is only the
+  /// copy shown here.
   static const int rewardPoints = RewardsService.registrationBonus;
 
   /// The states and union territories the address form offers.
@@ -171,32 +172,25 @@ class RegistrationService extends ChangeNotifier {
   /// Whether the home and checkout prompts should still be offered.
   bool get shouldPrompt => !isRegistered && !_promptDismissed;
 
-  /// Saves the profile and, the first time only, credits the registration
-  /// bonus — a later edit is not a second reward.
+  /// Saves the profile. The backend credits the one-time registration bonus
+  /// itself, automatically, the first time a save actually completes
+  /// (`registrationCompletedAt`'s null → non-null transition — see
+  /// `identity.service.ts`'s `updateProfile`) — a later edit is not a
+  /// second reward, and there is nothing for this class to guard separately
+  /// any more.
   ///
-  /// The profile update is synchronous so the UI reacts at once; the write to
-  /// `app.users` and the reward-points ledger row both go in the background.
-  /// A failed or unconfigured database write is logged, never thrown —
-  /// registration is an offer, not a gate, and must not break here. The
-  /// [RewardsService] credit is guarded server-side, so re-saving cannot
-  /// double it.
+  /// The profile update is synchronous so the UI reacts at once; the write
+  /// to the backend goes in the background. A failed or unconfigured write
+  /// is logged, never thrown — registration is an offer, not a gate, and
+  /// must not break here.
   void save(Registration registration) {
-    final isFirst = _profile == null;
     _profile = registration;
     _promptDismissed = false;
     notifyListeners();
     unawaited(_persist(registration));
-    if (isFirst) {
-      unawaited(
-        RewardsService.instance.awardRegistrationBonus(
-          phone: registration.phone,
-          name: registration.name,
-        ),
-      );
-    }
   }
 
-  /// Write-through to Neon (`app.users`). Best-effort: see [save].
+  /// Write-through to the backend. Best-effort: see [save].
   Future<void> _persist(Registration registration) async {
     if (!MemberRepository.instance.isAvailable) {
       return;
@@ -204,7 +198,7 @@ class RegistrationService extends ChangeNotifier {
     try {
       await MemberRepository.instance.upsertRegistration(registration);
     } catch (error, stack) {
-      debugPrint('registration: could not save profile to database — $error');
+      debugPrint('registration: could not save profile to the backend — $error');
       debugPrintStack(stackTrace: stack);
     }
   }

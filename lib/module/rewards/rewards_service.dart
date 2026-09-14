@@ -4,7 +4,6 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/backend/backend_http.dart';
 import '../../data/backend/rewards_repository.dart';
-import '../../data/neon/rewards_repository.dart' as legacy;
 import '../auth/auth_service.dart';
 
 enum RewardsStatus { idle, loading, ready, error }
@@ -133,66 +132,21 @@ class RewardsService extends ChangeNotifier {
   }
 
   // ---- earning ----------------------------------------------------------
-
-  /// Credits the one-time registration bonus. Safe to call on every completed
-  /// registration — the ledger write is guarded so it only lands once.
-  Future<void> awardRegistrationBonus({
-    required String phone,
-    required String name,
-  }) async {
-    await legacy.RewardsRepository.instance.credit(
-      phone: phone,
-      name: name,
-      points: registrationBonus,
-      reason: 'REGISTRATION',
-      note: 'Registration bonus',
-      once: true,
-    );
-    await refresh();
-  }
-
-  /// Credits points for a paid order (see [pointsForSpend]). A no-op while
-  /// signed out or when the order earned nothing.
-  Future<void> awardForOrder({
-    required String code,
-    required int paidRupees,
-  }) async {
-    final user = AuthService.instance.currentUser.value;
-    final points = pointsForSpend(paidRupees);
-    if (user == null || points <= 0) {
-      return;
-    }
-    await legacy.RewardsRepository.instance.credit(
-      phone: user.phone,
-      name: user.name,
-      points: points,
-      reason: 'ORDER',
-      note: 'Order $code',
-      refType: 'order',
-    );
-    await refresh();
-  }
-
-  /// Credits a completed-referral reward. Wired for when the referral flow can
-  /// say a referral has reached plan activation — nothing calls it yet.
-  Future<void> awardForReferral({
-    required String phone,
-    required String name,
-    required int points,
-    String note = 'Referral reward',
-  }) async {
-    if (points <= 0) {
-      return;
-    }
-    await legacy.RewardsRepository.instance.credit(
-      phone: phone,
-      name: name,
-      points: points,
-      reason: 'REFERRAL_LEVEL',
-      note: note,
-    );
-    await refresh();
-  }
+  //
+  // Every credit path used to live here, calling straight through to Neon:
+  // the registration bonus, order points, and a never-wired referral bonus.
+  // All three are gone from this class now:
+  //  - the registration bonus is credited automatically by the backend,
+  //    inside `PATCH /v1/member/me` (see `RegistrationService.save`'s doc);
+  //  - order points are credited automatically by the backend, inside
+  //    `POST /v1/member/orders`'s checkout transaction (see
+  //    `PurchaseService.record`'s doc);
+  //  - the referral bonus had no real trigger before this migration either
+  //    ("nothing calls it yet") — nothing lost in not porting it.
+  // pointsForSpend above is kept as the one place the ₹100-per-10-point
+  // rate is written down, even though nothing currently calls it either —
+  // it documents what the backend's own copy of this same rate
+  // (`RUPEES_PER_POINT` in `order.service.ts`) is matching.
 
   // ---- redemption -----------------------------------------------------
 

@@ -2,8 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/order_repository.dart';
-import '../../data/neon/prescription_repository.dart';
+import '../../data/backend/address_repository.dart';
+import '../../data/backend/prescription_repository.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
@@ -15,7 +15,6 @@ import '../location/address_form_screen.dart';
 import '../orders/purchase_service.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
-import 'medicine_duration.dart';
 import 'prescription_record.dart';
 import 'prescription_order_placed_screen.dart';
 
@@ -113,32 +112,12 @@ class _PrescriptionCheckoutScreenState
         status: OrderStatus.processing,
         kind: OrderKind.prescription,
       );
-      // Write the prescription chain — patient, prescription and a
-      // kind:PRESCRIPTION order — through to Neon. Best-effort: a missing or
-      // unreachable database must not stop the order.
+      // Submit the fulfilment order through the backend — an unpriced
+      // shell, pharmacist-priced at the counter. Best-effort: an
+      // unconfigured or unreachable backend must not stop the order.
       final user = AuthService.instance.currentUser.value;
       if (user != null) {
-        unawaited(
-          OrderRepository.instance.savePrescriptionOrder(
-            phone: user.phone,
-            name: user.name,
-            orderCode: id,
-            storeCode: _store.id,
-            paymentMethodCode: _method.id,
-            address: AddressBook.instance.deliverTo?.toDeliveryInput(),
-            prescriptions: [
-              for (final record in widget.records) _prescriptionInput(record),
-            ],
-          ),
-        );
-        for (final record in widget.records) {
-          unawaited(
-            PrescriptionRepository.instance.markOrdered(
-              memberPhone: user.phone,
-              prescriptionUuid: record.remoteId,
-            ),
-          );
-        }
+        unawaited(_submitToBackend());
       }
       // The records stay in the book; they just move to the "ordered, waiting
       // on the pharmacist" state the upload screen shows.
@@ -163,52 +142,28 @@ class _PrescriptionCheckoutScreenState
     }
   }
 
-  /// One [PrescriptionRecord] as the plain-values shape [OrderRepository]
-  /// persists. Only complete medicine lines are sent — a half-keyed row is not
-  /// something to file.
-  static PrescriptionInput _prescriptionInput(PrescriptionRecord record) {
-    final patient = record.patient;
-    return PrescriptionInput(
-      remoteUuid: record.remoteId,
-      code: record.number,
-      fileName: record.fileName,
-      doctor: record.doctor,
-      duration: _durationToken(record.duration),
-      customDays: record.customDays,
-      recurringFrom: record.recurring?.from,
-      recurringUntil: record.recurring?.until,
-      patient: PrescriptionPatientInput(
-        remoteUuid: patient.remoteId,
-        name: patient.name,
-        phone: patient.phone,
-        address: patient.address,
-        dob: patient.dob,
-        gender: patient.gender.name.toUpperCase(),
-        relation: patient.relation.name.toUpperCase(),
-        abhaId: patient.abhaId,
-      ),
-      medicines: [
-        for (final medicine in record.dispensable)
-          PrescriptionMedicineInput(
-            name: medicine.name,
-            pack: medicine.pack,
-            doseMorning: medicine.intake.morning,
-            doseAfternoon: medicine.intake.afternoon,
-            doseNight: medicine.intake.night,
-          ),
-      ],
+  /// Resolves each record's backend prescription id (pinned at upload time
+  /// — see `PrescriptionFormController._persist`), creates a delivery
+  /// address, and submits the fulfilment order. A record never synced to
+  /// the backend (a network blip at upload time) is left out rather than
+  /// failing the whole submission — same best-effort contract as every
+  /// write here.
+  Future<void> _submitToBackend() async {
+    final prescriptionIds = [
+      for (final record in widget.records)
+        if (int.tryParse(record.remoteId ?? '') case final id?) id,
+    ];
+    if (prescriptionIds.isEmpty) {
+      return;
+    }
+    final address = AddressBook.instance.deliverTo;
+    final addressId =
+        address == null ? null : await AddressRepository.instance.create(address);
+    await PrescriptionRepository.instance.submitForOrder(
+      prescriptionIds: prescriptionIds,
+      addressId: addressId,
     );
   }
-
-  /// [MedicineDuration] as its `app.medicine_duration` token, or null.
-  static String? _durationToken(MedicineDuration? duration) => switch (duration) {
-        MedicineDuration.oneWeek => 'ONE_WEEK',
-        MedicineDuration.fifteenDays => 'FIFTEEN_DAYS',
-        MedicineDuration.oneMonth => 'ONE_MONTH',
-        MedicineDuration.twoMonths => 'TWO_MONTHS',
-        MedicineDuration.threeMonths => 'THREE_MONTHS',
-        null => null,
-      };
 
   @override
   Widget build(BuildContext context) {

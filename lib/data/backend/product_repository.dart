@@ -133,6 +133,7 @@ class ProductRepository {
 
     return Product(
       id: orNull(str(row['uuid'])),
+      backendId: (row['id'] as num?)?.toInt(),
       name: str(row['name']),
       pack: str(row['pack']),
       brand: orNull(str(row['brand'])),

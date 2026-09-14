@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/order_repository.dart';
+import '../../data/backend/order_repository.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
@@ -116,42 +116,22 @@ class _CartScreenState extends State<CartScreen> {
               paidTotal: _cart.subtotal.round(),
               kind: OrderKind.standard,
             );
-            // Write the order through to Neon while the cart lines are still
-            // here to copy. Best-effort: a database that is absent (tests, a
-            // build with no DATABASE_URL) or down must not stop the order.
+            // Write the order through to the backend while the cart lines
+            // are still here to copy. Best-effort: an unconfigured backend
+            // (tests) or one that's down must not stop the order.
             final user = AuthService.instance.currentUser.value;
             if (user != null) {
               unawaited(
-                OrderRepository.instance.saveStandardOrder(
-                  phone: user.phone,
-                  name: user.name,
-                  code: id,
-                  lines: [
-                    for (final line in _cart.lines)
-                      OrderLineInput(
-                        name: line.name,
-                        pack: line.pack,
-                        unitPrice: line.price,
-                        mrp: line.mrp,
-                        qty: line.qty,
-                      ),
-                  ],
-                  mrpTotal: _cart.mrpTotal.round(),
-                  paidTotal: _cart.subtotal.round(),
-                  deliveryFee: _cart.deliveryFee.round(),
-                  itemCount: _cart.itemCount,
-                  storeCode: receipt.storeId,
-                  paymentMethodCode: receipt.method.id,
+                OrderRepository.instance.checkoutStandardOrder(
+                  lines: List.of(_cart.lines),
+                  address: AddressBook.instance.deliverTo,
                   reference: receipt.bankReference.isEmpty
                       ? id
                       : receipt.bankReference,
-                  address: AddressBook.instance.deliverTo?.toDeliveryInput(),
-                  receipt: OrderReceiptInput(
-                    payerName: user.name,
-                    reference: receipt.bankReference,
-                    amount: _cart.payable,
-                    fileName: receipt.fileName,
-                  ),
+                  receiptPayerName: user.name,
+                  receiptReference: receipt.bankReference,
+                  receiptAmount: _cart.payable,
+                  receiptFileName: receipt.fileName,
                 ),
               );
             }

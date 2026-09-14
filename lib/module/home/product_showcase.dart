@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../catalogue/catalogue_service.dart';
@@ -258,6 +257,7 @@ class _ProductCard extends StatelessWidget {
                         pack: product.pack,
                         price: product.price,
                         mrp: product.mrp,
+                        productId: product.backendId,
                         image: product.image,
                       ),
                     ],
@@ -276,7 +276,7 @@ class _ProductCard extends StatelessWidget {
 ///
 /// Cards need only the first handful of fields — name, pack, pricing, artwork.
 /// The rest ([id], [brand], [categorySlug], [prescriptionOnly], [outOfStock])
-/// come from `app.product` on Neon via [Product.fromRow] and are optional, so
+/// come from `app.product` via `ProductRepository` and are optional, so
 /// the widget tests that build a [Product] by hand keep compiling.
 class Product {
   final String name;
@@ -289,6 +289,12 @@ class Product {
 
   /// `app.product.uuid`. Null for a hand-built fixture.
   final String? id;
+
+  /// `app.product.id` — the numeric row id the backend's cart/order lines
+  /// key on (`POST /v1/member/cart/lines`'s `productId`). Null for a
+  /// hand-built fixture; distinct from [id] (the uuid), which nothing
+  /// backend-facing actually needs.
+  final int? backendId;
 
   /// Manufacturer / brand (`app.product.brand`). `ListingCatalogue.brandOf`
   /// falls back to the house brand when this is absent.
@@ -327,6 +333,7 @@ class Product {
     this.image,
     this.discountLabel,
     this.id,
+    this.backendId,
     this.brand,
     this.categorySlug,
     this.categoryTitle,
@@ -338,48 +345,10 @@ class Product {
     this.isOfferOfDay = false,
   });
 
-  /// One `app.product` row (joined to `app.product_category`) from Neon's HTTP
-  /// endpoint, where every column comes back as text.
-  factory Product.fromRow(Map<String, dynamic> row) {
-    String str(Object? v) => (v ?? '').toString().trim();
-    double dec(Object? v) => double.tryParse(str(v)) ?? 0;
-    bool flag(Object? v) {
-      final s = str(v).toLowerCase();
-      return s == 't' || s == 'true' || s == '1';
-    }
-
-    String? orNull(String v) => v.isEmpty ? null : v;
-
-    final price = dec(row['price']);
-    final rawMrp = dec(row['mrp']);
-    final mrp = rawMrp <= 0 ? price : rawMrp;
-    final slug = str(row['category_slug']);
-
-    var discount = str(row['discount_label']);
-    if (discount.isEmpty && mrp > price && price > 0) {
-      discount = '${(((mrp - price) / mrp) * 100).round()}% OFF';
-    }
-
-    return Product(
-      id: orNull(str(row['uuid'])),
-      name: str(row['name']),
-      pack: str(row['pack']),
-      brand: orNull(str(row['brand'])),
-      categorySlug: orNull(slug),
-      categoryTitle: orNull(str(row['category_title'])),
-      subcategoryLabel: orNull(str(row['subcategory_label'])),
-      price: formatRupees(price.round()),
-      mrp: formatRupees(mrp.round()),
-      discountLabel: orNull(discount),
-      icon: iconForCategorySlug(slug),
-      image: orNull(str(row['image'])),
-      prescriptionOnly: flag(row['is_prescription_only']),
-      outOfStock: dec(row['stock_quantity']) <= 0,
-      isPopular: flag(row['is_popular']),
-      isDeal: flag(row['is_deal']),
-      isOfferOfDay: flag(row['is_offer_of_day']),
-    );
-  }
+  /// Mapping from a backend `GET /v1/public/catalogue/products` row (joined
+  /// client-side against categories/subcategories) lives in
+  /// `lib/data/backend/product_repository.dart`'s `_toProduct` — this class
+  /// itself no longer parses rows.
 }
 
 /// A stand-in icon for a product with no artwork of its own — the admin

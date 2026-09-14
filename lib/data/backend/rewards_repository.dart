@@ -27,13 +27,15 @@ class RewardTxn {
 /// `backend/api` — `GET /v1/member/rewards/transactions` and
 /// `POST /v1/member/rewards/redeem` (see `rewards.service.ts`).
 ///
-/// Crediting points (registration bonus, per-order points, referral reward)
-/// has no backend endpoint yet — those stay on
-/// `lib/data/neon/rewards_repository.dart`'s `credit` for now. This class
-/// only covers the read side plus redemption, which the backend already
-/// does atomically (debits the points ledger *and* credits the wallet
-/// balance in one transaction) — a real correctness improvement over the
-/// old flow's two separate client-driven writes.
+/// Crediting points has no member-facing endpoint at all — the backend
+/// credits the registration bonus and per-order points itself,
+/// automatically, inside the transactions that earn them
+/// (`PATCH /v1/member/me`, `POST /v1/member/orders`), so there's nothing
+/// left for a client to call for that. This class covers reads plus
+/// redemption, which the backend does atomically (debits the points ledger
+/// *and* credits the wallet balance in one transaction) — a real
+/// correctness improvement over the old flow's two separate
+/// client-driven writes.
 ///
 /// Best-effort, like the other backend repositories: an unconfigured
 /// backend or the network down makes reads return `null` (not `0`) and

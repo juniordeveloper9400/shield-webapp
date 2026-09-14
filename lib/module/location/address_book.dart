@@ -1,7 +1,5 @@
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/order_repository.dart';
-
 /// What a saved address is used for.
 enum AddressLabel {
   home('Home'),
@@ -45,20 +43,6 @@ class Address {
   });
 
   String get receiver => lastName.isEmpty ? firstName : '$firstName $lastName';
-
-  /// This address as the plain-values shape [OrderRepository] persists. The
-  /// [label] enum name maps straight onto the `app.address_label` tokens
-  /// (`home` -> `HOME`).
-  DeliveryAddressInput toDeliveryInput() => DeliveryAddressInput(
-        label: label.name.toUpperCase(),
-        house: house,
-        area: area,
-        landmark: landmark,
-        pincode: pincode,
-        firstName: firstName,
-        lastName: lastName,
-        phone: phone,
-      );
 
   /// Single-line rendering for lists.
   String get summary {

@@ -2,15 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/neon_http.dart';
-import '../../data/neon/referral_repository.dart';
+import '../../data/backend/backend_http.dart';
+import '../../data/backend/referral_repository.dart';
 import '../auth/auth_service.dart';
 import 'referral_level.dart';
 
 enum ReferralStatus { idle, loading, ready, error }
 
 /// The signed-in member's refer-and-earn standing, backed by `app.referral`
-/// and `app.users.referral_code` on Neon (see [ReferralRepository]).
+/// and `app.users.referral_code` through the backend (see [ReferralRepository]).
 ///
 /// Mirrors [RewardsService]: one figure kept once, so the home card and the
 /// refer & earn screen read the same real numbers rather than each carrying
@@ -24,7 +24,7 @@ class ReferralService extends ChangeNotifier {
   ReferralStatus _status = ReferralStatus.idle;
   ReferralStatus get status => _status;
   bool get isLoading => _status == ReferralStatus.loading;
-  bool get isConfigured => NeonHttp.isConfigured;
+  bool get isConfigured => BackendHttp.isConfigured;
 
   ReferralProgress _progress = const ReferralProgress(directReferrals: 0);
 
@@ -95,7 +95,7 @@ class ReferralService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (!NeonHttp.isConfigured) {
+    if (!BackendHttp.isConfigured) {
       _status = ReferralStatus.error;
       _inFlight = null;
       notifyListeners();
@@ -110,7 +110,7 @@ class ReferralService extends ChangeNotifier {
       if (progress != null) _progress = progress;
       _status = progress == null ? ReferralStatus.error : ReferralStatus.ready;
     } catch (error) {
-      NeonHttp.log('ReferralService load failed', error: error);
+      BackendHttp.log('ReferralService load failed', error: error);
       _status = ReferralStatus.error;
     } finally {
       _inFlight = null;
@@ -118,41 +118,13 @@ class ReferralService extends ChangeNotifier {
     }
   }
 
-  // ---- writes ------------------------------------------------------
-
-  /// Records a referral code entered on the registration form. Called once,
-  /// right after [RegistrationService.save] on a first-time registration —
-  /// editing an existing profile carries no such field, so this never runs
-  /// twice for the same member.
-  ///
-  /// Best-effort and silent either way: a bad, self-used or already-spent
-  /// code must not stop the registration it rode in on.
-  Future<void> recordSignupCode(String code) async {
-    final phone = AuthService.instance.currentUser.value?.phone;
-    final trimmed = code.trim();
-    if (phone == null || trimmed.isEmpty) {
-      return;
-    }
-    await ReferralRepository.instance.recordSignup(
-      code: trimmed,
-      newMemberPhone: phone,
-    );
-  }
-
-  /// Marks the signed-in member's own inbound referral as transacted — they
-  /// were the one invited, and have just completed their first paid order.
-  /// Called alongside `RewardsService.awardForOrder` from
-  /// `PurchaseService.record`. A no-op for a member nobody referred.
-  Future<void> markTransacted() async {
-    final phone = AuthService.instance.currentUser.value?.phone;
-    if (phone == null) {
-      return;
-    }
-    await ReferralRepository.instance.markTransacted(phone);
-    // The rung this unlocks (or the commission a later plan will pay) should
-    // show up without the member having to leave the screen and come back.
-    await refresh();
-  }
+  // Entering someone else's code at signup, and advancing this member's own
+  // inbound referral to TRANSACTED, used to be separate writes here
+  // (`recordSignupCode`, `markTransacted`). Neither is ported: the first had
+  // no real call site anywhere in the app (no signup screen has ever
+  // collected a code), and the second now happens automatically on the
+  // backend, inside the checkout transaction itself — see
+  // `order.service.ts`'s `checkout`.
 
   // ---- test hooks --------------------------------------------------
 

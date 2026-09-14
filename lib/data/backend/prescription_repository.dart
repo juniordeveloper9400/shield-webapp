@@ -55,10 +55,9 @@ class RemotePrescriptionMedicine {
 /// [PrescriptionBook] stays the source of truth for the running app, and
 /// this row is the durable copy.
 ///
-/// This covers only the upload/list/view slice of what the old direct-Neon
-/// `PrescriptionRepository` did — `markOrdered` (tightly coupled to the
-/// deferred order-checkout flow) stays on the old class in
-/// `lib/data/neon/prescription_repository.dart` for now.
+/// This originally covered only the upload/list/view slice — `markOrdered`
+/// stayed on the old direct-Neon class until the order-checkout flow this
+/// migration also covers, [submitForOrder] below, replaced it outright.
 class PrescriptionRepository {
   const PrescriptionRepository._();
 
@@ -147,6 +146,42 @@ class PrescriptionRepository {
       return cards;
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.fetchForMember failed', error: error);
+      return null;
+    }
+  }
+
+  /// Submits one or more uploaded prescriptions for fulfilment —
+  /// `POST /v1/member/prescription-orders`. An unpriced order shell the
+  /// pharmacist prices at the counter, mirroring the old direct-Neon
+  /// `OrderRepository.savePrescriptionOrder` + `markOrdered` exactly (see
+  /// that endpoint's own doc): no pricing or payment logic here.
+  ///
+  /// [prescriptionIds] are the backend's numeric ids (the same value
+  /// [insertUpload] returned and [fetchForMember]'s cards carry as `uuid` —
+  /// an opaque pass-through identifier since the migration, not a real
+  /// uuid). Returns the created order's id, or null when nothing was
+  /// written.
+  Future<int?> submitForOrder({
+    required List<int> prescriptionIds,
+    int? addressId,
+    int? paymentMethodId,
+  }) async {
+    if (!BackendHttp.isConfigured || prescriptionIds.isEmpty) {
+      return null;
+    }
+    try {
+      final created = await BackendHttp.instance.request(
+        'POST',
+        '/v1/member/prescription-orders',
+        body: {
+          'prescriptionIds': prescriptionIds,
+          if (addressId != null) 'addressId': addressId,
+          if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+        },
+      ) as Map<String, dynamic>;
+      return created['id'] as int?;
+    } catch (error) {
+      BackendHttp.log('PrescriptionRepository.submitForOrder failed', error: error);
       return null;
     }
   }

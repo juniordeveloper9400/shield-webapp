@@ -2,14 +2,12 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/neon_http.dart';
-import '../../data/neon/order_repository.dart';
+import '../../data/backend/backend_http.dart';
+import '../../data/backend/order_repository.dart';
 import '../../dates.dart' as dates;
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
-import '../refer/referral_service.dart';
-import '../rewards/rewards_service.dart';
 
 enum PurchaseStatus { idle, loading, ready, error }
 
@@ -95,19 +93,21 @@ class Purchase {
 
   String get savedLabel => '₹${formatRupees(saved)}';
 
-  /// One row of `app."order"` (see `OrderRepository.listForMember`) → a
-  /// [Purchase] the earnings card and the orders list can read directly.
+  /// One row of `GET /v1/member/orders` (see `OrderRepository.listForMember`)
+  /// → a [Purchase] the earnings card and the orders list can read directly.
+  /// Money fields come back as decimal strings (Postgres `numeric` via
+  /// Drizzle), parsed the same defensive way the old Neon rows were.
   factory Purchase.fromRow(Map<String, dynamic> row) {
     String str(Object? v) => (v ?? '').toString().trim();
-    int i(Object? v) => int.tryParse(str(v)) ?? 0;
+    int i(Object? v) => v is int ? v : (double.tryParse(str(v))?.round() ?? 0);
 
-    final placedOn = DateTime.tryParse(str(row['placed_on']));
+    final placedOn = DateTime.tryParse(str(row['placedOn']));
     return Purchase(
       id: str(row['code']),
-      placedOn: placedOn == null ? str(row['placed_on']) : dates.formatDate(placedOn),
-      itemCount: i(row['item_count']),
-      mrpTotal: i(row['mrp_total']),
-      paidTotal: i(row['paid_total']),
+      placedOn: placedOn == null ? str(row['placedOn']) : dates.formatDate(placedOn),
+      itemCount: i(row['itemCount']),
+      mrpTotal: i(row['mrpTotal']),
+      paidTotal: i(row['paidTotal']),
       status: _statusFromDb(str(row['status'])),
       kind: _kindFromDb(str(row['kind'])),
     );
@@ -138,11 +138,11 @@ OrderKind _kindFromDb(String token) =>
 /// card that totals a different four is the app disagreeing with itself over
 /// money. The list reads [purchases]; the card reads the sums below it.
 ///
-/// Backed by `app."order"` (see `OrderRepository.listForMember`), keyed to
-/// the signed-in mobile number the same way [RewardsService] is: [attach]
-/// wires it to the auth session, loading on sign-in and clearing on sign-out,
-/// so what a member sees here is their own real order history rather than a
-/// fixture every fresh install showed alike.
+/// Backed by `app."order"` (see `OrderRepository.listForMember`), following
+/// the auth session the same way `RewardsService` does: [attach] wires it
+/// to the session, loading on sign-in and clearing on sign-out, so what a
+/// member sees here is their own real order history rather than a fixture
+/// every fresh install showed alike.
 class PurchaseService extends ChangeNotifier {
   PurchaseService._();
 
@@ -213,7 +213,7 @@ class PurchaseService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (!NeonHttp.isConfigured) {
+    if (!BackendHttp.isConfigured) {
       _status = PurchaseStatus.error;
       _inFlight = null;
       notifyListeners();
@@ -222,7 +222,7 @@ class PurchaseService extends ChangeNotifier {
     _status = PurchaseStatus.loading;
     notifyListeners();
     try {
-      final rows = await OrderRepository.instance.listForMember(phone);
+      final rows = await OrderRepository.instance.listForMember();
       if (rows != null) {
         _purchases
           ..clear()
@@ -232,7 +232,7 @@ class PurchaseService extends ChangeNotifier {
         _status = PurchaseStatus.error;
       }
     } catch (error) {
-      NeonHttp.log('PurchaseService load failed', error: error);
+      BackendHttp.log('PurchaseService load failed', error: error);
       _status = PurchaseStatus.error;
     } finally {
       _inFlight = null;
@@ -306,18 +306,13 @@ class PurchaseService extends ChangeNotifier {
     _purchases.insert(0, purchase);
     notifyListeners();
 
-    // Reward points for what was actually paid (₹100 → 10 pts). Best-effort
-    // and signed-in only; a prescription order still awaiting pricing has
-    // paidTotal 0 and earns nothing until it is paid.
-    if (purchase.status.counts && paidTotal > 0) {
-      unawaited(
-        RewardsService.instance.awardForOrder(code: id, paidRupees: paidTotal),
-      );
-      // If somebody referred this member, their first paid order is the
-      // "transacted" step the ladder actually asks for — see
-      // ReferralLadder.stepsFor. A no-op for a member nobody referred.
-      unawaited(ReferralService.instance.markTransacted());
-    }
+    // Reward points for what was actually paid, and advancing the buyer's
+    // own inbound referral to TRANSACTED, both now happen automatically on
+    // the backend inside the checkout transaction itself
+    // (`order.service.ts`'s `checkout`) — nothing to trigger client-side any
+    // more for a standard order. A prescription order's `paidTotal` is
+    // always 0 (priced at the counter later), so it was never eligible for
+    // either anyway.
 
     return purchase;
   }

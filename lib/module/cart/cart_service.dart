@@ -7,6 +7,12 @@ class CartLine {
   final double price;
   final double mrp;
 
+  /// `Product.backendId` — the numeric id the backend's cart-line API keys
+  /// on. Null for a line whose product couldn't be resolved to a real
+  /// catalogue row (a stale/fixture add) — checkout treats that as
+  /// unsyncable rather than guessing at an id.
+  final int? productId;
+
   /// Artwork for the product, carried from wherever it was added so the cart
   /// shows the same picture the shelf did. Null for lines with no image —
   /// prescription medicines, or fixtures — which fall back to an icon.
@@ -18,6 +24,7 @@ class CartLine {
     required this.pack,
     required this.price,
     double? mrp,
+    this.productId,
     this.image,
     this.qty = 1,
   }) : mrp = mrp ?? price;
@@ -81,6 +88,7 @@ class CartService extends ChangeNotifier {
     required String pack,
     required double price,
     double? mrp,
+    int? productId,
     String? image,
     int qty = 1,
   }) {
@@ -99,6 +107,7 @@ class CartService extends ChangeNotifier {
           pack: pack,
           price: price,
           mrp: mrp,
+          productId: productId,
           image: image,
           qty: qty,
         ),

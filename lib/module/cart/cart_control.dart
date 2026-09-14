@@ -16,6 +16,13 @@ class CartControl extends StatelessWidget {
   final String price;
   final String mrp;
 
+  /// `Product.backendId` — carried through to the cart line so checkout can
+  /// sync it to the backend cart by id, not by a fragile name match. Null
+  /// for a hand-built fixture (tests, or a product the catalogue read failed
+  /// to resolve); a line with no id is checkout-blocking, not silently
+  /// dropped — see `CartScreen`'s sync step.
+  final int? productId;
+
   /// Product artwork, passed straight through to the cart line so the basket
   /// shows the same picture as the tile.
   final String? image;
@@ -26,6 +33,7 @@ class CartControl extends StatelessWidget {
     required this.pack,
     required this.price,
     required this.mrp,
+    this.productId,
     this.image,
   });
 
@@ -53,6 +61,7 @@ class CartControl extends StatelessWidget {
                 pack: pack,
                 price: _price,
                 mrp: _mrp,
+                productId: productId,
                 image: image,
               ),
               style: OutlinedButton.styleFrom(
