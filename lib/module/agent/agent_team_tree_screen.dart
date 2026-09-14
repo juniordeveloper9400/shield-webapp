@@ -68,13 +68,23 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       vsync: this,
       duration: const Duration(milliseconds: 420),
     );
-    // Pull the live geographic hierarchy (regions … wards) from Neon; the
-    // tree is empty until it lands. Rebuild when it does. `force: true` — a
-    // fresh pull every time "My Team" is opened, so an admin's edit to a
-    // district or ward shows on the next visit, and a load that failed
-    // earlier in the session is retried rather than left stuck.
+    // Pull the live geographic hierarchy (regions … wards) from the backend;
+    // the tree is empty until it lands. Rebuild when it does.
+    //
+    // Deliberately plain `ensureLoaded()`, not `force: true`: this list is
+    // ~22k rows flattened into one JSON payload (every region, state,
+    // district, assembly, LSGD and ward), and forcing a fresh pull on every
+    // single "My Team" open — as this used to do — meant re-downloading the
+    // whole thing, and the body below blocking on it, every single visit,
+    // even though the geographic hierarchy essentially never changes during
+    // a session. Plain `ensureLoaded()` already retries on its own after an
+    // earlier failure (`AgentGeo._load` only flips `_loaded` to true on a
+    // non-empty success), so nothing is lost there; the one real trade-off
+    // is that an admin's edit to a district or ward now shows on the next
+    // app launch rather than the next visit to this screen, which is a fair
+    // price for not re-fetching megabytes of largely-static data every time.
     AgentGeo.instance.addListener(_onGeoChanged);
-    AgentGeo.instance.ensureLoaded(force: true);
+    AgentGeo.instance.ensureLoaded();
     // Same for the roster itself — every agent already registered in
     // app.agent, so a fresh app launch (or a second device) shows who is
     // really on the team rather than just the national seed persona.
@@ -339,15 +349,15 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         ),
       ),
       // The whole tree hangs off the geographic hierarchy (regions … wards).
-      // `initState` force-reloads it every time this screen opens, so a card
-      // an admin renamed or moved shows up on the next visit — but that
-      // means a *stale* copy from an earlier visit can still be sitting in
-      // [AgentGeo.current] while this visit's own reload is in flight. Wait
-      // for that reload rather than drawing the tree off whatever was on
-      // hand before it started: a slot rendered as the generic tier name
-      // ("+ District") while the real one ("+ Thiruvananthapuram") is a
-      // network round-trip away looks exactly like a placement that
-      // genuinely has no name, not like a page still catching up.
+      // `initState` only loads it once per session now (see its own doc), so
+      // this blocking state is normally seen only on the very first "My
+      // Team" open, or after the Retry button below forces a reload
+      // following a failure — either way, waiting for that load rather than
+      // drawing the tree off a half-populated [AgentGeo.current] avoids a
+      // slot rendered as the generic tier name ("+ District") when the real
+      // one ("+ Thiruvananthapuram") is a network round-trip away, which
+      // looks exactly like a placement that genuinely has no name, not like
+      // a page still catching up.
       body: (AgentGeo.instance.isLoading || AgentGeo.current.regions.isEmpty)
           ? _HierarchyStatus(
               attempted:
