@@ -36,4 +36,15 @@ flutter pub get
 DB_URL="${DATABASE_URL:-}"
 echo "DATABASE_URL length: ${#DB_URL}"  # value not printed; 0 = env var missing
 
-flutter build web --release --dart-define=DATABASE_URL="$DB_URL"
+# backend/api's base URL (set in the Vercel project's Environment Variables).
+# Without this, BackendHttp.isConfigured is false at runtime, the app never
+# signs in to backend/api, and PersonaRepository always resolves "not
+# converted" — an agent/investor the Super Admin converts never sees their
+# card on this build no matter what the database says. Public, not a secret:
+# it is just this deployment's own backend URL.
+BACKEND_URL="${BACKEND_API_BASE_URL:-}"
+echo "BACKEND_API_BASE_URL: $BACKEND_URL"
+
+flutter build web --release \
+  --dart-define=DATABASE_URL="$DB_URL" \
+  --dart-define=BACKEND_API_BASE_URL="$BACKEND_URL"
