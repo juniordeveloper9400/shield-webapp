@@ -63,3 +63,6 @@ lib/data/neon/neon_secret.dart
 /shieldweb/
 
 _flutter/
+
+.vercel
+.env*
