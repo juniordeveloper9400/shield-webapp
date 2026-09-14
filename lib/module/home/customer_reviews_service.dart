@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/customer_review_repository.dart';
-import '../../data/neon/neon_http.dart';
+import '../../data/backend/backend_http.dart';
+import '../../data/backend/customer_review_repository.dart';
 import 'customer_reviews.dart';
 
 /// Where the customer-video load has got to.
@@ -40,8 +40,8 @@ class CustomerReviewsService extends ChangeNotifier {
 
   List<CustomerReviewItem> _admin = const [];
 
-  /// Whether a load would actually reach the database.
-  bool get isConfigured => NeonHttp.isConfigured;
+  /// Whether a load would actually reach the backend.
+  bool get isConfigured => BackendHttp.isConfigured;
 
   bool get isLoading => _status == CustomerReviewsStatus.loading;
 
@@ -76,7 +76,7 @@ class CustomerReviewsService extends ChangeNotifier {
       _status == CustomerReviewsStatus.error;
 
   Future<void> _load() async {
-    if (!NeonHttp.isConfigured) {
+    if (!BackendHttp.isConfigured) {
       _set(CustomerReviewsStatus.error, const []);
       _inFlight = null;
       return;
@@ -96,7 +96,7 @@ class CustomerReviewsService extends ChangeNotifier {
         );
       }
     } catch (error) {
-      NeonHttp.log('CustomerReviewsService load failed', error: error);
+      BackendHttp.log('CustomerReviewsService load failed', error: error);
       _set(CustomerReviewsStatus.error, const []);
     } finally {
       _inFlight = null;

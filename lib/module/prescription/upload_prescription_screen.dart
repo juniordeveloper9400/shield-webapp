@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import '../../data/neon/prescription_repository.dart';
+import '../../data/backend/prescription_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
 import '../location/address_book.dart';

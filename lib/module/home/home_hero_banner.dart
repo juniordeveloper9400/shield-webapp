@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../data/neon/home_banner_repository.dart';
+import '../../data/backend/home_banner_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 

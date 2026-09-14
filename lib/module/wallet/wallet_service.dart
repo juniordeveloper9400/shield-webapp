@@ -2,7 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/wallet_repository.dart';
+import '../../data/backend/wallet_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../privilege/privilege_tier.dart';

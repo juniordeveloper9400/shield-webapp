@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
-import '../../data/neon/neon_http.dart';
+import '../../data/backend/backend_http.dart';
 import '../../theme/app_colors.dart';
 import 'agent_detail_screen.dart';
 import 'agent_model.dart';
@@ -354,7 +354,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
                   AgentGeo.instance.hasAttempted &&
                   !AgentGeo.instance.isLoading,
               error: AgentGeo.instance.lastError,
-              configured: NeonHttp.isConfigured,
+              configured: BackendHttp.isConfigured,
               onRetry: () {
                 setState(() {});
                 AgentGeo.instance.ensureLoaded(force: true);

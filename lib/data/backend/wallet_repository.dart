@@ -1,0 +1,196 @@
+import '../../module/privilege/privilege_tier.dart';
+import 'backend_http.dart';
+
+/// A privilege card as it stands on the backend — what the app reads back to
+/// learn whether a submitted plan has been approved yet.
+class RemoteWalletCard {
+  final String uuid;
+
+  /// `PENDING` · `APPROVED` · `REJECTED` (the `app.approval_status` tokens).
+  final String status;
+  final PrivilegeCardKind tierKind;
+  final int amount;
+  final int bonus;
+  final int rechargedExtra;
+  final String? storeCode;
+  final DateTime issuedOn;
+  final DateTime expiresOn;
+  final DateTime submittedAt;
+
+  /// The Super Admin's reason, set only when [status] is `REJECTED`.
+  final String reviewerNote;
+
+  const RemoteWalletCard({
+    required this.uuid,
+    required this.status,
+    required this.tierKind,
+    required this.amount,
+    required this.bonus,
+    required this.rechargedExtra,
+    required this.storeCode,
+    required this.issuedOn,
+    required this.expiresOn,
+    required this.submittedAt,
+    required this.reviewerNote,
+  });
+
+  bool get isPending => status == 'PENDING';
+  bool get isApproved => status == 'APPROVED';
+  bool get isRejected => status == 'REJECTED';
+
+  /// What lands on the balance once the card is approved: the load, its bonus
+  /// and anything recharged onto it since.
+  int get credited => amount + bonus + rechargedExtra;
+}
+
+/// Submits privilege-card activations to `backend/api` and reads their
+/// approval state back — `POST /v1/member/wallet/cards` and
+/// `GET /v1/member/wallet/cards` (see `wallet.service.ts`).
+///
+/// Every method is best-effort, the same contract as the other repositories
+/// here: an unconfigured backend or an unreachable one → the call no-ops.
+/// Submitting a plan must never fail because the backend is down.
+///
+/// A submitted card lands as `PENDING` and credits nothing. The console
+/// approves it — that is where the `TOPUP` / `BONUS` ledger lines and the
+/// balance move — or rejects it with a note.
+class WalletRepository {
+  WalletRepository._();
+
+  static final WalletRepository instance = WalletRepository._();
+
+  bool get isAvailable => BackendHttp.isConfigured;
+
+  /// The load amounts and bonus rate are already bundled client-side
+  /// (`lib/module/privilege/privilege_tier.dart`) — this only needs to
+  /// resolve [tierKind] to the numeric id `submitWalletCardSchema` requires,
+  /// via the public membership-tiers list (cached — it's near-static).
+  Map<PrivilegeCardKind, int>? _tierIdCache;
+
+  /// Files a privilege-card activation for review.
+  ///
+  /// Returns the new card's id (as a string, standing in for the old row's
+  /// uuid), or null when nothing was written.
+  Future<String?> submitCardForApproval({
+    required PrivilegeCardKind tierKind,
+    required int amount,
+    String? cardNumber,
+    String? receiptReference,
+    String? receiptFileName,
+    String? receiptImage,
+  }) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final tierId = await _tierIdFor(tierKind);
+      if (tierId == null) {
+        return null; // reference data not seeded
+      }
+      final created = await BackendHttp.instance.request(
+        'POST',
+        '/v1/member/wallet/cards',
+        body: {
+          'tierId': tierId,
+          'amount': amount,
+          if (cardNumber != null) 'cardNumber': cardNumber,
+          if (receiptReference != null) 'receiptReference': receiptReference,
+          if (receiptFileName != null) 'receiptFileName': receiptFileName,
+          if (receiptImage != null && receiptImage.isNotEmpty) 'receiptImage': receiptImage,
+        },
+      ) as Map<String, dynamic>;
+      return created['id']?.toString();
+    } catch (error) {
+      BackendHttp.log('WalletRepository.submitCardForApproval failed', error: error);
+      return null;
+    }
+  }
+
+  /// Every privilege card on the member's wallet, oldest first — pending,
+  /// approved and rejected. The app merges this into `WalletService` to
+  /// reflect what the console has decided. Returns null when nothing could
+  /// be read. [memberPhone] is accepted for parity with the old direct-Neon
+  /// signature but unused — the backend resolves identity from the session.
+  Future<List<RemoteWalletCard>?> fetchCards({required String memberPhone}) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final tierKindById = await _tierKindsById();
+      final rows = await BackendHttp.instance.request('GET', '/v1/member/wallet/cards')
+          as List<dynamic>;
+      return [
+        for (final row in rows.cast<Map<String, dynamic>>())
+          if (tierKindById[(row['tierId'] as num).toInt()] case final kind?)
+            RemoteWalletCard(
+              uuid: row['id'].toString(),
+              status: (row['status'] ?? 'PENDING').toString(),
+              tierKind: kind,
+              amount: _int(row['amount']),
+              bonus: _int(row['bonus']),
+              rechargedExtra: _int(row['rechargedExtra']),
+              storeCode: null, // Not resolvable from this row alone; unused today.
+              issuedOn: _date(row['issuedOn']) ?? DateTime.now(),
+              expiresOn: _date(row['expiresOn']) ?? DateTime.now(),
+              submittedAt: _date(row['submittedAt']) ?? DateTime.now(),
+              reviewerNote: (row['reviewerNote'] ?? '').toString(),
+            ),
+      ];
+    } catch (error) {
+      BackendHttp.log('WalletRepository.fetchCards failed', error: error);
+      return null;
+    }
+  }
+
+  Future<int?> _tierIdFor(PrivilegeCardKind kind) async {
+    final cache = await _ensureTierIdCache();
+    return cache[kind];
+  }
+
+  Future<Map<int, PrivilegeCardKind>> _tierKindsById() async {
+    final byKind = await _ensureTierIdCache();
+    return {for (final entry in byKind.entries) entry.value: entry.key};
+  }
+
+  Future<Map<PrivilegeCardKind, int>> _ensureTierIdCache() async {
+    final cached = _tierIdCache;
+    if (cached != null) {
+      return cached;
+    }
+    final rows = await BackendHttp.instance.request(
+      'GET',
+      '/v1/public/catalogue/membership-tiers',
+      auth: false,
+    ) as List<dynamic>;
+    final map = <PrivilegeCardKind, int>{};
+    for (final row in rows.cast<Map<String, dynamic>>()) {
+      final kind = _kindFor((row['kind'] ?? '').toString());
+      final id = row['id'];
+      if (kind != null && id != null) {
+        map[kind] = (id as num).toInt();
+      }
+    }
+    _tierIdCache = map;
+    return map;
+  }
+
+  static PrivilegeCardKind? _kindFor(String? token) => switch (token) {
+    'SILVER' => PrivilegeCardKind.silver,
+    'GOLD' => PrivilegeCardKind.gold,
+    'PLATINUM' => PrivilegeCardKind.platinum,
+    _ => null,
+  };
+
+  static int _int(Object? value, [int fallback = 0]) {
+    if (value is int) return value;
+    if (value is num) return value.toInt();
+    final parsed = num.tryParse(value?.toString() ?? '');
+    return parsed?.toInt() ?? fallback;
+  }
+
+  static DateTime? _date(Object? value) {
+    if (value == null) return null;
+    if (value is DateTime) return value;
+    return DateTime.tryParse(value.toString());
+  }
+}

@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/patient_repository.dart';
+import '../../data/backend/patient_repository.dart';
 import '../../theme/app_colors.dart';
 import 'patient_book.dart';
 import 'patient_form_sheet.dart';

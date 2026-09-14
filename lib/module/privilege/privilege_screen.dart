@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/wallet_repository.dart';
+import '../../data/backend/wallet_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_service.dart';
@@ -181,13 +181,9 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
               if (user != null) {
                 final uuid =
                     await WalletRepository.instance.submitCardForApproval(
-                  memberPhone: user.phone,
-                  memberName: user.name,
                   tierKind: load.tier.kind,
                   amount: load.amount,
-                  bonus: load.bonus,
                   cardNumber: load.cardNumber,
-                  storeCode: receipt.storeId,
                   receiptReference: receipt.bankReference,
                   receiptFileName: receipt.fileName,
                   receiptImage: receipt.imageDataUrl,

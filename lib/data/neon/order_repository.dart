@@ -151,45 +151,7 @@ class PrescriptionInput {
   });
 }
 
-/// One lab package booked for a number of patients. The package fields are
-/// carried so a package the app knows but the backend has never seen can be
-/// written on the fly; it is matched on a slug derived from [name].
-@immutable
-class LabBookingInput {
-  final String name;
-  final int testCount;
-  final int profileCount;
-  final String rating;
-  final String booked;
-  final String reportIn;
-  final int unitPrice;
-  final int mrp;
-  final int patients;
-  final String forWhom;
-  final String ageRange;
-  final String preparation;
-  final String sample;
-  final String about;
-
-  const LabBookingInput({
-    required this.name,
-    this.testCount = 0,
-    this.profileCount = 0,
-    this.rating = '',
-    this.booked = '',
-    this.reportIn = '',
-    required this.unitPrice,
-    required this.mrp,
-    required this.patients,
-    this.forWhom = '',
-    this.ageRange = '',
-    this.preparation = '',
-    this.sample = '',
-    this.about = '',
-  });
-}
-
-/// Writes placed orders, prescription submissions and lab bookings to the
+/// Writes placed orders and prescription submissions to the
 /// `app` schema on Neon.
 ///
 /// Every method is best-effort, the same contract as [MemberRepository]: when
@@ -500,91 +462,6 @@ class OrderRepository {
             VALUES (\$1, \$2, \$3, 'SUBMITTED', \$4)
           ''',
           [prescriptionId, orderId, storeId, rx.notes],
-        );
-      }
-      return;
-    });
-  }
-
-  /// Files a lab basket: one `app.lab_booking` per package, each preceded by an
-  /// upsert of the `app.lab_package` it points at (matched on a slug derived
-  /// from the package name) so a package the backend has never seen is created
-  /// rather than failing the not-null reference.
-  Future<void> saveLabBookings({
-    required String phone,
-    String? name,
-    required List<LabBookingInput> bookings,
-    DeliveryAddressInput? address,
-  }) async {
-    await _guard('saveLabBookings', () async {
-      if (bookings.isEmpty) {
-        return;
-      }
-      final memberId = await _ensureMember(phone, name);
-      if (memberId == null) {
-        return;
-      }
-      final addressId =
-          address == null ? null : await _upsertAddress(memberId, address);
-
-      for (final b in bookings) {
-        final pkg = await NeonHttp.instance.query(
-          '''
-            INSERT INTO app.lab_package (
-              slug, name, test_count, profile_count, rating, booked, report_in,
-              price, mrp, saved, for_whom, age_range, preparation, sample, about
-            )
-            VALUES (
-              \$1, \$2, \$3, \$4, \$5, \$6, \$7,
-              \$8, \$9, \$10, \$11, \$12, \$13, \$14, \$15
-            )
-            ON CONFLICT (slug) DO UPDATE SET
-              name       = EXCLUDED.name,
-              price      = EXCLUDED.price,
-              mrp        = EXCLUDED.mrp,
-              saved      = EXCLUDED.saved,
-              updated_at = now()
-            RETURNING id
-          ''',
-          [
-            _slug(b.name),
-            b.name,
-            b.testCount,
-            b.profileCount,
-            b.rating,
-            b.booked,
-            b.reportIn,
-            b.unitPrice,
-            b.mrp,
-            (b.mrp - b.unitPrice) < 0 ? 0 : b.mrp - b.unitPrice,
-            b.forWhom,
-            b.ageRange,
-            b.preparation,
-            b.sample,
-            b.about,
-          ],
-        );
-        final packageId = _rowId(pkg);
-        if (packageId == null) {
-          continue;
-        }
-
-        await NeonHttp.instance.query(
-          '''
-            INSERT INTO app.lab_booking (
-              member_id, lab_package_id, patients_count,
-              unit_price, total_price, status, address_id
-            )
-            VALUES (\$1, \$2, \$3, \$4, \$5, 'REQUESTED', \$6)
-          ''',
-          [
-            memberId,
-            packageId,
-            b.patients,
-            b.unitPrice,
-            b.unitPrice * b.patients,
-            addressId,
-          ],
         );
       }
       return;
@@ -949,11 +826,4 @@ class OrderRepository {
     return '${date.year}-$month-$day';
   }
 
-  /// `Preventive Plus` -> `preventive-plus`, the key lab packages are matched
-  /// on so the same panel booked twice updates one row.
-  static String _slug(String name) {
-    final lower = name.toLowerCase();
-    final dashed = lower.replaceAll(RegExp(r'[^a-z0-9]+'), '-');
-    return dashed.replaceAll(RegExp(r'^-+|-+$'), '');
-  }
 }

@@ -2,11 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/order_repository.dart';
+import '../../data/backend/lab_booking_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_service.dart';
-import '../location/address_book.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import 'patient_count_sheet.dart';
@@ -336,27 +335,13 @@ class _CheckoutBar extends StatelessWidget {
       final user = AuthService.instance.currentUser.value;
       if (user != null && !cart.isEmpty) {
         unawaited(
-          OrderRepository.instance.saveLabBookings(
-            phone: user.phone,
-            name: user.name,
-            address: AddressBook.instance.deliverTo?.toDeliveryInput(),
+          LabBookingRepository.instance.saveLabBookings(
             bookings: [
               for (final booking in cart.bookings)
                 LabBookingInput(
                   name: booking.package.name,
-                  testCount: booking.package.testCount,
-                  profileCount: booking.package.profileCount,
-                  rating: booking.package.rating,
-                  booked: booking.package.booked,
-                  reportIn: booking.package.reportIn,
                   unitPrice: booking.package.priceValue,
-                  mrp: booking.package.mrpValue,
                   patients: booking.patients,
-                  forWhom: booking.package.forWhom,
-                  ageRange: booking.package.ageRange,
-                  preparation: booking.package.preparation,
-                  sample: booking.package.sample,
-                  about: booking.package.about,
                 ),
             ],
           ),

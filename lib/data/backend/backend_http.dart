@@ -98,11 +98,13 @@ class BackendHttp {
   }
 
   /// Runs a `GET`/`POST`/`PATCH`/`DELETE` against [path] (e.g.
-  /// `/v1/agent/team`), optionally as JSON [body]. Attaches
-  /// `Authorization: Bearer <token>` unless [auth] is false (public routes:
-  /// session/register/refresh). A `401` on an authenticated call gets one
-  /// silent refresh-and-retry before this throws — the same one-shot
-  /// recovery `shieldweb/src/lib/api.ts` already does for the admin console.
+  /// `/v1/agent/team`), optionally as JSON [body] and/or extra request
+  /// [headers] (e.g. `Idempotency-Key` — see `checkout`/`redeem`'s own
+  /// callers). Attaches `Authorization: Bearer <token>` unless [auth] is
+  /// false (public routes: session/register/refresh). A `401` on an
+  /// authenticated call gets one silent refresh-and-retry before this
+  /// throws — the same one-shot recovery `shieldweb/src/lib/api.ts` already
+  /// does for the admin console.
   ///
   /// Returns the decoded JSON body (a `Map` or `List`), or `null` for a
   /// `204 No Content` response. Throws [BackendHttpException] on any other
@@ -112,6 +114,7 @@ class BackendHttp {
     String method,
     String path, {
     Map<String, dynamic>? body,
+    Map<String, String>? headers,
     bool auth = true,
   }) async {
     if (!_effectivelyConfigured) {
@@ -121,10 +124,10 @@ class BackendHttp {
       );
     }
 
-    var response = await _send(method, path, body: body, auth: auth);
+    var response = await _send(method, path, body: body, headers: headers, auth: auth);
     if (response.statusCode == 401 && auth && _refreshToken != null) {
       if (await _refresh()) {
-        response = await _send(method, path, body: body, auth: auth);
+        response = await _send(method, path, body: body, headers: headers, auth: auth);
       }
     }
     return _decode(response);
@@ -134,11 +137,15 @@ class BackendHttp {
     String method,
     String path, {
     Map<String, dynamic>? body,
+    Map<String, String>? headers,
     required bool auth,
   }) {
-    final headers = <String, String>{'Content-Type': 'application/json'};
+    final requestHeaders = <String, String>{
+      'Content-Type': 'application/json',
+      ...?headers,
+    };
     if (auth && _accessToken != null) {
-      headers['Authorization'] = 'Bearer $_accessToken';
+      requestHeaders['Authorization'] = 'Bearer $_accessToken';
     }
     final uri = Uri.parse('$_baseUrl$path');
     final encodedBody = body == null ? null : jsonEncode(body);
@@ -146,13 +153,13 @@ class BackendHttp {
     final Future<http.Response> future;
     switch (method) {
       case 'GET':
-        future = _client.get(uri, headers: headers);
+        future = _client.get(uri, headers: requestHeaders);
       case 'POST':
-        future = _client.post(uri, headers: headers, body: encodedBody);
+        future = _client.post(uri, headers: requestHeaders, body: encodedBody);
       case 'PATCH':
-        future = _client.patch(uri, headers: headers, body: encodedBody);
+        future = _client.patch(uri, headers: requestHeaders, body: encodedBody);
       case 'DELETE':
-        future = _client.delete(uri, headers: headers);
+        future = _client.delete(uri, headers: requestHeaders);
       default:
         throw ArgumentError('Unsupported HTTP method: $method');
     }

@@ -2,14 +2,18 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/neon_http.dart';
-import '../../data/neon/rewards_repository.dart';
+import '../../data/backend/backend_http.dart';
+import '../../data/backend/rewards_repository.dart';
+import '../../data/neon/rewards_repository.dart' as legacy;
 import '../auth/auth_service.dart';
 
 enum RewardsStatus { idle, loading, ready, error }
 
-/// The member's reward-points balance, backed by the `app.reward_point_transaction`
-/// ledger on Neon (see [RewardsRepository]).
+/// The member's reward-points balance, backed by the
+/// `app.reward_point_transaction` ledger — reads and redemption go through
+/// `backend/api` (see [RewardsRepository]); crediting (registration bonus,
+/// order points, referral reward) still goes straight to Neon (see
+/// `legacy.RewardsRepository`) since the backend has no endpoint for it yet.
 ///
 /// One number, one source of truth: the balance is `SUM(points)` over the
 /// ledger, and every earn / redeem is a real row. The header coin, the rewards
@@ -47,7 +51,7 @@ class RewardsService extends ChangeNotifier {
   List<RewardTxn> _history = const [];
   List<RewardTxn> get history => _history;
 
-  bool get isConfigured => NeonHttp.isConfigured;
+  bool get isConfigured => BackendHttp.isConfigured;
   bool get isLoading => _status == RewardsStatus.loading;
 
   String? _phone;
@@ -105,7 +109,7 @@ class RewardsService extends ChangeNotifier {
       notifyListeners();
       return;
     }
-    if (!NeonHttp.isConfigured) {
+    if (!BackendHttp.isConfigured) {
       _status = RewardsStatus.error;
       _inFlight = null;
       notifyListeners();
@@ -114,13 +118,13 @@ class RewardsService extends ChangeNotifier {
     _status = RewardsStatus.loading;
     notifyListeners();
     try {
-      final balance = await RewardsRepository.instance.balanceFor(phone);
-      final history = await RewardsRepository.instance.historyFor(phone);
+      final balance = await RewardsRepository.instance.balanceFor();
+      final history = await RewardsRepository.instance.historyFor();
       if (balance != null) _balance = balance;
       if (history != null) _history = history;
       _status = balance == null ? RewardsStatus.error : RewardsStatus.ready;
     } catch (error) {
-      NeonHttp.log('RewardsService load failed', error: error);
+      BackendHttp.log('RewardsService load failed', error: error);
       _status = RewardsStatus.error;
     } finally {
       _inFlight = null;
@@ -136,7 +140,7 @@ class RewardsService extends ChangeNotifier {
     required String phone,
     required String name,
   }) async {
-    await RewardsRepository.instance.credit(
+    await legacy.RewardsRepository.instance.credit(
       phone: phone,
       name: name,
       points: registrationBonus,
@@ -158,7 +162,7 @@ class RewardsService extends ChangeNotifier {
     if (user == null || points <= 0) {
       return;
     }
-    await RewardsRepository.instance.credit(
+    await legacy.RewardsRepository.instance.credit(
       phone: user.phone,
       name: user.name,
       points: points,
@@ -180,7 +184,7 @@ class RewardsService extends ChangeNotifier {
     if (points <= 0) {
       return;
     }
-    await RewardsRepository.instance.credit(
+    await legacy.RewardsRepository.instance.credit(
       phone: phone,
       name: name,
       points: points,
@@ -217,22 +221,17 @@ class RewardsService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Spends [points] from the balance as a negative `REDEMPTION` ledger row.
-  /// The caller does the wallet-side credit. Returns `true` when the row was
-  /// written.
-  Future<bool> redeem(int points, {String note = 'Redeemed to wallet'}) async {
+  /// Spends [points] from the balance into the wallet — one backend call
+  /// atomically debits the points ledger and credits the wallet balance
+  /// (`RewardsRepository.redeem`), unlike the old two-separate-writes
+  /// version of this. Returns `true` on success.
+  Future<bool> redeem(int points) async {
     final user = AuthService.instance.currentUser.value;
     if (user == null || points <= 0 || points > _balance) {
       return false;
     }
-    final wrote = await RewardsRepository.instance.credit(
-      phone: user.phone,
-      name: user.name,
-      points: -points,
-      reason: 'REDEMPTION',
-      note: note,
-    );
+    final spent = await RewardsRepository.instance.redeem(points);
     await refresh();
-    return wrote != null;
+    return spent;
   }
 }

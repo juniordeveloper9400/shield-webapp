@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 
-import '../../data/neon/patient_repository.dart';
+import '../../data/backend/patient_repository.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/age_badge.dart';
@@ -292,7 +292,7 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
     unawaited(
       PatientRepository.instance
           .upsert(
-            uuid: saved.remoteId,
+            id: saved.remoteId,
             memberPhone: account.phone,
             memberName: account.name,
             name: saved.name,
@@ -303,9 +303,9 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
             relation: saved.relation,
             abhaId: saved.abhaId,
           )
-          .then((uuid) {
-            if (uuid != null && uuid != saved.remoteId) {
-              PatientBook.instance.attachRemoteId(saved.id, uuid);
+          .then((remoteId) {
+            if (remoteId != null && remoteId != saved.remoteId) {
+              PatientBook.instance.attachRemoteId(saved.id, remoteId);
             }
           }),
     );
