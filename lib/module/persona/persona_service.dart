@@ -49,6 +49,10 @@ class PersonaService extends ChangeNotifier {
   bool _loading = false;
   bool _attached = false;
 
+  /// When [reload] last actually resolved something, so [refreshCurrent]
+  /// can skip a redundant one — see that method's doc.
+  DateTime? _lastResolvedAt;
+
   /// Starts following the session: reloads the persona whenever the signed-in
   /// member changes, and clears it on sign-out. Call once from `main()` after
   /// `AuthService.restoreSession()`. Also does the first load for whoever is
@@ -74,8 +78,22 @@ class PersonaService extends ChangeNotifier {
   }
 
   /// Re-reads for the member who is signed in right now — call on app resume.
-  Future<void> refreshCurrent() =>
-      reload(AuthService.instance.currentUser.value?.phone);
+  ///
+  /// "Resumed" can fire more than once in quick succession — a browser tab
+  /// losing and regaining focus while DevTools is open is a common way to
+  /// trigger it repeatedly — and each call is a full network round trip
+  /// (agent + investor). Skipping one that just ran avoids stacking
+  /// redundant fetches on top of each other, which is what turned an
+  /// already-slow cold backend into a much longer wait in practice: a
+  /// change the admin console made a few seconds ago can wait for the next
+  /// resume rather than justifying another full reload right away.
+  Future<void> refreshCurrent() {
+    final last = _lastResolvedAt;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 8)) {
+      return Future<void>.value();
+    }
+    return reload(AuthService.instance.currentUser.value?.phone);
+  }
 
   /// Re-reads the persona for [phone] (10 digits, no `+91`) and applies it.
   /// Safe to call often; an overlapping call is dropped rather than queued.
@@ -96,6 +114,7 @@ class PersonaService extends ChangeNotifier {
       // Ignore a result for a number we have since moved off (sign-out/switch).
       if (_phone == clean) {
         _resolvedFor = clean;
+        _lastResolvedAt = DateTime.now();
         _apply(snap);
       }
     } finally {
@@ -111,6 +130,7 @@ class PersonaService extends ChangeNotifier {
   void clear() {
     _phone = null;
     _resolvedFor = null;
+    _lastResolvedAt = null;
     AgentService.instance.reset();
     _apply(PersonaSnapshot.none);
   }
@@ -171,6 +191,7 @@ class PersonaService extends ChangeNotifier {
   void reset() {
     _phone = null;
     _resolvedFor = null;
+    _lastResolvedAt = null;
     _loading = false;
     _apply(PersonaSnapshot.none);
   }
