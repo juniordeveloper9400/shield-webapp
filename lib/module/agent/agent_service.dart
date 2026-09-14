@@ -701,7 +701,18 @@ class AgentService extends ChangeNotifier {
   List<Agent> teamAtLevel(Agent agent, AgentLevel level) =>
       teamOf(agent).where((member) => member.level == level).toList();
 
-  @visibleForTesting
+  /// Drops everything [ensureLoaded] fetched (and every locally-added row)
+  /// back to the seed-only roster, and lets a later [ensureLoaded] fetch
+  /// again. `ensureLoaded` only ever runs its remote fetch once per app
+  /// lifetime (`_remoteLoaded`), so without this a member who signs out and
+  /// a different member who then signs in on the same device inherits the
+  /// first member's entire fetched roster — including a phantom "team"
+  /// made of whoever the first member's downline was, since nothing here
+  /// keys any of this state on which member is actually signed in. Call on
+  /// sign-out (see `PersonaService.clear()`) so the next sign-in starts
+  /// clean. Local session-only state (this session's own withdrawal
+  /// requests, wallet transfers, registrations) goes with it too — none of
+  /// it means anything for whoever signs in next.
   void reset() {
     _requests.clear();
     _movedToWallet.clear();
@@ -713,6 +724,7 @@ class AgentService extends ChangeNotifier {
       ..addAll(AgentCustomerDirectory.seed);
     _added = 0;
     _dbId.clear();
+    _remoteAgentPhone = null;
     _remoteLoaded = false;
     _remoteLoadInFlight = null;
     notifyListeners();

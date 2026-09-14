@@ -103,10 +103,15 @@ class PersonaService extends ChangeNotifier {
     }
   }
 
-  /// Drops any applied persona — call on sign-out.
+  /// Drops any applied persona — call on sign-out. Also resets
+  /// [AgentService]'s whole fetched roster, not just this member's own row
+  /// — otherwise a different member signing in next on the same device
+  /// inherits whatever team tree the previous member's one-shot
+  /// `ensureLoaded` fetch already pulled in (see that method's doc).
   void clear() {
     _phone = null;
     _resolvedFor = null;
+    AgentService.instance.reset();
     _apply(PersonaSnapshot.none);
   }
 
