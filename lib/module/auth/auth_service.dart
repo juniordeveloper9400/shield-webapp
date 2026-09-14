@@ -260,12 +260,27 @@ class AuthService {
           '';
     }
 
-    currentUser.value = AuthUser(
+    final user = AuthUser(
       name: name.isEmpty ? 'Member' : name,
       phone: restored.phone,
     );
+    currentUser.value = user;
     unawaited(MemberRepository.instance.touchLogin(restored.phone));
-    unawaited(BackendSession.instance.restore());
+    unawaited(_restoreOrBridgeBackend(user));
+  }
+
+  /// Restores a persisted backend session, or — when there is none to
+  /// restore (this device has never successfully bridged to backend/api
+  /// before, e.g. it was unreachable at the time this member last signed
+  /// in) — re-exchanges a fresh Firebase ID token instead. Without this
+  /// fallback, a member converted to an agent/investor while backend/api
+  /// was down would never see their portal card until they explicitly
+  /// signed out and back in.
+  Future<void> _restoreOrBridgeBackend(AuthUser user) async {
+    final restored = await BackendSession.instance.restore();
+    if (!restored) {
+      await _bridgeToBackend(user);
+    }
   }
 
   /// Null when [value] is usable as a name, otherwise the reason it is not.

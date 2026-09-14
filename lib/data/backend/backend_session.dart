@@ -88,12 +88,17 @@ class BackendSession {
 
   /// Restores a session from a refresh token persisted on an earlier run —
   /// call once at app launch, alongside `MemberRepository`'s own
-  /// phone-based `restoreSession`. Never throws.
-  Future<void> restore() async {
+  /// phone-based `restoreSession`. Returns whether a session was actually
+  /// restored, so a caller can fall back to re-bridging from a fresh
+  /// Firebase token when there was no persisted one to restore (a member
+  /// who has never successfully reached backend/api before — see
+  /// `AuthService.restoreSession`'s doc). Never throws.
+  Future<bool> restore() async {
     try {
-      await _http.restoreSession();
+      return await _http.restoreSession();
     } catch (error) {
       BackendHttp.log('restore failed', error: error);
+      return false;
     }
   }
 
