@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../data/neon/investor_repository.dart';
+import '../../data/backend/investor_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
@@ -445,22 +445,10 @@ class _PlanChangeAction extends StatelessWidget {
     }
 
     InvestorService.instance.markPlanChangeRequested();
-    // Best-effort durable copy — a build with no DATABASE_URL, or an
-    // unreachable database, must not swallow the request the investor just
-    // confirmed.
+    // Best-effort durable copy — an unconfigured backend, or an unreachable
+    // one, must not swallow the request the investor just confirmed.
     unawaited(
-      InvestorRepository.instance.requestPlanChange(
-        investorCode: investor.investorCode,
-        investorName: investor.name,
-        investorPhone: investor.phone,
-        currentPlanType: investor.planType,
-        requestedPlanType: target,
-        investedStoreCode: investor.investedStore.id,
-        totalUnits: investor.totalUnits,
-        unitPrice: investor.unitPrice,
-        investedSince: investor.investedSince,
-        roiPercent: investor.roiPercent,
-      ),
+      InvestorRepository.instance.requestPlanChange(requestedPlanType: target),
     );
 
     messenger

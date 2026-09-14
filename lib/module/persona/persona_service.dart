@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/persona_repository.dart';
+import '../../data/backend/persona_repository.dart';
 import '../agent/agent_directory.dart';
 import '../agent/agent_model.dart';
 import '../agent/agent_service.dart';
@@ -11,7 +11,7 @@ import '../investor/investor_model.dart';
 import '../investor/investor_service.dart';
 import '../registration/shield_store.dart';
 
-/// Resolves the signed-in member's persona from Neon and applies it.
+/// Resolves the signed-in member's persona from the backend and applies it.
 ///
 /// A member the Super Admin converts in the console gets an `app.agent` or
 /// `app.investor` row. This service reads that on sign-in, on a session
@@ -22,8 +22,9 @@ import '../registration/shield_store.dart';
 ///  * flips [isConverted], which `RootScreen` uses to send a converted member
 ///    on the **APK** to a "use the web console" screen instead of the app.
 ///
-/// Best-effort: a build with no `DATABASE_URL` or an unreachable database
-/// leaves [snapshot] at [PersonaSnapshot.none] — a plain member.
+/// Best-effort: an unconfigured backend, a member not signed in to it, or an
+/// unreachable backend leaves [snapshot] at [PersonaSnapshot.none] — a plain
+/// member.
 class PersonaService extends ChangeNotifier {
   PersonaService._();
 

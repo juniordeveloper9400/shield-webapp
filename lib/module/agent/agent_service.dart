@@ -2,7 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/agent_repository.dart';
+import '../../data/backend/agent_repository.dart';
 import '../../money.dart';
 import '../auth/auth_service.dart';
 import '../wallet/wallet_service.dart';
@@ -76,11 +76,12 @@ class AgentService extends ChangeNotifier {
     return null;
   }
 
-  /// Loads every agent already in `app.agent`, folding them into the roster
-  /// below the seed national persona — best-effort, matching
-  /// `AgentGeo.ensureLoaded`'s contract (a missing `DATABASE_URL` or a
-  /// network blip just leaves the seed-only roster in place). Safe to call
-  /// from every screen's `initState`; only the first call does any work.
+  /// Loads the signed-in agent's own subtree from the backend, folding it
+  /// into the roster below the seed national persona — best-effort,
+  /// matching `AgentGeo.ensureLoaded`'s contract (an unconfigured backend,
+  /// not being signed in to it, or a network blip just leaves the seed-only
+  /// roster in place). Safe to call from every screen's `initState`; only
+  /// the first call does any work.
   Future<void> ensureLoaded() {
     if (_remoteLoaded) {
       return Future<void>.value();
@@ -549,25 +550,27 @@ class AgentService extends ChangeNotifier {
   }
 
   /// The database row id for [agent] — resolving (and caching, via [_dbId])
-  /// it the first time anything needs it. The seed national persona has no
-  /// row of its own until the first registration under it asks for one
-  /// ([AgentRepository.ensureNationalRow]); every other agent already has
+  /// it the first time anything needs it. Every non-seed agent already has
   /// one cached — a fetched row from [_loadFromServer], or its own
   /// [_persistNew] future kicked off at the moment it was registered.
+  ///
+  /// The seed national persona is a local UI placeholder only — it has no
+  /// row of its own, and nothing here creates one. Filing a request under it
+  /// submits `parentAgentId: null`; the staff console resolves the real
+  /// parent on approval regardless of what the client sent (see
+  /// [_persistNew]'s doc). Older versions of this app inserted an
+  /// `APPROVED` `app.agent` row directly for exactly this case, with no
+  /// "only one national agent" guard — the real cause of the two live
+  /// NATIONAL rows recorded in `docs/decision-log.md`. That path is
+  /// retired, not ported.
   Future<int?> _dbIdFor(Agent agent) {
-    return _dbId[agent.id] ??= agent.id == AgentDirectory.national.id
-        ? AgentRepository.instance.ensureNationalRow(
-            phone: agent.phone,
-            name: agent.name,
-            code: agent.agentCode,
-          )
-        : Future.value(null);
+    return _dbId[agent.id] ??= Future.value(null);
   }
 
   /// Files [agent] as an `app.agent_request` under [parent] for the admin
   /// console to approve — the app never writes `app.agent` itself. Best-effort:
-  /// a missing `DATABASE_URL` or a network blip just leaves the request in this
-  /// session's roster (as a pending card) and absent from the database.
+  /// an unconfigured backend or a network blip just leaves the request in
+  /// this session's roster (as a pending card) and absent from the database.
   ///
   /// The parent's own database id is passed through when known, but a null one
   /// is fine — the admin confirms the parent on approval anyway.

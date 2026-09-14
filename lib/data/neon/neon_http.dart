@@ -10,12 +10,13 @@ import 'neon_secret.dart';
 /// Talks to Neon over its HTTP SQL endpoint (`https://<host>/sql`) rather than a
 /// raw Postgres socket.
 ///
-/// The socket driver ([NeonDatabase]) needs an outbound connection on 5432 with
+/// A raw-socket driver needs an outbound connection on 5432 with
 /// Neon-specific TLS/SNI. That is unreliable from a phone and, worse, fails
 /// silently in a `--release` build where `debugPrint` is stripped — which is why
 /// sign-in and registration rows were never reaching `app.users`. This endpoint
 /// is plain HTTPS on 443, behaves identically in debug and release, and is the
-/// same transport Neon's own serverless driver uses.
+/// same transport Neon's own serverless driver uses. (An earlier raw-socket
+/// driver, `NeonDatabase`, was dropped entirely — it had no callers.)
 ///
 /// The connection string is injected at build time and never committed:
 ///

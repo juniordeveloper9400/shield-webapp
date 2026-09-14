@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/backend_session.dart';
 import '../../data/neon/member_repository.dart';
 import '../registration/registration_service.dart';
 import 'otp_send_throttle.dart';
@@ -189,8 +190,10 @@ class AuthService {
   }
 
   /// Persists the freshly signed-in user: writes the name onto the Firebase
-  /// profile so the next launch has it, and records the account in the
-  /// `app.users` table. Both are best-effort and never block the sign-in.
+  /// profile so the next launch has it, records the account in the
+  /// `app.users` table, and bridges into a backend-issued session for the
+  /// agent/investor screens. All three are best-effort and never block the
+  /// sign-in.
   void _afterSignIn(AuthUser user) {
     _freshSignIn = user;
     // Signed in — clear the hourly send cap so a later sign-in starts fresh.
@@ -203,6 +206,26 @@ class AuthService {
         phone: user.phone,
       ),
     );
+    unawaited(_bridgeToBackend(user));
+  }
+
+  /// Exchanges the Firebase ID token for a backend session — see
+  /// `BackendSession.signInWithFirebaseToken`. A missing/expired token or an
+  /// unreachable backend just leaves the backend session unset; it never
+  /// affects the Firebase sign-in this app already completed.
+  Future<void> _bridgeToBackend(AuthUser user) async {
+    try {
+      final idToken = await _activeGateway.currentIdToken();
+      if (idToken == null) {
+        return;
+      }
+      await BackendSession.instance.signInWithFirebaseToken(
+        idToken,
+        name: user.name,
+      );
+    } catch (error) {
+      debugPrint('_bridgeToBackend failed: $error');
+    }
   }
 
   /// Restores a persisted sign-in at launch, so a member who has signed in
@@ -242,6 +265,7 @@ class AuthService {
       phone: restored.phone,
     );
     unawaited(MemberRepository.instance.touchLogin(restored.phone));
+    unawaited(BackendSession.instance.restore());
   }
 
   /// Null when [value] is usable as a name, otherwise the reason it is not.
@@ -376,6 +400,7 @@ class AuthService {
     _pending = null;
     _freshSignIn = null;
     await _gateway?.signOut();
+    unawaited(BackendSession.instance.signOut());
     currentUser.value = null;
     // Otherwise this member's registration details would still be sitting in
     // memory — and visible on the register bar — for whichever account (or
@@ -433,6 +458,11 @@ abstract class AuthGateway {
   void discard();
 
   Future<void> signOut();
+
+  /// The signed-in Firebase user's current ID token, or null when nobody is
+  /// signed in on this gateway — the credential [BackendSession] exchanges
+  /// for a backend-issued session. Never throws.
+  Future<String?> currentIdToken();
 }
 
 /// Firebase Phone Auth. Holds the `verificationId` from [sendCode] and pairs
@@ -630,6 +660,19 @@ class FirebaseAuthGateway implements AuthGateway {
         ? e164.substring(3)
         : e164.replaceAll(RegExp(r'[^0-9]'), '');
     return AuthUser(name: user.displayName ?? '', phone: phone);
+  }
+
+  @override
+  Future<String?> currentIdToken() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return null;
+    }
+    try {
+      return await user.getIdToken();
+    } catch (_) {
+      return null;
+    }
   }
 
   @override

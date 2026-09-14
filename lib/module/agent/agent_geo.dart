@@ -1,14 +1,15 @@
 import 'package:flutter/foundation.dart';
 
-import '../../data/neon/agent_geo_repository.dart';
+import '../../data/backend/agent_geo_repository.dart';
 import 'agent_model.dart' show AgentLevel;
 
 // ============================================================================
 //  The agent geographic hierarchy — region → state → district → assembly →
 //  lsgd → ward.
 //
-//  The live shape comes from Neon — one table per tier, `app.region` …
-//  `app.ward` (migration 0014), read through [AgentGeoRepository]. The admin
+//  The live shape comes from the backend (`GET /v1/public/geo/tree`) — one
+//  table per tier, `app.region` … `app.ward` (migration 0014), flattened and
+//  read through [AgentGeoRepository]. The admin
 //  can add / rename / delete a ward, an LSGD or a whole district and the app
 //  picks it up on the next "My Team" open. Until that load lands (or when the
 //  database is unreachable) the hierarchy is empty — there is no bundled
@@ -392,10 +393,10 @@ class AgentGeo extends ChangeNotifier {
   /// surfaces this so an empty tree is explained rather than silent.
   Object? get lastError => _lastError;
 
-  /// Loads the hierarchy from Neon once (best-effort — a missing or
-  /// unreachable database just leaves it empty). Safe to call from every
-  /// screen's `initState`; only the first call does any work unless [force]
-  /// is set.
+  /// Loads the hierarchy from the backend once (best-effort — an
+  /// unconfigured or unreachable backend just leaves it empty). Safe to call
+  /// from every screen's `initState`; only the first call does any work
+  /// unless [force] is set.
   Future<void> ensureLoaded({bool force = false}) {
     if (force) {
       _loaded = false;
@@ -407,7 +408,7 @@ class AgentGeo extends ChangeNotifier {
 
   Future<void> _load() async {
     try {
-      // Belt-and-suspenders on top of NeonHttp's own per-query timeout: this
+      // Belt-and-suspenders on top of BackendHttp's own per-request timeout: this
       // guarantees the load reaches a terminal state (success, empty, or
       // error) within a bounded time no matter what, so "My Team" can never
       // sit on "Loading the team hierarchy…" forever — it always ends up
