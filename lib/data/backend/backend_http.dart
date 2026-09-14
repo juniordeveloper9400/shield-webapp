@@ -62,6 +62,10 @@ class BackendHttp {
   String? _accessToken;
   String? _refreshToken;
 
+  /// A refresh already in flight, so concurrent 401s share its result
+  /// instead of each starting their own — see [_refresh]'s doc.
+  Future<bool>? _refreshInFlight;
+
   bool get isSignedIn => _accessToken != null;
 
   /// Sets the in-memory access token and persists the refresh token for
@@ -166,7 +170,22 @@ class BackendHttp {
     return future.timeout(const Duration(seconds: 20));
   }
 
-  Future<bool> _refresh() async {
+  /// The backend rotates refresh tokens — each one is single-use (see
+  /// `auth.service.ts`'s `refresh`). [request] calls this independently
+  /// for every 401 it sees, and this app fires several requests in
+  /// parallel on load (persona, patients, rewards, …) — with an expired
+  /// access token, all of them 401 around the same moment. Without this
+  /// guard, each would send the same (now-single-use) refresh token; only
+  /// the first would succeed and every other concurrent request would
+  /// permanently fail that page load, having refreshed with a token the
+  /// winner had already spent. Coalescing into one shared in-flight
+  /// refresh — every concurrent caller awaits the same result — fixes
+  /// that without weakening single-use rotation itself.
+  Future<bool> _refresh() => _refreshInFlight ??= _doRefresh().whenComplete(() {
+    _refreshInFlight = null;
+  });
+
+  Future<bool> _doRefresh() async {
     final refreshToken = _refreshToken;
     if (refreshToken == null) {
       return false;

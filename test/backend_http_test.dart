@@ -80,6 +80,42 @@ void main() {
       expect(callCount, 3); // 401 attempt, refresh, retry
     });
 
+    test('coalesces concurrent 401s into a single refresh call — the backend rotates refresh tokens, so a second concurrent refresh attempt would fail', () async {
+      var refreshCalls = 0;
+      final client = MockClient((request) async {
+        if (request.url.path == '/v1/member/auth/refresh') {
+          refreshCalls++;
+          // A real backend would reject a second concurrent call with this
+          // same (now-rotated) refresh token — returning success unconditionally
+          // here would hide exactly the bug this test exists to catch.
+          expect(refreshCalls, 1, reason: 'refresh token is single-use; a second call here means the race was not coalesced');
+          return http.Response(
+            jsonEncode({'accessToken': 'new-access', 'refreshToken': 'new-refresh', 'expiresIn': 900}),
+            200,
+          );
+        }
+        final authHeader = request.headers['Authorization'];
+        if (authHeader == 'Bearer new-access') {
+          return http.Response(jsonEncode({'ok': true}), 200);
+        }
+        return http.Response(jsonEncode({'error': {'code': 'UNAUTHORIZED', 'message': 'expired'}}), 401);
+      });
+      final backend = BackendHttp.test(client: client);
+      await backend.setSession(accessToken: 'stale-access', refreshToken: 'old-refresh');
+
+      // Several requests firing in parallel with an already-stale access
+      // token — the exact shape of a page load that fetches persona,
+      // patients and rewards at once.
+      final results = await Future.wait([
+        backend.request('GET', '/v1/member/wallet'),
+        backend.request('GET', '/v1/member/patients'),
+        backend.request('GET', '/v1/member/rewards/transactions'),
+      ]);
+
+      expect(results, everyElement({'ok': true}));
+      expect(refreshCalls, 1);
+    });
+
     test('gives up after a 401 whose refresh also fails, without retrying again', () async {
       var attempts = 0;
       final client = MockClient((request) async {
