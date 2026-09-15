@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../../data/backend/order_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
@@ -13,7 +12,6 @@ import '../../widgets/social_glyphs.dart';
 import '../auth/auth_service.dart';
 import '../checkout/fulfillment_type.dart';
 import '../location/address_book.dart';
-import '../wallet/wallet_service.dart';
 import 'order_contact_service.dart';
 import 'purchase_service.dart';
 
@@ -1260,78 +1258,7 @@ class _PayBillSheet extends StatefulWidget {
 }
 
 class _PayBillSheetState extends State<_PayBillSheet> {
-  bool _busy = false;
-
   int get _amount => widget.order.billAmount ?? 0;
-
-  Future<void> _payWithWallet() async {
-    final wallet = WalletService.instance;
-    final backendId = widget.order.backendId;
-    if (_amount <= 0 || backendId == null) {
-      return;
-    }
-    // This sheet only offers a single, whole-amount wallet payment — no
-    // split — so it needs the month's allowance to cover the bill in full,
-    // same monthly cap a product checkout now applies (see
-    // WalletService.walletShareOf).
-    if (wallet.walletShareOf(_amount) < _amount) {
-      _toast(
-        context,
-        wallet.isActivated
-            ? "This month's wallet allowance won't cover this bill. Pay by cash instead."
-            : 'Not enough wallet balance to pay this bill.',
-      );
-      return;
-    }
-
-    setState(() => _busy = true);
-    final spent = wallet.spendMonthlyShare(
-      amount: _amount,
-      label: 'Order ${widget.order.id}',
-    );
-    if (!spent) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _toast(context, 'Wallet payment failed. Please try again.');
-      }
-      return;
-    }
-
-    // Awaited, unlike every other write-through in this file: the wallet
-    // debit above already happened locally, so a refusal here (a race, a
-    // stale client-side figure) has to be told apart from success, and
-    // either way the wallet needs to reconcile back to the real balance
-    // rather than sit on a local spend the backend never actually made.
-    final ok = await OrderRepository.instance.payBillWithWallet(orderId: backendId);
-    final user = AuthService.instance.currentUser.value;
-    if (user != null) {
-      unawaited(WalletService.instance.refreshFromDatabase(user.phone));
-    }
-
-    if (!ok) {
-      if (mounted) {
-        setState(() => _busy = false);
-        _toast(
-          context,
-          'Wallet payment did not go through. Your balance has been restored — try again.',
-        );
-      }
-      return;
-    }
-
-    PurchaseService.instance.updateOne(
-      widget.order.copyWith(
-        paymentStatus: OrderPaymentStatus.paid,
-        billStatus: OrderPaymentStatus.paid,
-      ),
-    );
-
-    if (mounted) {
-      setState(() => _busy = false);
-      _toast(context, 'Paid from your wallet.');
-      Navigator.of(context).pop();
-    }
-  }
 
   void _payWithCash() {
     _toast(context, 'Pay the delivery person, or at the store, when it arrives.');
@@ -1366,11 +1293,12 @@ class _PayBillSheetState extends State<_PayBillSheet> {
             _PayOptionTile(
               icon: Icons.account_balance_wallet_outlined,
               title: 'Wallet balance',
-              subtitle: WalletService.instance.isActivated
-                  ? '₹${formatRupees(WalletService.instance.balance)} available'
-                  : 'Get a Sahakar HealthPass first',
-              busy: _busy,
-              onTap: _busy ? null : _payWithWallet,
+              subtitle:
+                  "Read out the code we'll text you to whoever hands this "
+                  'over — they collect it from your wallet right there.',
+              busy: false,
+              onTap: null,
+              info: true,
             ),
             const SizedBox(height: 10),
             _PayOptionTile(
@@ -1378,7 +1306,7 @@ class _PayBillSheetState extends State<_PayBillSheet> {
               title: 'Cash',
               subtitle: 'Pay the delivery person, or at the store on pickup',
               busy: false,
-              onTap: _busy ? null : _payWithCash,
+              onTap: _payWithCash,
             ),
           ],
         ),
@@ -1394,12 +1322,18 @@ class _PayOptionTile extends StatelessWidget {
   final bool busy;
   final VoidCallback? onTap;
 
+  /// True for a row that explains itself rather than does anything when
+  /// tapped — [onTap] is null either way, but this also drops the chevron
+  /// that would otherwise promise an action nothing behind it performs.
+  final bool info;
+
   const _PayOptionTile({
     required this.icon,
     required this.title,
     required this.subtitle,
     required this.busy,
     required this.onTap,
+    this.info = false,
   });
 
   @override
@@ -1450,7 +1384,7 @@ class _PayOptionTile extends StatelessWidget {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              else
+              else if (!info)
                 const Icon(
                   Icons.chevron_right_rounded,
                   color: AppColors.textMuted,

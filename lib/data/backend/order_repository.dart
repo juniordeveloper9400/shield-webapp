@@ -232,32 +232,6 @@ class OrderRepository {
     }
   }
 
-  /// "Pay now" on a priced-but-unpaid bill — `POST /v1/member/orders/:id/pay`
-  /// (see `order.service.ts`'s `payBillWithWallet`). The backend debits the
-  /// wallet for the bill's own stored amount (never a client-submitted
-  /// figure) and marks the order and its bill PAID, all in one transaction.
-  ///
-  /// [orderId] is the backend's numeric id — [Purchase.backendId], not the
-  /// order's [Purchase.id] code. Returns false, writing nothing further,
-  /// when the backend is unreachable or refuses the debit (insufficient
-  /// balance, or the bill is already paid).
-  Future<bool> payBillWithWallet({required int orderId}) async {
-    if (!BackendHttp.isConfigured) {
-      return false;
-    }
-    try {
-      await BackendHttp.instance.request(
-        'POST',
-        '/v1/member/orders/$orderId/pay',
-        headers: {'Idempotency-Key': _newIdempotencyKey()},
-      );
-      return true;
-    } catch (error) {
-      BackendHttp.log('OrderRepository.payBillWithWallet failed', error: error);
-      return false;
-    }
-  }
-
   /// The full `app.bill` row for one order — `GET /v1/member/orders/:id/bill`
   /// (see `order.service.ts`'s `getBillForMember`) — fetched lazily per
   /// order rather than carried on every row of `listForMember`'s list, since
