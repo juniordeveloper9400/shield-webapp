@@ -115,6 +115,10 @@ class _CartScreenState extends State<CartScreen> {
               mrpTotal: _cart.mrpTotal.round(),
               paidTotal: _cart.subtotal.round(),
               kind: OrderKind.standard,
+              fulfillmentType: receipt.fulfillmentType,
+              paymentStatus: receipt.paidViaWallet
+                  ? OrderPaymentStatus.paid
+                  : OrderPaymentStatus.pending,
             );
             // Write the order through to the backend while the cart lines
             // are still here to copy. Best-effort: an unconfigured backend
@@ -128,10 +132,18 @@ class _CartScreenState extends State<CartScreen> {
                   reference: receipt.bankReference.isEmpty
                       ? id
                       : receipt.bankReference,
-                  receiptPayerName: user.name,
-                  receiptReference: receipt.bankReference,
-                  receiptAmount: _cart.payable,
-                  receiptFileName: receipt.fileName,
+                  fulfillmentType: receipt.fulfillmentType,
+                  paymentMethodCode: receipt.method.id,
+                  // A delivering order (wallet or cash) never uploads a
+                  // receipt file — only the bank-transfer path does.
+                  receiptPayerName: receipt.fileName.isEmpty ? null : user.name,
+                  receiptReference: receipt.fileName.isEmpty
+                      ? null
+                      : receipt.bankReference,
+                  receiptAmount: receipt.fileName.isEmpty ? null : _cart.payable,
+                  receiptFileName: receipt.fileName.isEmpty
+                      ? null
+                      : receipt.fileName,
                 ),
               );
             }

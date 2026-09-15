@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:developer' as developer;
 
@@ -67,6 +68,49 @@ class BackendHttp {
   Future<bool>? _refreshInFlight;
 
   bool get isSignedIn => _accessToken != null;
+
+  Timer? _keepWarmTimer;
+
+  /// Pings `/readyz` (which itself runs a real query, not just a liveness
+  /// check) every 4 minutes for as long as this app instance is open — call
+  /// once from `main()`, independent of sign-in state.
+  ///
+  /// Both the backend's Vercel functions and its Neon database are on free
+  /// tiers that suspend after a few idle minutes (Neon's is a fixed 5, not
+  /// configurable without a paid plan), and cold-starting either one adds a
+  /// real, measured ~2s to whichever request happens to hit it first — felt
+  /// as the intermittent "My Team" / agent-card lag reported against this
+  /// build. A repo-level GitHub Actions cron already exists for the same
+  /// purpose but has proven unreliable in practice (confirmed against this
+  /// project: correctly configured, yet it fired on its schedule zero times
+  /// in six-plus hours) — a well-documented weakness of GitHub's free
+  /// scheduled Actions, not something fixable from this app's side. This is
+  /// the mitigation available with no new infrastructure or account: while
+  /// anyone has the app open, both the function and the database stay warm
+  /// for everyone else using it at the same time or soon after. It cannot
+  /// help the very first request after a period with literally nobody's
+  /// app open anywhere — only an external always-on pinger or a paid plan
+  /// removes that case entirely.
+  ///
+  /// No-op when the backend isn't configured (tests, a build with no
+  /// `BACKEND_API_BASE_URL`). Safe to call more than once — a second call
+  /// replaces the first timer rather than stacking another one.
+  void keepWarm() {
+    if (!isConfigured) {
+      return;
+    }
+    _keepWarmTimer?.cancel();
+    _keepWarmTimer = Timer.periodic(const Duration(minutes: 4), (_) {
+      unawaited(
+        _send('GET', '/readyz', auth: false).catchError((Object error) {
+          log('keepWarm ping failed', error: error);
+          // A dummy Response so _send's Future<http.Response> type is
+          // satisfied — nothing reads this value, the ping is fire-and-forget.
+          return http.Response('', 0);
+        }),
+      );
+    });
+  }
 
   /// Sets the in-memory access token and persists the refresh token for
   /// [restoreSession] to pick up on a later app launch.

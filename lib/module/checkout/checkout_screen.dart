@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../dates.dart';
+import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../../widgets/upload_picker.dart';
@@ -16,6 +17,7 @@ import '../registration/store_map_picker.dart';
 import '../wallet/wallet_service.dart';
 import 'checkout_chrome.dart';
 import 'checkout_order.dart';
+import 'fulfillment_type.dart';
 import 'patient_address_details_screen.dart';
 import 'payment_method.dart';
 import 'payment_receipt.dart';
@@ -86,6 +88,16 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   late ShieldStore _store;
   late StoreBankAccount _account;
 
+  /// How a delivering order reaches the member. Only ever read on the
+  /// [CheckoutOrder.requiresDelivery] path — the Health Pass purchase has
+  /// nowhere to deliver to or pick up from.
+  FulfillmentType _fulfillment = FulfillmentType.homeDelivery;
+
+  /// Set while a delivering order's direct submit — pay by wallet or cash,
+  /// no receipt step — is in flight, so the action bar shows a spinner and
+  /// a second tap cannot place the same order twice.
+  bool _placingOrder = false;
+
   /// The order actually shown and, eventually, submitted — starts as
   /// [CheckoutScreen.order] and is replaced whenever [CheckoutScreen.liveTotals]
   /// fires, so a "Last minute buys" add on this very screen is reflected in
@@ -119,8 +131,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   void initState() {
     super.initState();
     _syncDefaultStore();
-    if (widget.order.requiresDelivery && PatientBook.instance.patients.isNotEmpty) {
-      _patient = PatientBook.instance.patients.first;
+    if (widget.order.requiresDelivery) {
+      // Cash is the safe default — always selectable, unlike wallet, which
+      // may not even be open yet.
+      _method = PaymentMethods.cash;
+      if (PatientBook.instance.patients.isNotEmpty) {
+        _patient = PatientBook.instance.patients.first;
+      }
     }
     _bankReference.addListener(() {
       _receipt.setBankReference(_bankReference.text);
@@ -265,6 +282,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool get _hasDeliveryAddress =>
       !widget.order.requiresDelivery ||
+      _fulfillment == FulfillmentType.storePickup ||
       AddressBook.instance.deliverTo != null;
 
   bool get _hasPatient => !widget.order.requiresDelivery || _patient != null;
@@ -283,6 +301,28 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       (!widget.storeSelectable || _storeLocationReady);
 
   bool get _canSubmit => _canContinue && _receipt.isComplete && !_receipt.busy;
+
+  /// Whether wallet balance actually covers this order right now — the same
+  /// check the wallet tile disables itself on, repeated here as the submit
+  /// button's own guard rather than trusted to the tile alone.
+  bool get _walletCanCoverOrder =>
+      WalletService.instance.isActivated &&
+      WalletService.instance.balance >= _order.amount;
+
+  /// Gates the direct place-order submit on the delivering path: a live,
+  /// affordable method, the address/patient requirement, and not already
+  /// mid-submit.
+  bool get _canPlaceOrder =>
+      _canContinue &&
+      !_placingOrder &&
+      (_method.id != PaymentMethods.wallet.id || _walletCanCoverOrder);
+
+  void _chooseFulfillment(FulfillmentType fulfillment) {
+    if (fulfillment == _fulfillment) {
+      return;
+    }
+    setState(() => _fulfillment = fulfillment);
+  }
 
   void _refresh() {
     if (mounted) {
@@ -374,6 +414,68 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
+  /// Places a delivering order directly off step one: no bank-transfer step,
+  /// no receipt to attach. Wallet debits the balance first — refusing to
+  /// proceed if that fails — cash just records the choice.
+  Future<void> _submitDelivering() async {
+    if (!_canPlaceOrder) {
+      return;
+    }
+    setState(() => _placingOrder = true);
+    try {
+      final paidByWallet = _method.id == PaymentMethods.wallet.id;
+      if (paidByWallet) {
+        final spent = WalletService.instance.spendBalance(
+          amount: _order.amount.round(),
+          label: 'Order ${_order.reference}',
+        );
+        if (!spent) {
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                const SnackBar(
+                  content: Text(
+                    'Wallet payment failed. Try again, or pay with cash.',
+                  ),
+                ),
+              );
+          }
+          return;
+        }
+      }
+
+      await widget.onComplete(
+        PaymentReceipt(
+          method: _method,
+          fileName: '',
+          bytes: 0,
+          orderReference: _order.reference,
+          storeId: _store.id,
+          bankAccount: _account,
+          agentCode: _agent.text.trim(),
+          bankReference: '',
+          submittedAt: DateTime.now(),
+          fulfillmentType: _fulfillment,
+          paidViaWallet: paidByWallet,
+        ),
+      );
+      if (!mounted) return;
+      final success = widget.successScreen;
+      if (success != null) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: success),
+        );
+      } else {
+        Navigator.of(context).pop(true);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _placingOrder = false);
+      }
+    }
+  }
+
   Future<void> _submit() async {
     if (!_canSubmit) {
       return;
@@ -437,8 +539,13 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
-          CheckoutSteps(active: _step),
-          const SizedBox(height: 14),
+          // Two-step only means something on the manual bank-transfer path —
+          // a delivering order never leaves this screen, so there is nothing
+          // for the rail to count down.
+          if (!delivering) ...[
+            CheckoutSteps(active: _step),
+            const SizedBox(height: 14),
+          ],
           if (delivering && _step == 1) ...[
             _DeliveryEstimateStrip(itemCount: _order.itemCount),
             const SizedBox(height: 14),
@@ -469,6 +576,12 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               const SizedBox(height: 14),
               const _LastMinuteBuysPanel(),
               const SizedBox(height: 14),
+              _FulfillmentPanel(
+                selected: _fulfillment,
+                store: _store,
+                onSelect: _chooseFulfillment,
+              ),
+              const SizedBox(height: 14),
             ],
             _StorePanel(
               store: _store,
@@ -486,9 +599,19 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               onPlanChanged: _choosePlan,
               onStoreChanged: _chooseStore,
               onAccountChanged: _chooseAccount,
+              // Delivering orders settle by wallet or cash — there is no bank
+              // transfer to pick an account for.
+              showBankAccount: !delivering,
             ),
             const SizedBox(height: 14),
-            _MethodPanel(selected: _method, onSelect: _chooseMethod),
+            if (delivering)
+              _WalletCashPanel(
+                selected: _method,
+                amount: _order.amount,
+                onSelect: _chooseMethod,
+              )
+            else
+              _MethodPanel(selected: _method, onSelect: _chooseMethod),
           ] else ...[
             _BankTransferPanel(order: _order, account: _account),
             const SizedBox(height: 14),
@@ -518,18 +641,22 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: _DeliverToAndPatientSection(
                 address: AddressBook.instance.deliverTo,
                 patient: _patient,
+                fulfillment: _fulfillment,
+                store: _store,
                 onChange: _openPatientAddressDetails,
               ),
             ),
           CheckoutActionBar(
             amountLabel: _order.amountLabel,
-            label: _step == 1
-                ? (delivering ? 'Select payment mode' : 'Next')
-                : _order.submitLabel,
-            busy: _receipt.busy,
-            onPressed: _step == 1
-                ? (_canContinue ? () => setState(() => _step = 2) : null)
-                : (_canSubmit ? _submit : null),
+            label: delivering
+                ? _order.submitLabel
+                : (_step == 1 ? 'Next' : _order.submitLabel),
+            busy: delivering ? _placingOrder : _receipt.busy,
+            onPressed: delivering
+                ? (_canPlaceOrder ? _submitDelivering : null)
+                : (_step == 1
+                      ? (_canContinue ? () => setState(() => _step = 2) : null)
+                      : (_canSubmit ? _submit : null)),
           ),
         ],
       ),
@@ -896,11 +1023,18 @@ class _LastMinuteTile extends StatelessWidget {
 class _DeliverToAndPatientSection extends StatelessWidget {
   final Address? address;
   final Patient? patient;
+
+  /// Whether this order ships or is collected — a pickup order has no
+  /// address requirement, so the row above the patient reads differently.
+  final FulfillmentType fulfillment;
+  final ShieldStore store;
   final VoidCallback onChange;
 
   const _DeliverToAndPatientSection({
     required this.address,
     required this.patient,
+    required this.fulfillment,
+    required this.store,
     required this.onChange,
   });
 
@@ -908,19 +1042,31 @@ class _DeliverToAndPatientSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final address = this.address;
     final patient = this.patient;
+    final pickup = fulfillment == FulfillmentType.storePickup;
+    // Only a pickup order can be missing nothing but a patient — an address
+    // is not asked for on that path at all.
+    final addressMissing = !pickup && address == null;
 
     return _Panel(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _DetailRow(
-            label: 'DELIVER TO',
-            title: address == null
-                ? 'Add a delivery address'
-                : '${address.label.label} (${address.pincode})',
-            subtitle: address?.summary,
-            onChange: onChange,
-          ),
+          if (pickup)
+            _DetailRow(
+              label: 'PICKUP AT',
+              title: store.name,
+              subtitle: store.addressLine,
+              onChange: onChange,
+            )
+          else
+            _DetailRow(
+              label: 'DELIVER TO',
+              title: address == null
+                  ? 'Add a delivery address'
+                  : '${address.label.label} (${address.pincode})',
+              subtitle: address?.summary,
+              onChange: onChange,
+            ),
           const Divider(height: 22, color: AppColors.border),
           _DetailRow(
             label: 'PATIENT',
@@ -928,13 +1074,13 @@ class _DeliverToAndPatientSection extends StatelessWidget {
             subtitle: patient?.summary,
             onChange: onChange,
           ),
-          if (address == null || patient == null) ...[
+          if (addressMissing || patient == null) ...[
             const SizedBox(height: 10),
             Text(
-              address == null && patient == null
+              addressMissing && patient == null
                   ? 'A delivery address and a patient are required to '
                         'continue.'
-                  : address == null
+                  : addressMissing
                   ? 'A delivery address is required to continue.'
                   : 'A patient is required to continue.',
               style: const TextStyle(
@@ -1068,6 +1214,11 @@ class _StorePanel extends StatelessWidget {
   /// when [selectable].
   final ValueChanged<bool>? onLocationReady;
 
+  /// Whether the "Choose bank account" block is shown at all. False on a
+  /// delivering checkout — wallet and cash settle those, so there is no bank
+  /// account to pick one of.
+  final bool showBankAccount;
+
   const _StorePanel({
     required this.store,
     required this.account,
@@ -1080,6 +1231,7 @@ class _StorePanel extends StatelessWidget {
     required this.onStoreChanged,
     required this.onAccountChanged,
     this.onLocationReady,
+    this.showBankAccount = true,
   });
 
   @override
@@ -1144,15 +1296,17 @@ class _StorePanel extends StatelessWidget {
               border: OutlineInputBorder(),
             ),
           ),
-          const SizedBox(height: 14),
-          const CheckoutHeading('Choose bank account'),
-          const SizedBox(height: 9),
-          for (final option in accounts)
-            _AccountTile(
-              account: option,
-              selected: option.id == account.id,
-              onTap: () => onAccountChanged(option),
-            ),
+          if (showBankAccount) ...[
+            const SizedBox(height: 14),
+            const CheckoutHeading('Choose bank account'),
+            const SizedBox(height: 9),
+            for (final option in accounts)
+              _AccountTile(
+                account: option,
+                selected: option.id == account.id,
+                onTap: () => onAccountChanged(option),
+              ),
+          ],
         ],
       ),
     );
@@ -1223,6 +1377,259 @@ class _PickablePlanTile extends StatelessWidget {
                   ],
                 ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// The home-delivery / store-pickup chooser on a delivering checkout.
+class _FulfillmentPanel extends StatelessWidget {
+  final FulfillmentType selected;
+  final ShieldStore store;
+  final ValueChanged<FulfillmentType> onSelect;
+
+  const _FulfillmentPanel({
+    required this.selected,
+    required this.store,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Panel(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CheckoutHeading('How should this reach you?'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _FulfillmentChip(
+                  icon: Icons.local_shipping_outlined,
+                  label: FulfillmentType.homeDelivery.label,
+                  selected: selected == FulfillmentType.homeDelivery,
+                  onTap: () => onSelect(FulfillmentType.homeDelivery),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _FulfillmentChip(
+                  icon: Icons.storefront_outlined,
+                  label: FulfillmentType.storePickup.label,
+                  selected: selected == FulfillmentType.storePickup,
+                  onTap: () => onSelect(FulfillmentType.storePickup),
+                ),
+              ),
+            ],
+          ),
+          if (selected == FulfillmentType.storePickup) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Pick up at ${store.name}, ${store.addressLine}',
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.35,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _FulfillmentChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FulfillmentChip({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.chipBlueTint : AppColors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.brandBlue : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? AppColors.brandBlue : AppColors.textMuted,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.brandBlue : AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Wallet and cash — the two payment choices on a delivering checkout, in
+/// place of [_MethodPanel]'s manual-settlement methods. The wallet tile
+/// listens to [WalletService] directly so its balance and affordability stay
+/// live without this screen having to track them itself.
+class _WalletCashPanel extends StatelessWidget {
+  final PaymentMethod selected;
+  final double amount;
+  final ValueChanged<PaymentMethod> onSelect;
+
+  const _WalletCashPanel({
+    required this.selected,
+    required this.amount,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: WalletService.instance,
+      builder: (context, _) {
+        final wallet = WalletService.instance;
+        final affordable = wallet.isActivated && wallet.balance >= amount;
+        final String? deniedNote = !wallet.isActivated
+            ? 'Get a Sahakar HealthPass first'
+            : affordable
+            ? null
+            : 'Insufficient balance';
+
+        return _Panel(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const CheckoutHeading('Payment option'),
+              const SizedBox(height: 10),
+              _WalletMethodTile(
+                selected: selected.id == PaymentMethods.wallet.id && affordable,
+                balance: wallet.balance,
+                deniedNote: deniedNote,
+                onTap: affordable
+                    ? () => onSelect(PaymentMethods.wallet)
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              _MethodTile(
+                method: PaymentMethods.cash,
+                selected: selected.id == PaymentMethods.cash.id,
+                onTap: () => onSelect(PaymentMethods.cash),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// The wallet tile on [_WalletCashPanel]: the live balance when it can cover
+/// the order, or the reason it cannot be picked right now.
+class _WalletMethodTile extends StatelessWidget {
+  final bool selected;
+  final int balance;
+  final String? deniedNote;
+  final VoidCallback? onTap;
+
+  const _WalletMethodTile({
+    required this.selected,
+    required this.balance,
+    required this.deniedNote,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final method = PaymentMethods.wallet;
+    final denied = deniedNote != null;
+
+    return Material(
+      color: selected ? method.tint : AppColors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? method.accent : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.all(11),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: method.tint,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(method.icon, size: 20, color: method.accent),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      method.name,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    Text(
+                      deniedNote ?? '₹${formatRupees(balance)} available',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: denied ? AppColors.danger : AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!denied)
+                Icon(
+                  selected
+                      ? Icons.radio_button_checked_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 20,
+                  color: selected ? method.accent : AppColors.textMuted,
+                ),
             ],
           ),
         ),

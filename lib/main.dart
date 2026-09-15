@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'data/backend/backend_http.dart';
 import 'data/neon/neon_http.dart';
 import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
@@ -78,6 +79,11 @@ Future<void> main() async {
   // Warm the agent geographic hierarchy (regions … wards) so "My Team" and
   // the agent registration form draw the database copy, not the bundled seed.
   unawaited(AgentGeo.instance.ensureLoaded());
+
+  // Keep the backend's Vercel functions and Neon database from suspending
+  // while this app is open — see BackendHttp.keepWarm's own doc for why
+  // this exists instead of relying solely on the repo's GitHub Actions cron.
+  BackendHttp.instance.keepWarm();
 
   // One line at launch — via dart:developer so it survives a release build —
   // saying whether the Neon write-through is live. A build started without

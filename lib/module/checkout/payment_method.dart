@@ -99,4 +99,33 @@ abstract final class PaymentMethods {
   /// The ones that can actually be used today. One, for now.
   static List<PaymentMethod> get live =>
       all.where((method) => method.isLive).toList();
+
+  /// Pay from the SHIELD wallet balance — instant, and never "coming soon":
+  /// the balance either covers the order or it does not.
+  static const PaymentMethod wallet = PaymentMethod(
+    id: 'wallet',
+    name: 'Wallet balance',
+    blurb: 'Pay from your SHIELD wallet',
+    icon: Icons.account_balance_wallet_rounded,
+    accent: AppColors.brandGreenDark,
+    tint: AppColors.greenTint,
+    isLive: true,
+  );
+
+  /// Pay the person who hands the order over — the delivery rider, or the
+  /// counter on a store pickup.
+  static const PaymentMethod cash = PaymentMethod(
+    id: 'cash',
+    name: 'Cash',
+    blurb: 'Pay the delivery person, or at the store on pickup',
+    icon: Icons.payments_outlined,
+    accent: AppColors.goldAccent,
+    tint: AppColors.goldTint,
+    isLive: true,
+  );
+
+  /// The payment choices for a delivering (product/prescription) checkout.
+  /// Manual bank transfer settles a privilege-plan purchase, not a parcel —
+  /// an order that ships is paid for at the point it changes hands instead.
+  static const List<PaymentMethod> forOrder = [wallet, cash];
 }

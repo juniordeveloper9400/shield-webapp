@@ -8,6 +8,7 @@ import '../../dates.dart' as dates;
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
+import '../checkout/fulfillment_type.dart';
 
 enum PurchaseStatus { idle, loading, ready, error }
 
@@ -36,6 +37,11 @@ enum OrderStatus {
 /// tracker carries two stages the standard one does not.
 enum OrderKind { standard, prescription }
 
+/// Whether an order (or the bill on a prescription order) has actually been
+/// paid — the `paymentStatus`/`billStatus` token `GET /v1/member/orders`
+/// hands back on each row, read back the same way on both.
+enum OrderPaymentStatus { pending, paid }
+
 /// One completed purchase: what it was worth at list price, and what was
 /// actually paid for it.
 ///
@@ -62,6 +68,34 @@ class Purchase {
   /// existing call site and stored line keeps its meaning.
   final OrderKind kind;
 
+  /// The backend's own numeric `order.id` — an opaque pass-through
+  /// identifier carried alongside [id] (the order's `code`, which is what
+  /// every screen displays and matches on) so a "Pay now" can address
+  /// `POST /v1/member/orders/:id/pay`, which the backend addresses by
+  /// numeric id rather than code. Null for an order not yet synced from
+  /// `GET /v1/member/orders` — see [Purchase.fromRow].
+  final int? backendId;
+
+  /// How this order reaches the member. Defaults to
+  /// [FulfillmentType.homeDelivery] so every existing call site and stored
+  /// line keeps its meaning.
+  final FulfillmentType fulfillmentType;
+
+  /// Whether this order itself has been paid — distinct from [billStatus],
+  /// which is what a prescription's priced bill carries. A standard order
+  /// paid by wallet at checkout is [OrderPaymentStatus.paid] the moment it is
+  /// placed; a cash order stays [OrderPaymentStatus.pending] until someone at
+  /// the counter or on the delivery round collects it.
+  final OrderPaymentStatus paymentStatus;
+
+  /// What the pharmacist priced this prescription's bill at, in whole
+  /// rupees. Null until `app.bill` has been priced.
+  final int? billAmount;
+
+  /// Whether [billAmount] has actually been paid. Null until the bill has a
+  /// price at all.
+  final OrderPaymentStatus? billStatus;
+
   const Purchase({
     required this.id,
     required this.placedOn,
@@ -70,7 +104,33 @@ class Purchase {
     required this.paidTotal,
     required this.status,
     this.kind = OrderKind.standard,
+    this.backendId,
+    this.fulfillmentType = FulfillmentType.homeDelivery,
+    this.paymentStatus = OrderPaymentStatus.pending,
+    this.billAmount,
+    this.billStatus,
   });
+
+  /// A copy with just the payment fields swapped in — what a wallet "Pay now"
+  /// applies once the debit has gone through, so the order and its bill read
+  /// as paid without waiting on the next full server sync.
+  Purchase copyWith({
+    OrderPaymentStatus? paymentStatus,
+    OrderPaymentStatus? billStatus,
+  }) => Purchase(
+    id: id,
+    placedOn: placedOn,
+    itemCount: itemCount,
+    mrpTotal: mrpTotal,
+    paidTotal: paidTotal,
+    status: status,
+    kind: kind,
+    backendId: backendId,
+    fulfillmentType: fulfillmentType,
+    paymentStatus: paymentStatus ?? this.paymentStatus,
+    billAmount: billAmount,
+    billStatus: billStatus ?? this.billStatus,
+  );
 
   /// A prescription order still waiting on money: priced or not, nothing has
   /// been paid and it has not been delivered or called off.
@@ -100,8 +160,10 @@ class Purchase {
   factory Purchase.fromRow(Map<String, dynamic> row) {
     String str(Object? v) => (v ?? '').toString().trim();
     int i(Object? v) => v is int ? v : (double.tryParse(str(v))?.round() ?? 0);
+    int? iOrNull(Object? v) => v == null ? null : i(v);
 
     final placedOn = DateTime.tryParse(str(row['placedOn']));
+    final billAmount = row['billAmount'] == null ? null : i(row['billAmount']);
     return Purchase(
       id: str(row['code']),
       placedOn: placedOn == null ? str(row['placedOn']) : dates.formatDate(placedOn),
@@ -110,6 +172,19 @@ class Purchase {
       paidTotal: i(row['paidTotal']),
       status: _statusFromDb(str(row['status'])),
       kind: _kindFromDb(str(row['kind'])),
+      backendId: iOrNull(row['id']),
+      fulfillmentType: str(row['fulfillmentType']).toUpperCase() == 'STORE_PICKUP'
+          ? FulfillmentType.storePickup
+          : FulfillmentType.homeDelivery,
+      paymentStatus: str(row['paymentStatus']).toUpperCase() == 'PAID'
+          ? OrderPaymentStatus.paid
+          : OrderPaymentStatus.pending,
+      billAmount: billAmount,
+      billStatus: row['billStatus'] == null
+          ? null
+          : (str(row['billStatus']).toUpperCase() == 'PAID'
+                ? OrderPaymentStatus.paid
+                : OrderPaymentStatus.pending),
     );
   }
 }
@@ -293,6 +368,8 @@ class PurchaseService extends ChangeNotifier {
     required int paidTotal,
     OrderStatus status = OrderStatus.processing,
     OrderKind kind = OrderKind.standard,
+    FulfillmentType fulfillmentType = FulfillmentType.homeDelivery,
+    OrderPaymentStatus paymentStatus = OrderPaymentStatus.pending,
   }) {
     final purchase = Purchase(
       id: id,
@@ -302,6 +379,8 @@ class PurchaseService extends ChangeNotifier {
       paidTotal: paidTotal,
       status: status,
       kind: kind,
+      fulfillmentType: fulfillmentType,
+      paymentStatus: paymentStatus,
     );
     _purchases.insert(0, purchase);
     notifyListeners();
@@ -315,6 +394,19 @@ class PurchaseService extends ChangeNotifier {
     // either anyway.
 
     return purchase;
+  }
+
+  /// Replaces one order in place — what a wallet "Pay now" calls once its
+  /// debit has gone through, so the screen it was tapped from reflects the
+  /// payment without waiting on the next [refresh]. A no-op when [updated]
+  /// is not (by id) an order already on file.
+  void updateOne(Purchase updated) {
+    final index = _purchases.indexWhere((p) => p.id == updated.id);
+    if (index == -1) {
+      return;
+    }
+    _purchases[index] = updated;
+    notifyListeners();
   }
 
   @visibleForTesting

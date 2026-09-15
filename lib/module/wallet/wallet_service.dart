@@ -661,6 +661,33 @@ class WalletService extends ChangeNotifier {
     return true;
   }
 
+  /// Spends [amount] straight off the wallet's real balance — an order paid
+  /// for at checkout, not a reward redeemed against the month's allowance.
+  ///
+  /// Deliberately not [spend]: that method draws against
+  /// [redeemedThisMonth], the reward-release allowance, which is a narrower,
+  /// unrelated figure from the member's actual spendable [balance]. Paying
+  /// for a ₹2,000 order through [spend] would wrongly cap it at whatever this
+  /// month's reward instalment happens to be. This method only ever touches
+  /// [balance] itself, and never moves [redeemedThisMonth].
+  ///
+  /// Refused — changing nothing — while the wallet is closed or the balance
+  /// cannot cover [amount].
+  bool spendBalance({
+    required int amount,
+    required String label,
+    String date = 'Today',
+  }) {
+    if (!isActivated || amount <= 0 || amount > _balance) {
+      return false;
+    }
+
+    _balance -= amount;
+    _entries.insert(0, WalletEntry(label: label, date: date, amount: -amount));
+    notifyListeners();
+    return true;
+  }
+
   /// Two entries rather than one combined credit: the bonus is the whole point
   /// of the privilege programme, and rolling it into the top-up would hide the
   /// thing the member signed up for.

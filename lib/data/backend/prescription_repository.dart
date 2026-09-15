@@ -1,3 +1,4 @@
+import '../../module/checkout/fulfillment_type.dart';
 import '../../module/prescription/medicine_duration.dart';
 import 'backend_http.dart';
 
@@ -59,11 +60,46 @@ class RemotePrescriptionMedicine {
 /// stayed on the old direct-Neon class until the order-checkout flow this
 /// migration also covers, [submitForOrder] below, replaced it outright.
 class PrescriptionRepository {
-  const PrescriptionRepository._();
+  PrescriptionRepository._();
 
-  static const PrescriptionRepository instance = PrescriptionRepository._();
+  // Non-const, unlike before this feature — `_paymentMethodIdCache` below
+  // needs a mutable instance field, the same reason `OrderRepository.instance`
+  // switched from `const` too.
+  static final PrescriptionRepository instance = PrescriptionRepository._();
 
   bool get isAvailable => BackendHttp.isConfigured;
+
+  /// `code` (`'wallet'`/`'cash'`) → the backend's numeric `payment_method.id`
+  /// — resolved once against the public catalogue and cached, mirroring
+  /// `OrderRepository._paymentMethodIdFor`'s identical helper.
+  Map<String, int>? _paymentMethodIdCache;
+
+  Future<int?> _paymentMethodIdFor(String code) async {
+    final cached = _paymentMethodIdCache;
+    if (cached != null) {
+      return cached[code];
+    }
+    try {
+      final rows = await BackendHttp.instance.request(
+        'GET',
+        '/v1/public/catalogue/payment-methods',
+        auth: false,
+      ) as List<dynamic>;
+      final map = <String, int>{};
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        final rowCode = row['code']?.toString();
+        final id = row['id'];
+        if (rowCode != null && id != null) {
+          map[rowCode] = (id as num).toInt();
+        }
+      }
+      _paymentMethodIdCache = map;
+      return map[code];
+    } catch (error) {
+      BackendHttp.log('PrescriptionRepository._paymentMethodIdFor failed', error: error);
+      return null;
+    }
+  }
 
   /// Records a freshly uploaded prescription against an already-known
   /// [patientId] (resolve/create the patient via `PatientRepository`
@@ -161,15 +197,24 @@ class PrescriptionRepository {
   /// an opaque pass-through identifier since the migration, not a real
   /// uuid). Returns the created order's id, or null when nothing was
   /// written.
+  ///
+  /// [fulfillmentType] and [paymentMethodCode] are migration-0031 additions:
+  /// how the order reaches the member, and the member's stated payment
+  /// preference — never charged here either way, a prescription is priced
+  /// at the counter first.
   Future<int?> submitForOrder({
     required List<int> prescriptionIds,
     int? addressId,
-    int? paymentMethodId,
+    FulfillmentType fulfillmentType = FulfillmentType.homeDelivery,
+    String? paymentMethodCode,
   }) async {
     if (!BackendHttp.isConfigured || prescriptionIds.isEmpty) {
       return null;
     }
     try {
+      final paymentMethodId = paymentMethodCode == null
+          ? null
+          : await _paymentMethodIdFor(paymentMethodCode);
       final created = await BackendHttp.instance.request(
         'POST',
         '/v1/member/prescription-orders',
@@ -177,6 +222,9 @@ class PrescriptionRepository {
           'prescriptionIds': prescriptionIds,
           if (addressId != null) 'addressId': addressId,
           if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+          'fulfillmentType': fulfillmentType == FulfillmentType.storePickup
+              ? 'STORE_PICKUP'
+              : 'HOME_DELIVERY',
         },
       ) as Map<String, dynamic>;
       return created['id'] as int?;

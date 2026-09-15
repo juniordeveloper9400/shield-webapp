@@ -1,11 +1,16 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/backend/order_repository.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/social_glyphs.dart';
 import '../auth/auth_service.dart';
+import '../checkout/fulfillment_type.dart';
 import '../location/address_book.dart';
+import '../wallet/wallet_service.dart';
 import 'order_contact_service.dart';
 import 'purchase_service.dart';
 
@@ -60,7 +65,25 @@ class OrderBill {
 
   String get payableLabel => '₹${formatRupees(payable)}';
 
-  String get paymentMode => order.awaitingPayment ? 'UPI' : 'Cash on delivery';
+  /// What the member reads next to "Payment mode": whether this order is
+  /// actually settled, and — while it is not — how it is expected to be,
+  /// driven by the real [Purchase.paymentStatus] / [Purchase.fulfillmentType]
+  /// rather than a hardcoded guess.
+  String get paymentMode {
+    if (order.paymentStatus == OrderPaymentStatus.paid) {
+      return 'Paid';
+    }
+    return order.fulfillmentType == FulfillmentType.storePickup
+        ? 'Pay at store'
+        : 'Pay on delivery';
+  }
+
+  /// Whether a "Pay now" button belongs on this bill: a prescription that has
+  /// actually been priced and is still owed.
+  bool get canPayNow =>
+      order.kind == OrderKind.prescription &&
+      (order.billAmount ?? 0) > 0 &&
+      order.billStatus == OrderPaymentStatus.pending;
 }
 
 // ---------------------------------------------------------------------------
@@ -1179,7 +1202,233 @@ class BillDetailsCard extends StatelessWidget {
             'Invoice will be available to download once the order is delivered',
             style: TextStyle(fontSize: 12, color: AppColors.textMuted),
           ),
+          if (bill.canPayNow) ...[
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => _PayBillSheet.show(context, order),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: AppColors.brandBlue,
+                  side: const BorderSide(color: AppColors.brandBlue, width: 1.4),
+                  padding: const EdgeInsets.symmetric(vertical: 13),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: Text(
+                  'Pay ₹${formatRupees(order.billAmount ?? 0)} now',
+                  style: const TextStyle(fontSize: 14.5, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+          ],
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pay now
+// ---------------------------------------------------------------------------
+
+/// The bottom sheet a prescription's "Pay now" opens: the priced bill, then
+/// Wallet or Cash. Wallet debits the balance instantly and marks the order —
+/// and its bill — paid; Cash just tells the member how it is settled instead.
+class _PayBillSheet extends StatefulWidget {
+  final Purchase order;
+
+  const _PayBillSheet({required this.order});
+
+  static Future<void> show(BuildContext context, Purchase order) {
+    return showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: AppColors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (_) => _PayBillSheet(order: order),
+    );
+  }
+
+  @override
+  State<_PayBillSheet> createState() => _PayBillSheetState();
+}
+
+class _PayBillSheetState extends State<_PayBillSheet> {
+  bool _busy = false;
+
+  int get _amount => widget.order.billAmount ?? 0;
+
+  Future<void> _payWithWallet() async {
+    final wallet = WalletService.instance;
+    final backendId = widget.order.backendId;
+    if (_amount <= 0 || backendId == null) {
+      return;
+    }
+    if (!wallet.isActivated || wallet.balance < _amount) {
+      _toast(context, 'Not enough wallet balance to pay this bill.');
+      return;
+    }
+
+    setState(() => _busy = true);
+    final spent = wallet.spendBalance(
+      amount: _amount,
+      label: 'Order ${widget.order.id}',
+    );
+    if (!spent) {
+      if (mounted) {
+        setState(() => _busy = false);
+        _toast(context, 'Wallet payment failed. Please try again.');
+      }
+      return;
+    }
+
+    // Best-effort write-through, same contract as every other order write —
+    // the local wallet debit above and the optimistic update below are what
+    // the member actually sees; this is what keeps the backend in step.
+    unawaited(OrderRepository.instance.payBillWithWallet(orderId: backendId));
+
+    PurchaseService.instance.updateOne(
+      widget.order.copyWith(
+        paymentStatus: OrderPaymentStatus.paid,
+        billStatus: OrderPaymentStatus.paid,
+      ),
+    );
+
+    if (mounted) {
+      setState(() => _busy = false);
+      _toast(context, 'Paid from your wallet.');
+      Navigator.of(context).pop();
+    }
+  }
+
+  void _payWithCash() {
+    _toast(context, 'Pay the delivery person, or at the store, when it arrives.');
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 14),
+                decoration: BoxDecoration(
+                  color: AppColors.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Text('Pay ₹${formatRupees(_amount)}', style: _titleStyle),
+            const SizedBox(height: 2),
+            Text('Order ${widget.order.id}', style: _mutedStyle),
+            const SizedBox(height: 16),
+            _PayOptionTile(
+              icon: Icons.account_balance_wallet_outlined,
+              title: 'Wallet balance',
+              subtitle: WalletService.instance.isActivated
+                  ? '₹${formatRupees(WalletService.instance.balance)} available'
+                  : 'Get a Sahakar HealthPass first',
+              busy: _busy,
+              onTap: _busy ? null : _payWithWallet,
+            ),
+            const SizedBox(height: 10),
+            _PayOptionTile(
+              icon: Icons.payments_outlined,
+              title: 'Cash',
+              subtitle: 'Pay the delivery person, or at the store on pickup',
+              busy: false,
+              onTap: _busy ? null : _payWithCash,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _PayOptionTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final bool busy;
+  final VoidCallback? onTap;
+
+  const _PayOptionTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.busy,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Container(
+                width: 36,
+                height: 36,
+                decoration: BoxDecoration(
+                  color: AppColors.pageTint,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: Icon(icon, size: 19, color: AppColors.brandBlue),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    Text(subtitle, style: _mutedStyle),
+                  ],
+                ),
+              ),
+              if (busy)
+                const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }

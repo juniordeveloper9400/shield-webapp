@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'fulfillment_type.dart';
 import 'payment_method.dart';
 import 'shield_payee.dart';
 
@@ -43,6 +44,17 @@ class PaymentReceipt {
 
   final DateTime submittedAt;
 
+  /// How a delivering order reaches the member: shipped, or held for
+  /// pickup. Defaults to home delivery so the Health-Pass path — which never
+  /// sets this — keeps its existing meaning.
+  final FulfillmentType fulfillmentType;
+
+  /// Whether [method] settled this order instantly off the SHIELD wallet,
+  /// rather than being a claim someone still has to collect on or settle
+  /// manually. False for every existing caller — a bank-transfer receipt is
+  /// never paid by wallet.
+  final bool paidViaWallet;
+
   const PaymentReceipt({
     required this.method,
     required this.fileName,
@@ -54,5 +66,7 @@ class PaymentReceipt {
     required this.submittedAt,
     required this.bankReference,
     this.imageDataUrl,
+    this.fulfillmentType = FulfillmentType.homeDelivery,
+    this.paidViaWallet = false,
   });
 }

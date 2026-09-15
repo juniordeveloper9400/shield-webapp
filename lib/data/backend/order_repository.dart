@@ -1,6 +1,7 @@
 import 'dart:math';
 
 import '../../module/cart/cart_service.dart';
+import '../../module/checkout/fulfillment_type.dart';
 import '../../module/location/address_book.dart';
 import 'address_repository.dart';
 import 'backend_http.dart';
@@ -22,11 +23,48 @@ import 'backend_http.dart';
 /// unreachable, it just won't be visible to staff or earn anything until it
 /// syncs.
 class OrderRepository {
-  const OrderRepository._();
+  OrderRepository._();
 
-  static const OrderRepository instance = OrderRepository._();
+  // Non-const, unlike the rest of this file's siblings before this feature —
+  // `_paymentMethodIdCache` below needs a mutable instance field, the same
+  // reason `WalletRepository.instance` is `static final` rather than `const`.
+  static final OrderRepository instance = OrderRepository._();
 
   bool get isAvailable => BackendHttp.isConfigured;
+
+  /// `code` (`'wallet'`/`'cash'`) → the backend's numeric `payment_method.id`
+  /// — resolved once against the public catalogue and cached, the same
+  /// pattern `WalletRepository._tierIdCache` uses for membership tiers. The
+  /// checkout DTO only accepts the numeric id; the app only knows methods by
+  /// their [PaymentMethod.id] code.
+  Map<String, int>? _paymentMethodIdCache;
+
+  Future<int?> _paymentMethodIdFor(String code) async {
+    final cached = _paymentMethodIdCache;
+    if (cached != null) {
+      return cached[code];
+    }
+    try {
+      final rows = await BackendHttp.instance.request(
+        'GET',
+        '/v1/public/catalogue/payment-methods',
+        auth: false,
+      ) as List<dynamic>;
+      final map = <String, int>{};
+      for (final row in rows.cast<Map<String, dynamic>>()) {
+        final rowCode = row['code']?.toString();
+        final id = row['id'];
+        if (rowCode != null && id != null) {
+          map[rowCode] = (id as num).toInt();
+        }
+      }
+      _paymentMethodIdCache = map;
+      return map[code];
+    } catch (error) {
+      BackendHttp.log('OrderRepository._paymentMethodIdFor failed', error: error);
+      return null;
+    }
+  }
 
   /// Every order the member has placed, newest first — raw rows, same shape
   /// [PurchaseService] already expects from `Purchase.fromRow`.
@@ -63,6 +101,13 @@ class OrderRepository {
   /// philosophy as every other best-effort write here.
   ///
   /// Returns the created order's id, or null when nothing was written.
+  ///
+  /// [fulfillmentType] and [paymentMethodCode] are migration-0031 additions:
+  /// how the order reaches the member, and how it is paid for — `'wallet'`
+  /// settles the order instantly (the backend debits the balance and marks
+  /// it PAID in the same transaction as the order itself, see
+  /// `order.service.ts`'s `checkout`), `'cash'` (or leaving this null)
+  /// leaves it PENDING until it is collected in person.
   Future<int?> checkoutStandardOrder({
     required List<CartLine> lines,
     Address? address,
@@ -71,6 +116,8 @@ class OrderRepository {
     String? receiptReference,
     double? receiptAmount,
     String? receiptFileName,
+    FulfillmentType fulfillmentType = FulfillmentType.homeDelivery,
+    String? paymentMethodCode,
   }) async {
     if (!BackendHttp.isConfigured || lines.isEmpty) {
       return null;
@@ -104,6 +151,11 @@ class OrderRepository {
           ? null
           : await AddressRepository.instance.create(address);
 
+      // 3b · The chosen payment method's numeric id, if it resolves.
+      final paymentMethodId = paymentMethodCode == null
+          ? null
+          : await _paymentMethodIdFor(paymentMethodCode);
+
       // 4 · Checkout — totals are computed server-side from the lines just synced.
       final createdOrder = await BackendHttp.instance.request(
         'POST',
@@ -111,6 +163,10 @@ class OrderRepository {
         body: {
           if (addressId != null) 'deliveryAddressId': addressId,
           if (reference != null) 'reference': reference,
+          if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+          'fulfillmentType': fulfillmentType == FulfillmentType.storePickup
+              ? 'STORE_PICKUP'
+              : 'HOME_DELIVERY',
         },
         headers: {'Idempotency-Key': _newIdempotencyKey()},
       ) as Map<String, dynamic>;
@@ -119,28 +175,64 @@ class OrderRepository {
         return null;
       }
 
-      // 5 · The manual-transfer claim, against the order just placed.
-      try {
-        await BackendHttp.instance.request(
-          'POST',
-          '/v1/member/orders/$orderId/receipt',
-          body: {
-            if (receiptPayerName != null) 'payerName': receiptPayerName,
-            if (receiptReference != null) 'reference': receiptReference,
-            if (receiptAmount != null) 'amount': receiptAmount,
-            if (receiptFileName != null) 'fileName': receiptFileName,
-          },
-        );
-      } catch (error) {
-        // The order itself is real even if the receipt claim failed to
-        // attach — never unwind a placed order over this.
-        BackendHttp.log('OrderRepository: receipt claim failed for order $orderId', error: error);
+      // 5 · The manual-transfer claim, against the order just placed — only
+      // when there is one to file. A wallet or cash order never uploads a
+      // receipt (see checkout_screen.dart's `_submitDelivering`); filing an
+      // empty claim for it would just be a bare row with nothing on it.
+      final hasReceipt =
+          receiptPayerName != null ||
+          receiptReference != null ||
+          receiptAmount != null ||
+          (receiptFileName != null && receiptFileName.isNotEmpty);
+      if (hasReceipt) {
+        try {
+          await BackendHttp.instance.request(
+            'POST',
+            '/v1/member/orders/$orderId/receipt',
+            body: {
+              if (receiptPayerName != null) 'payerName': receiptPayerName,
+              if (receiptReference != null) 'reference': receiptReference,
+              if (receiptAmount != null) 'amount': receiptAmount,
+              if (receiptFileName != null) 'fileName': receiptFileName,
+            },
+          );
+        } catch (error) {
+          // The order itself is real even if the receipt claim failed to
+          // attach — never unwind a placed order over this.
+          BackendHttp.log('OrderRepository: receipt claim failed for order $orderId', error: error);
+        }
       }
 
       return orderId;
     } catch (error) {
       BackendHttp.log('OrderRepository.checkoutStandardOrder failed', error: error);
       return null;
+    }
+  }
+
+  /// "Pay now" on a priced-but-unpaid bill — `POST /v1/member/orders/:id/pay`
+  /// (see `order.service.ts`'s `payBillWithWallet`). The backend debits the
+  /// wallet for the bill's own stored amount (never a client-submitted
+  /// figure) and marks the order and its bill PAID, all in one transaction.
+  ///
+  /// [orderId] is the backend's numeric id — [Purchase.backendId], not the
+  /// order's [Purchase.id] code. Returns false, writing nothing further,
+  /// when the backend is unreachable or refuses the debit (insufficient
+  /// balance, or the bill is already paid).
+  Future<bool> payBillWithWallet({required int orderId}) async {
+    if (!BackendHttp.isConfigured) {
+      return false;
+    }
+    try {
+      await BackendHttp.instance.request(
+        'POST',
+        '/v1/member/orders/$orderId/pay',
+        headers: {'Idempotency-Key': _newIdempotencyKey()},
+      );
+      return true;
+    } catch (error) {
+      BackendHttp.log('OrderRepository.payBillWithWallet failed', error: error);
+      return false;
     }
   }
 

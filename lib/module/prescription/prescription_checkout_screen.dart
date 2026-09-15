@@ -9,6 +9,7 @@ import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_service.dart';
 import '../checkout/checkout_chrome.dart';
+import '../checkout/fulfillment_type.dart';
 import '../checkout/payment_method.dart';
 import '../location/address_book.dart';
 import '../location/address_form_screen.dart';
@@ -36,8 +37,18 @@ class PrescriptionCheckoutScreen extends StatefulWidget {
 
 class _PrescriptionCheckoutScreenState
     extends State<PrescriptionCheckoutScreen> {
-  PaymentMethod _method = PaymentMethods.bankTransfer;
+  // Cash is the safe default — always selectable, unlike wallet, which may
+  // not even be open yet. Bank transfer is no longer offered here.
+  PaymentMethod _method = PaymentMethods.cash;
+  FulfillmentType _fulfillment = FulfillmentType.homeDelivery;
   bool _placing = false;
+
+  void _chooseFulfillment(FulfillmentType fulfillment) {
+    if (fulfillment == _fulfillment) {
+      return;
+    }
+    setState(() => _fulfillment = fulfillment);
+  }
 
   /// The branch this order is served by. The one pinned to the account comes
   /// first — the store chosen at registration or privilege-plan activation —
@@ -83,9 +94,10 @@ class _PrescriptionCheckoutScreenState
     if (_placing) {
       return;
     }
-    // The delivery address is the one thing this screen exists to collect, so
-    // there is no order to place without it.
-    if (AddressBook.instance.deliverTo == null) {
+    // A delivery address is only needed when the order actually ships — a
+    // pickup order has nowhere to deliver to.
+    final needsAddress = _fulfillment == FulfillmentType.homeDelivery;
+    if (needsAddress && AddressBook.instance.deliverTo == null) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -162,6 +174,8 @@ class _PrescriptionCheckoutScreenState
     await PrescriptionRepository.instance.submitForOrder(
       prescriptionIds: prescriptionIds,
       addressId: addressId,
+      fulfillmentType: _fulfillment,
+      paymentMethodCode: _method.id,
     );
   }
 
@@ -210,7 +224,16 @@ class _PrescriptionCheckoutScreenState
             ),
           ),
           const SizedBox(height: 14),
-          const _DeliveryCard(),
+          _FulfillmentCard(
+            selected: _fulfillment,
+            store: _store,
+            onSelect: _chooseFulfillment,
+          ),
+          const SizedBox(height: 14),
+          if (_fulfillment == FulfillmentType.homeDelivery)
+            const _DeliveryCard()
+          else
+            _PickupCard(store: _store),
           const SizedBox(height: 14),
           _PaymentCard(selected: _method, onSelect: _chooseMethod),
         ],
@@ -221,7 +244,8 @@ class _PrescriptionCheckoutScreenState
         listenable: AddressBook.instance,
         builder: (context, _) => _PlaceOrderBar(
           busy: _placing,
-          hasAddress: AddressBook.instance.deliverTo != null,
+          hasAddress: _fulfillment == FulfillmentType.storePickup ||
+              AddressBook.instance.deliverTo != null,
           onPressed: _placeOrder,
         ),
       ),
@@ -333,6 +357,157 @@ class _SummaryCard extends StatelessWidget {
                 ),
               ),
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The home-delivery / store-pickup chooser — the same choice a standard
+/// cart checkout offers, so a prescription order is never limited to
+/// delivery only.
+class _FulfillmentCard extends StatelessWidget {
+  final FulfillmentType selected;
+  final ShieldStore store;
+  final ValueChanged<FulfillmentType> onSelect;
+
+  const _FulfillmentCard({
+    required this.selected,
+    required this.store,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const CheckoutHeading('How should this reach you?'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _FulfillmentChip(
+                  icon: Icons.local_shipping_outlined,
+                  label: FulfillmentType.homeDelivery.label,
+                  selected: selected == FulfillmentType.homeDelivery,
+                  onTap: () => onSelect(FulfillmentType.homeDelivery),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _FulfillmentChip(
+                  icon: Icons.storefront_outlined,
+                  label: FulfillmentType.storePickup.label,
+                  selected: selected == FulfillmentType.storePickup,
+                  onTap: () => onSelect(FulfillmentType.storePickup),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FulfillmentChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FulfillmentChip({
+    required this.icon,
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.chipBlueTint : AppColors.white,
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(
+              color: selected ? AppColors.brandBlue : AppColors.border,
+              width: selected ? 1.4 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? AppColors.brandBlue : AppColors.textMuted,
+              ),
+              const SizedBox(height: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.brandBlue : AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// What "Deliver to" becomes once store pickup is chosen — nothing to add,
+/// just where to go.
+class _PickupCard extends StatelessWidget {
+  final ShieldStore store;
+
+  const _PickupCard({required this.store});
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Row(
+        children: [
+          const Icon(
+            Icons.storefront_outlined,
+            size: 20,
+            color: AppColors.brandBlue,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Pick up in store',
+                  style: TextStyle(
+                    fontSize: 15.5,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${store.name}, ${store.addressLine}',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    height: 1.4,
+                    color: AppColors.textBody,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -461,7 +636,7 @@ class _PaymentCard extends StatelessWidget {
             style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
-          for (final method in PaymentMethods.all) ...[
+          for (final method in PaymentMethods.forOrder) ...[
             _MethodTile(
               method: method,
               selected: method.id == selected.id,
