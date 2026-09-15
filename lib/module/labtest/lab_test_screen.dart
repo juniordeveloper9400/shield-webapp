@@ -60,12 +60,12 @@ class _LabTestScreenState extends State<LabTestScreen> {
               child: ListView.separated(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                itemCount: LabCatalogue.packages.length,
+                itemCount: LabCatalogue.topPackages.length,
                 separatorBuilder: (_, _) => const SizedBox(width: 12),
                 itemBuilder: (context, index) => SizedBox(
                   width: 330,
                   child: PackageCard(
-                    package: LabCatalogue.packages[index],
+                    package: LabCatalogue.topPackages[index],
                     onViewAll: widget.onSeeAllPackages,
                     fillHeight: true,
                   ),

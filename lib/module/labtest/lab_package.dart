@@ -972,6 +972,27 @@ class LabCatalogue {
     ...specialPackages,
   ];
 
+  /// A curated highlight strip for the landing screen's "Top Packages"
+  /// section: the three comprehensive bundles, plus the most-booked of the
+  /// real special panels. [packages] itself runs to dozens of entries now
+  /// that the real price list is in, so "top" needs its own, shorter list —
+  /// the full catalogue is still one tap away via "See all".
+  static final List<LabPackage> topPackages = [
+    preventivePlus,
+    activeLife,
+    completeCare,
+    ...specialPackages.where(
+      (p) => const {
+        'Diabetic Panel 1',
+        'Vitamin Profile',
+        'Thyroid Profile 2',
+        'Cardiac Profile',
+        'Hypertension Panel',
+        'Prostate Profile',
+      }.contains(p.name),
+    ),
+  ];
+
   /// Individually bookable profiles listed under the packages.
   static const List<LabProfile> topProfiles = [
     LabProfile('🩸', 'Complete Blood Count', 24),

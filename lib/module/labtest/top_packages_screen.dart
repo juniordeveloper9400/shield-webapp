@@ -30,7 +30,7 @@ class TopPackagesScreen extends StatelessWidget {
           tooltip: 'Back',
         ),
         title: const Text(
-          'Top Packages',
+          'All Packages',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
