@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/address_repository.dart';
+
 /// What a saved address is used for.
 enum AddressLabel {
   home('Home'),
@@ -128,6 +130,58 @@ class AddressBook extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Merges the member's real, backend-saved addresses in — see
+  /// `AddressRepository.fetchAll`'s doc for why this has to run at all: this
+  /// class was, until now, "in memory only," so an address saved in an
+  /// earlier session (or, on the web build, before the last page reload)
+  /// read as never having been saved at all. Best-effort and additive: an
+  /// address already known locally (matched on every field, the closest
+  /// thing to an id this class has before hydration) is left alone rather
+  /// than duplicated, and [deliverTo] is only set from this when nothing has
+  /// already picked one — [remote]'s last entry, the most recently saved.
+  void hydrateFromBackend(List<Address> remote) {
+    if (remote.isEmpty) {
+      return;
+    }
+    var changed = false;
+    for (final address in remote) {
+      final known = _addresses.any((a) => _sameAddress(a, address));
+      if (!known) {
+        _addresses.add(address);
+        changed = true;
+      }
+    }
+    if (_deliverTo == null && _addresses.isNotEmpty) {
+      _deliverTo = _addresses.last;
+      changed = true;
+    }
+    if (changed) {
+      notifyListeners();
+    }
+  }
+
+  /// Pulls every address the member has actually saved on the backend and
+  /// merges it in via [hydrateFromBackend]. Best-effort: a no-op without a
+  /// configured backend or on a failed read, same contract as every other
+  /// repository-backed refresh in the app (see `WalletService
+  /// .refreshFromDatabase`, which this mirrors).
+  Future<void> refreshFromDatabase() async {
+    final remote = await AddressRepository.instance.fetchAll();
+    if (remote != null) {
+      hydrateFromBackend(remote);
+    }
+  }
+
+  static bool _sameAddress(Address a, Address b) =>
+      a.pincode == b.pincode &&
+      a.house == b.house &&
+      a.area == b.area &&
+      a.landmark == b.landmark &&
+      a.firstName == b.firstName &&
+      a.lastName == b.lastName &&
+      a.phone == b.phone &&
+      a.patientId == b.patientId;
+
   /// Starts delivering to an address already on file — picking one on the
   /// "Select address" list, rather than saving a new one.
   void select(Address address) {
@@ -181,7 +235,10 @@ class AddressBook extends ChangeNotifier {
     notifyListeners();
   }
 
-  @visibleForTesting
+  /// Drops every saved address back to empty — call on sign-out. Otherwise
+  /// the next member signed in on this device would open checkout to the
+  /// previous member's saved addresses, the same leak [WalletService.reset]
+  /// and [AgentService.reset] guard against for the wallet and team roster.
   void reset() {
     _addresses.clear();
     _deliverTo = null;

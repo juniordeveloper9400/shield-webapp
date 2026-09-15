@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/backend/backend_session.dart';
 import '../../data/neon/member_repository.dart';
+import '../location/address_book.dart';
 import '../persona/persona_service.dart';
 import '../registration/registration_service.dart';
 import '../wallet/wallet_service.dart';
@@ -238,6 +239,7 @@ class AuthService {
       if (signedIn) {
         unawaited(PersonaService.instance.reload(user.phone));
         unawaited(WalletService.instance.refreshFromDatabase(user.phone));
+        unawaited(AddressBook.instance.refreshFromDatabase());
       }
     } catch (error) {
       debugPrint('_bridgeToBackend failed: $error');
@@ -303,6 +305,7 @@ class AuthService {
       // same reason — see _bridgeToBackend's own doc.
       unawaited(PersonaService.instance.reload(user.phone));
       unawaited(WalletService.instance.refreshFromDatabase(user.phone));
+      unawaited(AddressBook.instance.refreshFromDatabase());
     }
   }
 
@@ -448,6 +451,7 @@ class AuthService {
     // would open the wallet screen to the previous member's balance and
     // ledger for the instant before refreshFromDatabase's next call lands.
     WalletService.instance.reset();
+    AddressBook.instance.reset();
   }
 
   /// Test hook: puts a member straight into the session, skipping the round

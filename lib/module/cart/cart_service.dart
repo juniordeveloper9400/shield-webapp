@@ -69,7 +69,8 @@ class CartService extends ChangeNotifier {
 
   double get discount => (mrpTotal - subtotal).clamp(0, double.infinity);
 
-  double get deliveryFee => _lines.isEmpty ? 0 : 40;
+  /// Delivery is free — always zero, regardless of cart contents.
+  double get deliveryFee => 0;
 
   double get payable => subtotal + deliveryFee;
 

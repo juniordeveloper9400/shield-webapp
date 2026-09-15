@@ -57,6 +57,13 @@ class CheckoutOrder {
   /// shipped anywhere.
   final bool requiresDelivery;
 
+  /// Whether this order is *for* a specific patient — true for a
+  /// prescription or a lab booking, false for a plain product order, which
+  /// only needs somewhere to send it. Only meaningful alongside
+  /// [requiresDelivery]; defaults true so a caller that never set it keeps
+  /// asking for one, same as before this existed.
+  final bool requiresPatient;
+
   /// Units in the order, for the "N items" line next to the delivery
   /// estimate. Null when there is nothing to count — a privilege plan is not
   /// a quantity of anything.
@@ -70,6 +77,7 @@ class CheckoutOrder {
     required this.submitLabel,
     this.lines = const [],
     this.requiresDelivery = false,
+    this.requiresPatient = true,
     this.itemCount,
   });
 

@@ -9,6 +9,7 @@ import '../../widgets/upload_picker.dart';
 import '../cart/cart_control.dart';
 import '../home/product_showcase.dart';
 import '../location/address_book.dart';
+import '../location/address_selection_screen.dart';
 import '../patients/patient_book.dart';
 import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_service.dart';
@@ -285,7 +286,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       _fulfillment == FulfillmentType.storePickup ||
       AddressBook.instance.deliverTo != null;
 
-  bool get _hasPatient => !widget.order.requiresDelivery || _patient != null;
+  bool get _hasPatient =>
+      !widget.order.requiresDelivery ||
+      !widget.order.requiresPatient ||
+      _patient != null;
 
   // The agent code is optional — an order placed without one is still valid —
   // so it does not gate the step. Only a live method and (where the order
@@ -336,11 +340,21 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     }
   }
 
-  /// Opens "Patient & address details", pre-selecting whoever is chosen
-  /// already. Carries a new choice back; a bare back-press (no Save) returns
-  /// null, which leaves both the address ([AddressBook] notifies on its own)
-  /// and the patient exactly as they were.
-  Future<void> _openPatientAddressDetails() async {
+  /// Opens the "Change" screen behind the deliver-to/patient strip — the
+  /// combined "Patient & address details" screen when this order is *for*
+  /// someone in particular (a prescription, a lab booking), or a plain
+  /// address picker when it is not (a product order only needs somewhere to
+  /// send it). Carries a new patient choice back where one was asked for; a
+  /// bare back-press (no Save) returns null either way, which leaves the
+  /// address ([AddressBook] notifies on its own) and the patient exactly as
+  /// they were.
+  Future<void> _openDeliveryDetails() async {
+    if (!widget.order.requiresPatient) {
+      await Navigator.of(context).push<Address>(
+        MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
+      );
+      return;
+    }
     final chosen = await Navigator.of(context).push<Patient>(
       MaterialPageRoute(
         builder: (_) => PatientAddressDetailsScreen(initialPatient: _patient),
@@ -654,9 +668,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               child: _DeliverToAndPatientSection(
                 address: AddressBook.instance.deliverTo,
                 patient: _patient,
+                requiresPatient: widget.order.requiresPatient,
                 fulfillment: _fulfillment,
                 store: _store,
-                onChange: _openPatientAddressDetails,
+                onChange: _openDeliveryDetails,
               ),
             ),
           CheckoutActionBar(
@@ -1029,13 +1044,19 @@ class _LastMinuteTile extends StatelessWidget {
   }
 }
 
-/// The deliver-to and patient rows, together at the foot of the order
-/// summary — the last thing to confirm before choosing how to pay. Both
-/// "Change" links, and either row itself, open the same combined screen:
-/// picking who an order is for and where it goes is one decision, not two.
+/// The deliver-to (and, where this order is for someone in particular,
+/// patient) rows, together at the foot of the order summary — the last thing
+/// to confirm before choosing how to pay. A plain product order only ever
+/// shows the deliver-to row: it has nowhere else to go, but it isn't *for*
+/// anyone the way a prescription or a lab booking is. Both "Change" links,
+/// and either row itself, open the same screen — the combined one when a
+/// patient is asked for, a plain address picker when it is not.
 class _DeliverToAndPatientSection extends StatelessWidget {
   final Address? address;
   final Patient? patient;
+
+  /// False for a plain product order — see this class's own doc.
+  final bool requiresPatient;
 
   /// Whether this order ships or is collected — a pickup order has no
   /// address requirement, so the row above the patient reads differently.
@@ -1046,6 +1067,7 @@ class _DeliverToAndPatientSection extends StatelessWidget {
   const _DeliverToAndPatientSection({
     required this.address,
     required this.patient,
+    required this.requiresPatient,
     required this.fulfillment,
     required this.store,
     required this.onChange,
@@ -1059,6 +1081,7 @@ class _DeliverToAndPatientSection extends StatelessWidget {
     // Only a pickup order can be missing nothing but a patient — an address
     // is not asked for on that path at all.
     final addressMissing = !pickup && address == null;
+    final patientMissing = requiresPatient && patient == null;
 
     return _Panel(
       child: Column(
@@ -1080,17 +1103,19 @@ class _DeliverToAndPatientSection extends StatelessWidget {
               subtitle: address?.summary,
               onChange: onChange,
             ),
-          const Divider(height: 22, color: AppColors.border),
-          _DetailRow(
-            label: 'PATIENT',
-            title: patient?.name ?? 'Add a patient',
-            subtitle: patient?.summary,
-            onChange: onChange,
-          ),
-          if (addressMissing || patient == null) ...[
+          if (requiresPatient) ...[
+            const Divider(height: 22, color: AppColors.border),
+            _DetailRow(
+              label: 'PATIENT',
+              title: patient?.name ?? 'Add a patient',
+              subtitle: patient?.summary,
+              onChange: onChange,
+            ),
+          ],
+          if (addressMissing || patientMissing) ...[
             const SizedBox(height: 10),
             Text(
-              addressMissing && patient == null
+              addressMissing && patientMissing
                   ? 'A delivery address and a patient are required to '
                         'continue.'
                   : addressMissing
