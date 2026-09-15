@@ -4,8 +4,10 @@ import '../../theme/app_colors.dart';
 import 'agent_direct_sale.dart';
 import 'agent_earnings_card.dart';
 import 'agent_model.dart';
+import 'agent_service.dart';
 import 'agent_team_roster_section.dart';
 import 'agent_team_sales.dart';
+import 'agent_team_skeleton.dart';
 import 'agent_team_tree_screen.dart';
 
 /// The agent's home base, opened from the "Agent Portal" card on the feed.
@@ -21,6 +23,12 @@ class AgentPortalScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Fire-and-forget: ensureLoaded() is idempotent (a no-op once the one
+    // remote fetch it ever makes has settled), so calling it here on every
+    // build is safe and is what actually starts the team's own data
+    // loading — nothing else on the path into this screen does.
+    AgentService.instance.ensureLoaded();
+
     return Scaffold(
       backgroundColor: AppColors.pageTint,
       appBar: AppBar(
@@ -58,9 +66,18 @@ class AgentPortalScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          AgentTeamSalesCard(agent: agent),
-          const SizedBox(height: 18),
-          AgentTeamRosterSection(agent: agent),
+          ListenableBuilder(
+            listenable: AgentService.instance,
+            builder: (context, _) => AgentService.instance.isTeamLoaded
+                ? Column(
+                    children: [
+                      AgentTeamSalesCard(agent: agent),
+                      const SizedBox(height: 18),
+                      AgentTeamRosterSection(agent: agent),
+                    ],
+                  )
+                : const AgentTeamSkeleton(),
+          ),
         ],
       ),
       // Pinned to the bottom, always in reach however far the portal is

@@ -64,6 +64,12 @@ class AgentService extends ChangeNotifier {
 
   // ---- Roster ----
 
+  /// Whether [ensureLoaded]'s remote fetch has settled — a screen showing
+  /// the roster (the team-sales rollup, the member list) reads this to
+  /// decide between its own skeleton and the real thing, so a still-cold
+  /// backend reads as "loading" rather than as a team of zero.
+  bool get isTeamLoaded => _remoteLoaded;
+
   /// Every agent, seed and added, in insertion order.
   List<Agent> get roster => List.unmodifiable(_agents);
 
@@ -123,9 +129,14 @@ class AgentService extends ChangeNotifier {
           }
         }
       }
-      notifyListeners();
     } finally {
       _remoteLoaded = true;
+      // Unconditionally, even when there was nothing new to fold in — an
+      // agent with a genuinely empty team is the common case, not the
+      // exception, and a screen waiting on [isTeamLoaded] to leave its
+      // skeleton needs to hear about that outcome too, not just a non-empty
+      // one.
+      notifyListeners();
       _remoteLoadInFlight = null;
     }
   }

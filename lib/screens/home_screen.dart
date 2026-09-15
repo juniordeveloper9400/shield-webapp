@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../module/agent/agent_portal_card.dart';
 import '../module/agent/agent_service.dart';
 import '../module/auth/auth_service.dart';
+import '../module/home/agent_card_skeleton.dart';
+import '../module/persona/persona_service.dart';
 import '../module/cart/cart_badge.dart';
 import '../module/cart/cart_bar.dart';
 import '../module/cart/cart_service.dart';
@@ -53,21 +55,32 @@ class HomeScreen extends StatelessWidget {
                     // obvious next tap once the total has been read.
                     const EarningsSection(),
                     // Refer & Earn for a member; the Agent Portal in its place
-                    // once a known agent number is signed in.
+                    // once a known agent number is signed in. A skeleton in
+                    // this same slot until PersonaService has actually
+                    // resolved which one that is — otherwise Refer & Earn
+                    // flashes up first for every member, agent or not, and
+                    // is then yanked away the moment the real answer lands.
                     ValueListenableBuilder<AuthUser?>(
                       valueListenable: AuthService.instance.currentUser,
                       builder: (context, user, _) => ListenableBuilder(
-                        // Also rebuild when PersonaService applies the
-                        // admin-granted agent row, which arrives a beat after
-                        // sign-in.
-                        listenable: AgentService.instance,
+                        listenable: PersonaService.instance,
                         builder: (context, _) {
-                          final agent = AgentService.instance.agentForPhone(
-                            user?.phone,
+                          if (user != null && !PersonaService.instance.isResolved) {
+                            return const AgentCardSkeleton();
+                          }
+                          // Also rebuild when PersonaService applies the
+                          // admin-granted agent row, which arrives a beat
+                          // after sign-in.
+                          return ListenableBuilder(
+                            listenable: AgentService.instance,
+                            builder: (context, _) {
+                              final agent = AgentService.instance
+                                  .agentForPhone(user?.phone);
+                              return agent == null
+                                  ? const ReferEarnCard()
+                                  : AgentPortalCard(agent: agent);
+                            },
                           );
-                          return agent == null
-                              ? const ReferEarnCard()
-                              : AgentPortalCard(agent: agent);
                         },
                       ),
                     ),
