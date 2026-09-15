@@ -10,6 +10,7 @@ import 'package:shield/module/checkout/fulfillment_type.dart';
 import 'package:shield/module/checkout/payment_method.dart';
 import 'package:shield/module/orders/order_detail_sections.dart';
 import 'package:shield/module/orders/purchase_service.dart';
+import 'package:shield/module/privilege/privilege_tier.dart';
 import 'package:shield/module/wallet/wallet_service.dart';
 
 void main() {
@@ -55,6 +56,60 @@ void main() {
       // rather than assuming it.
       expect(wallet.isActivated, isFalse);
       expect(wallet.spendBalance(amount: 100, label: 'Order X'), isFalse);
+    });
+  });
+
+  // migration: monthly-capped wallet checkout — a product purchase draws
+  // only up to what this month's allowance has released, leaving any excess
+  // for the member to pay another way. See checkout_screen.dart's
+  // _walletShare / order.service.ts's checkout().
+  group('WalletService monthly-capped checkout', () {
+    setUp(() => WalletService.instance.reset());
+
+    test('walletShareOf caps a big order at the monthly allowance, not the full balance', () {
+      final wallet = WalletService.instance;
+      final load = PrivilegeProgramme.loadFor(10000)!; // ₹10,000 + 10% bonus = ₹11,000
+      wallet.activate(load);
+      expect(wallet.isActivated, isTrue);
+
+      // A ₹5,000 order is nowhere near the ₹11,000 balance, but this card's
+      // first monthly instalment is only ~₹916 — that is what caps it.
+      final share = wallet.walletShareOf(5000);
+      expect(share, wallet.monthlyBalance);
+      expect(share, lessThan(5000));
+      expect(share, lessThan(wallet.balance));
+    });
+
+    test('walletShareOf covers a small order in full when it fits the allowance', () {
+      final wallet = WalletService.instance;
+      wallet.activate(PrivilegeProgramme.loadFor(10000)!);
+      expect(wallet.walletShareOf(200), 200);
+    });
+
+    test('spendMonthlyShare debits the balance and shows up in redeemedThisMonth', () {
+      final wallet = WalletService.instance;
+      wallet.activate(PrivilegeProgramme.loadFor(10000)!);
+      final balanceBefore = wallet.balance;
+      final share = wallet.walletShareOf(5000);
+
+      final spent = wallet.spendMonthlyShare(amount: share, label: 'Order SHD-1');
+      expect(spent, isTrue);
+      expect(wallet.balance, balanceBefore - share);
+      expect(wallet.redeemedThisMonth, share);
+      // The whole month's instalment was just asked for, so nothing is left.
+      expect(wallet.monthlyBalance, 0);
+      expect(wallet.walletShareOf(500), 0);
+    });
+
+    test('a plain spendBalance debit also counts toward redeemedThisMonth once dated this month', () {
+      // Unlike the old design, redeemedThisMonth is now derived from every
+      // debit dated in the current calendar month — not a separately
+      // tracked counter only spendMonthlyShare moves — so it reflects real,
+      // backend-hydrated spend history the same way on every platform.
+      final wallet = WalletService.instance;
+      wallet.activate(PrivilegeProgramme.loadFor(10000)!);
+      wallet.spendBalance(amount: 300, label: 'Priced bill');
+      expect(wallet.redeemedThisMonth, 300);
     });
   });
 

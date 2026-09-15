@@ -100,8 +100,10 @@ abstract final class PaymentMethods {
   static List<PaymentMethod> get live =>
       all.where((method) => method.isLive).toList();
 
-  /// Pay from the SHIELD wallet balance — instant, and never "coming soon":
-  /// the balance either covers the order or it does not.
+  /// Pay from the SHIELD wallet balance — instant, and never "coming soon".
+  /// Capped at what this month's wallet allowance has left
+  /// ([WalletService.walletShareOf]), not the account's full balance; any
+  /// remainder on the order is paid in cash alongside it.
   static const PaymentMethod wallet = PaymentMethod(
     id: 'wallet',
     name: 'Wallet balance',

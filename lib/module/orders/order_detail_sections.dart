@@ -1267,13 +1267,22 @@ class _PayBillSheetState extends State<_PayBillSheet> {
     if (_amount <= 0 || backendId == null) {
       return;
     }
-    if (!wallet.isActivated || wallet.balance < _amount) {
-      _toast(context, 'Not enough wallet balance to pay this bill.');
+    // This sheet only offers a single, whole-amount wallet payment — no
+    // split — so it needs the month's allowance to cover the bill in full,
+    // same monthly cap a product checkout now applies (see
+    // WalletService.walletShareOf).
+    if (wallet.walletShareOf(_amount) < _amount) {
+      _toast(
+        context,
+        wallet.isActivated
+            ? "This month's wallet allowance won't cover this bill. Pay by cash instead."
+            : 'Not enough wallet balance to pay this bill.',
+      );
       return;
     }
 
     setState(() => _busy = true);
-    final spent = wallet.spendBalance(
+    final spent = wallet.spendMonthlyShare(
       amount: _amount,
       label: 'Order ${widget.order.id}',
     );
@@ -1285,10 +1294,27 @@ class _PayBillSheetState extends State<_PayBillSheet> {
       return;
     }
 
-    // Best-effort write-through, same contract as every other order write —
-    // the local wallet debit above and the optimistic update below are what
-    // the member actually sees; this is what keeps the backend in step.
-    unawaited(OrderRepository.instance.payBillWithWallet(orderId: backendId));
+    // Awaited, unlike every other write-through in this file: the wallet
+    // debit above already happened locally, so a refusal here (a race, a
+    // stale client-side figure) has to be told apart from success, and
+    // either way the wallet needs to reconcile back to the real balance
+    // rather than sit on a local spend the backend never actually made.
+    final ok = await OrderRepository.instance.payBillWithWallet(orderId: backendId);
+    final user = AuthService.instance.currentUser.value;
+    if (user != null) {
+      unawaited(WalletService.instance.refreshFromDatabase(user.phone));
+    }
+
+    if (!ok) {
+      if (mounted) {
+        setState(() => _busy = false);
+        _toast(
+          context,
+          'Wallet payment did not go through. Your balance has been restored — try again.',
+        );
+      }
+      return;
+    }
 
     PurchaseService.instance.updateOne(
       widget.order.copyWith(

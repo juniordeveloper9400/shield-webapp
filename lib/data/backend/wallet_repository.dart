@@ -1,6 +1,32 @@
 import '../../module/privilege/privilege_tier.dart';
 import 'backend_http.dart';
 
+/// The wallet's own row — `GET /v1/member/wallet` (`wallet.service.ts`'s
+/// `getOrCreateWallet`). The one authoritative figure for [balance]: the
+/// column every debit and credit in `wallet_entry` is written against in the
+/// same transaction, never derived client-side.
+class RemoteWallet {
+  final int balance;
+  final int rewardPoints;
+
+  const RemoteWallet({required this.balance, required this.rewardPoints});
+}
+
+/// One row of the real ledger behind [RemoteWallet.balance] —
+/// `GET /v1/member/wallet/entries`. Credits positive, debits negative, same
+/// convention as [WalletEntry].
+class RemoteWalletEntry {
+  final String label;
+  final int amount;
+  final DateTime occurredOn;
+
+  const RemoteWalletEntry({
+    required this.label,
+    required this.amount,
+    required this.occurredOn,
+  });
+}
+
 /// A privilege card as it stands on the backend — what the app reads back to
 /// learn whether a submitted plan has been approved yet.
 class RemoteWalletCard {
@@ -138,6 +164,53 @@ class WalletRepository {
       ];
     } catch (error) {
       BackendHttp.log('WalletRepository.fetchCards failed', error: error);
+      return null;
+    }
+  }
+
+  /// The wallet's real, server-held balance — the source of truth
+  /// [WalletService.refreshFromDatabase] hydrates against, in place of the
+  /// figure it would otherwise only ever compute from local activity. Null
+  /// when the backend is unconfigured or unreachable, same contract as every
+  /// other read here.
+  Future<RemoteWallet?> fetchWallet() async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final row =
+          await BackendHttp.instance.request('GET', '/v1/member/wallet')
+              as Map<String, dynamic>;
+      return RemoteWallet(
+        balance: _int(row['balance']),
+        rewardPoints: _int(row['rewardPoints']),
+      );
+    } catch (error) {
+      BackendHttp.log('WalletRepository.fetchWallet failed', error: error);
+      return null;
+    }
+  }
+
+  /// The full ledger behind [fetchWallet]'s balance, newest first — every
+  /// top-up, bonus, and spend the backend has ever posted for this member.
+  Future<List<RemoteWalletEntry>?> fetchEntries() async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows =
+          await BackendHttp.instance.request('GET', '/v1/member/wallet/entries')
+              as List<dynamic>;
+      return [
+        for (final row in rows.cast<Map<String, dynamic>>())
+          RemoteWalletEntry(
+            label: (row['label'] ?? '').toString(),
+            amount: _int(row['amount']),
+            occurredOn: _date(row['occurredOn']) ?? DateTime.now(),
+          ),
+      ];
+    } catch (error) {
+      BackendHttp.log('WalletRepository.fetchEntries failed', error: error);
       return null;
     }
   }

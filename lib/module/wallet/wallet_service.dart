@@ -18,11 +18,19 @@ class WalletEntry {
   /// Positive credits, negative debits, in whole rupees.
   final int amount;
 
-  const WalletEntry({
+  /// When this actually happened. Real, backend-sourced entries carry their
+  /// true `wallet_entry.occurred_on`; an entry added optimistically before
+  /// the next sync defaults to now. [WalletService.redeemedThisMonth] reads
+  /// this to work out what has left the wallet in the current calendar
+  /// month, so a hydrate from the backend can't silently drop it.
+  final DateTime occurredOn;
+
+  WalletEntry({
     required this.label,
     required this.date,
     required this.amount,
-  });
+    DateTime? occurredOn,
+  }) : occurredOn = occurredOn ?? DateTime.now();
 
   bool get isCredit => amount >= 0;
 }
@@ -278,7 +286,6 @@ class WalletService extends ChangeNotifier {
   static const List<WalletEntry> _seed = [];
 
   int _balance = openingBalance;
-  int _redeemed = 0;
   final List<WalletEntry> _entries = List.of(_seed);
 
   /// The cards on the account, oldest first, or empty while the wallet is
@@ -470,14 +477,48 @@ class WalletService extends ChangeNotifier {
     }
   }
 
-  /// Pulls the member's privilege cards from Neon and applies any approvals or
-  /// rejections. Best-effort: a no-op without a database or on a failed read.
+  /// Pulls the member's privilege cards, real balance and ledger from the
+  /// backend and applies all three. Best-effort: a no-op on any piece the
+  /// backend is unconfigured or unreachable for.
+  ///
+  /// This is what keeps [balance] and [entries] honest — without it they are
+  /// only ever the local, in-memory total of whatever [spendBalance] /
+  /// [spendMonthlyShare] / [topUp] happened to run in this exact app
+  /// instance, which a page reload (web) or a restart (APK) wipes back to
+  /// zero, and which the APK and the webapp can never agree on since neither
+  /// ever heard about the other's spend. Call on sign-in, session restore,
+  /// app resume, and right after any checkout that might have touched the
+  /// wallet — see the call sites in `auth_service.dart`, `cart_screen.dart`
+  /// and `order_detail_sections.dart`.
   Future<void> refreshFromDatabase(String memberPhone) async {
-    final remote = await WalletRepository.instance.fetchCards(
-      memberPhone: memberPhone,
-    );
-    if (remote != null) {
-      applyRemoteCards(remote);
+    final results = await Future.wait([
+      WalletRepository.instance.fetchCards(memberPhone: memberPhone),
+      WalletRepository.instance.fetchWallet(),
+      WalletRepository.instance.fetchEntries(),
+    ]);
+    final remoteCards = results[0] as List<RemoteWalletCard>?;
+    final remoteWallet = results[1] as RemoteWallet?;
+    final remoteEntries = results[2] as List<RemoteWalletEntry>?;
+
+    if (remoteCards != null) {
+      applyRemoteCards(remoteCards);
+    }
+    // Both or neither: a balance with no ledger behind it (or the reverse)
+    // would show a total the entries list under it cannot explain.
+    if (remoteWallet != null && remoteEntries != null) {
+      _balance = remoteWallet.balance;
+      _entries
+        ..clear()
+        ..addAll([
+          for (final entry in remoteEntries)
+            WalletEntry(
+              label: entry.label,
+              date: formatDate(entry.occurredOn),
+              amount: entry.amount,
+              occurredOn: entry.occurredOn,
+            ),
+        ]);
+      notifyListeners();
     }
   }
 
@@ -542,10 +583,23 @@ class WalletService extends ChangeNotifier {
 
   /// Drawn against this month's allowance so far.
   ///
-  /// Only what has been spent since a card opened the wallet counts: the
-  /// seeded ledger predates the card, and was paid out of the wallet's own
-  /// balance rather than against an allowance that did not exist yet.
-  int get redeemedThisMonth => _redeemed;
+  /// Derived from the ledger rather than a running counter — every debit
+  /// dated in the current calendar month, [WalletEntry.occurredOn] and all —
+  /// so it reads the same on the APK and the webapp the moment both have
+  /// pulled the same [refreshFromDatabase] entries, and survives a refresh
+  /// instead of resetting with it.
+  int get redeemedThisMonth {
+    final now = DateTime.now();
+    var total = 0;
+    for (final entry in _entries) {
+      if (entry.amount < 0 &&
+          entry.occurredOn.year == now.year &&
+          entry.occurredOn.month == now.month) {
+        total += -entry.amount;
+      }
+    }
+    return total;
+  }
 
   /// What is left of this month's allowance.
   ///
@@ -553,8 +607,20 @@ class WalletService extends ChangeNotifier {
   /// has been used up is used up, and a negative one would read as a debt the
   /// member does not owe.
   int get monthlyBalance {
-    final left = monthlyRedeemable - _redeemed;
+    final left = monthlyRedeemable - redeemedThisMonth;
     return left < 0 ? 0 : left;
+  }
+
+  /// The most a purchase of [orderAmount] can draw from the wallet: capped at
+  /// this month's remaining allowance, and never more than the real balance
+  /// behind it. Whatever is left over — [orderAmount] minus this — is what
+  /// the member pays another way.
+  int walletShareOf(int orderAmount) {
+    if (!isActivated || orderAmount <= 0) {
+      return 0;
+    }
+    final cap = math.min(monthlyBalance, _balance);
+    return math.min(orderAmount, cap);
   }
 
   /// Newest first, which is the order the screen reads them in.
@@ -642,9 +708,9 @@ class WalletService extends ChangeNotifier {
 
   /// Spends [amount] against the wallet, drawing on this month's allowance.
   ///
-  /// The one debit path, so [redeemedThisMonth] cannot drift from the ledger.
   /// Refused when the wallet is closed or the balance would go negative — the
-  /// wallet holds real money and cannot be overdrawn.
+  /// wallet holds real money and cannot be overdrawn. [redeemedThisMonth] is
+  /// derived from the ledger this inserts into, so it moves on its own.
   bool spend({
     required int amount,
     required String label,
@@ -655,25 +721,47 @@ class WalletService extends ChangeNotifier {
     }
 
     _balance -= amount;
-    _redeemed += amount;
     _entries.insert(0, WalletEntry(label: label, date: date, amount: -amount));
     notifyListeners();
     return true;
   }
 
-  /// Spends [amount] straight off the wallet's real balance — an order paid
-  /// for at checkout, not a reward redeemed against the month's allowance.
+  /// Spends [amount] straight off the wallet's real balance with no monthly
+  /// cap of its own — used for a debit the caller has already capped some
+  /// other way (a priced bill paid in full, for instance).
   ///
-  /// Deliberately not [spend]: that method draws against
-  /// [redeemedThisMonth], the reward-release allowance, which is a narrower,
-  /// unrelated figure from the member's actual spendable [balance]. Paying
-  /// for a ₹2,000 order through [spend] would wrongly cap it at whatever this
-  /// month's reward instalment happens to be. This method only ever touches
-  /// [balance] itself, and never moves [redeemedThisMonth].
+  /// Prefer [spendMonthlyShare] for a product checkout: that is the one path
+  /// that keeps a purchase inside this month's allowance and lets a member
+  /// pay the rest another way. This method exists for callers that already
+  /// know [amount] is the whole, uncapped figure to take off [balance].
   ///
   /// Refused — changing nothing — while the wallet is closed or the balance
   /// cannot cover [amount].
   bool spendBalance({
+    required int amount,
+    required String label,
+    String date = 'Today',
+  }) {
+    if (!isActivated || amount <= 0 || amount > _balance) {
+      return false;
+    }
+
+    _balance -= amount;
+    _entries.insert(0, WalletEntry(label: label, date: date, amount: -amount));
+    notifyListeners();
+    return true;
+  }
+
+  /// Spends [amount] off the real balance as a product checkout's wallet
+  /// share — the amount [walletShareOf] already capped at what this month's
+  /// allowance has left, never the order's full price. Call this instead of
+  /// [spendBalance] wherever a purchase must stay inside the monthly limit
+  /// and let the member pay any remainder another way.
+  ///
+  /// Refused — changing nothing — while the wallet is closed or the balance
+  /// cannot cover [amount]. Does not re-check the monthly cap itself: the
+  /// caller is expected to have already sized [amount] with [walletShareOf].
+  bool spendMonthlyShare({
     required int amount,
     required String label,
     String date = 'Today',
@@ -747,12 +835,15 @@ class WalletService extends ChangeNotifier {
     return true;
   }
 
-  @visibleForTesting
+  /// Drops every bit of state back to a closed, empty wallet — call on
+  /// sign-out. Otherwise the next member signed in on this device would
+  /// inherit whatever balance and ledger the previous member's session had
+  /// hydrated, the same leak [AgentService.reset] guards against for the
+  /// team roster.
   void reset() {
     _cards.clear();
     _pending.clear();
     _balance = openingBalance;
-    _redeemed = 0;
     _entries
       ..clear()
       ..addAll(_seed);

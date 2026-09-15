@@ -55,6 +55,12 @@ class PaymentReceipt {
   /// never paid by wallet.
   final bool paidViaWallet;
 
+  /// How much of the order [paidViaWallet] actually took off the wallet —
+  /// may be less than the order's total when the member's monthly allowance
+  /// didn't cover all of it (see `WalletService.walletShareOf`), with the
+  /// rest due another way. Zero when [paidViaWallet] is false.
+  final int walletAmountPaid;
+
   const PaymentReceipt({
     required this.method,
     required this.fileName,
@@ -68,5 +74,6 @@ class PaymentReceipt {
     this.imageDataUrl,
     this.fulfillmentType = FulfillmentType.homeDelivery,
     this.paidViaWallet = false,
+    this.walletAmountPaid = 0,
   });
 }

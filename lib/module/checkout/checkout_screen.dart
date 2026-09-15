@@ -302,12 +302,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
 
   bool get _canSubmit => _canContinue && _receipt.isComplete && !_receipt.busy;
 
-  /// Whether wallet balance actually covers this order right now — the same
-  /// check the wallet tile disables itself on, repeated here as the submit
-  /// button's own guard rather than trusted to the tile alone.
-  bool get _walletCanCoverOrder =>
-      WalletService.instance.isActivated &&
-      WalletService.instance.balance >= _order.amount;
+  /// How much of this order the wallet can take right now — capped at this
+  /// month's allowance, not the account's full balance (see
+  /// [WalletService.walletShareOf]). Any remainder is paid another way, so
+  /// wallet stays a usable choice even when it covers only part of the
+  /// order — the same figure the wallet tile shows and disables itself on.
+  int get _walletShare =>
+      WalletService.instance.walletShareOf(_order.amount.round());
+
+  /// Whether wallet is worth offering at all right now — the same check the
+  /// wallet tile disables itself on, repeated here as the submit button's
+  /// own guard rather than trusted to the tile alone.
+  bool get _walletCanCoverOrder => _walletShare > 0;
 
   /// Gates the direct place-order submit on the delivering path: a live,
   /// affordable method, the address/patient requirement, and not already
@@ -415,8 +421,10 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   /// Places a delivering order directly off step one: no bank-transfer step,
-  /// no receipt to attach. Wallet debits the balance first — refusing to
-  /// proceed if that fails — cash just records the choice.
+  /// no receipt to attach. Wallet debits its share of the balance first —
+  /// capped at this month's allowance, never the order's full price —
+  /// refusing to proceed if that fails; whatever is left over is recorded as
+  /// due in cash. Pure cash just records the choice.
   Future<void> _submitDelivering() async {
     if (!_canPlaceOrder) {
       return;
@@ -424,10 +432,14 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
     setState(() => _placingOrder = true);
     try {
       final paidByWallet = _method.id == PaymentMethods.wallet.id;
-      if (paidByWallet) {
-        final spent = WalletService.instance.spendBalance(
-          amount: _order.amount.round(),
-          label: 'Order ${_order.reference}',
+      final walletShare = paidByWallet ? _walletShare : 0;
+      if (paidByWallet && walletShare > 0) {
+        final cashRemainder = _order.amount.round() - walletShare;
+        final spent = WalletService.instance.spendMonthlyShare(
+          amount: walletShare,
+          label: cashRemainder > 0
+              ? 'Order ${_order.reference} (wallet share)'
+              : 'Order ${_order.reference}',
         );
         if (!spent) {
           if (mounted) {
@@ -458,6 +470,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           submittedAt: DateTime.now(),
           fulfillmentType: _fulfillment,
           paidViaWallet: paidByWallet,
+          walletAmountPaid: walletShare,
         ),
       );
       if (!mounted) return;
@@ -1518,12 +1531,14 @@ class _WalletCashPanel extends StatelessWidget {
       listenable: WalletService.instance,
       builder: (context, _) {
         final wallet = WalletService.instance;
-        final affordable = wallet.isActivated && wallet.balance >= amount;
+        final share = wallet.walletShareOf(amount.round());
+        final remainder = amount.round() - share;
+        final selectable = share > 0;
         final String? deniedNote = !wallet.isActivated
             ? 'Get a Sahakar HealthPass first'
-            : affordable
+            : selectable
             ? null
-            : 'Insufficient balance';
+            : "This month's wallet allowance is used up";
 
         return _Panel(
           child: Column(
@@ -1532,10 +1547,11 @@ class _WalletCashPanel extends StatelessWidget {
               const CheckoutHeading('Payment option'),
               const SizedBox(height: 10),
               _WalletMethodTile(
-                selected: selected.id == PaymentMethods.wallet.id && affordable,
-                balance: wallet.balance,
+                selected: selected.id == PaymentMethods.wallet.id && selectable,
+                share: share,
+                remainder: remainder,
                 deniedNote: deniedNote,
-                onTap: affordable
+                onTap: selectable
                     ? () => onSelect(PaymentMethods.wallet)
                     : null,
               ),
@@ -1553,17 +1569,24 @@ class _WalletCashPanel extends StatelessWidget {
   }
 }
 
-/// The wallet tile on [_WalletCashPanel]: the live balance when it can cover
-/// the order, or the reason it cannot be picked right now.
+/// The wallet tile on [_WalletCashPanel]: this month's wallet share of the
+/// order when there is one to offer, or the reason there is not.
 class _WalletMethodTile extends StatelessWidget {
   final bool selected;
-  final int balance;
+
+  /// What the wallet would cover of this order, this month.
+  final int share;
+
+  /// What is left over once [share] is taken off — paid in cash.
+  final int remainder;
+
   final String? deniedNote;
   final VoidCallback? onTap;
 
   const _WalletMethodTile({
     required this.selected,
-    required this.balance,
+    required this.share,
+    required this.remainder,
     required this.deniedNote,
     required this.onTap,
   });
@@ -1572,6 +1595,10 @@ class _WalletMethodTile extends StatelessWidget {
   Widget build(BuildContext context) {
     final method = PaymentMethods.wallet;
     final denied = deniedNote != null;
+    final subtitle = deniedNote ??
+        (remainder > 0
+            ? '₹${formatRupees(share)} from wallet · ₹${formatRupees(remainder)} in cash'
+            : '₹${formatRupees(share)} from wallet');
 
     return Material(
       color: selected ? method.tint : AppColors.white,
@@ -1613,7 +1640,7 @@ class _WalletMethodTile extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      deniedNote ?? '₹${formatRupees(balance)} available',
+                      subtitle,
                       style: TextStyle(
                         fontSize: 12.5,
                         color: denied ? AppColors.danger : AppColors.textMuted,

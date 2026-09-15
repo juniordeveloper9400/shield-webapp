@@ -118,6 +118,14 @@ class OrderRepository {
     String? receiptFileName,
     FulfillmentType fulfillmentType = FulfillmentType.homeDelivery,
     String? paymentMethodCode,
+    /// The wallet's share of the total when [paymentMethodCode] is
+    /// `'wallet'` and it does not cover the whole order — the split
+    /// [WalletService.walletShareOf] worked out client-side, so the backend
+    /// debits only this much (see `order.service.ts`'s `checkout`) and
+    /// leaves the order PENDING with the rest due another way, instead of
+    /// debiting the full total or refusing the order outright. Omitted (or
+    /// null) debits the full total, same as before this existed.
+    int? walletAmount,
   }) async {
     if (!BackendHttp.isConfigured || lines.isEmpty) {
       return null;
@@ -164,6 +172,7 @@ class OrderRepository {
           if (addressId != null) 'deliveryAddressId': addressId,
           if (reference != null) 'reference': reference,
           if (paymentMethodId != null) 'paymentMethodId': paymentMethodId,
+          if (walletAmount != null) 'walletAmount': walletAmount,
           'fulfillmentType': fulfillmentType == FulfillmentType.storePickup
               ? 'STORE_PICKUP'
               : 'HOME_DELIVERY',

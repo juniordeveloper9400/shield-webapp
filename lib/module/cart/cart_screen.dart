@@ -15,6 +15,7 @@ import '../orders/order_placed_screen.dart';
 import '../orders/purchase_service.dart';
 import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_flow.dart';
+import '../wallet/wallet_service.dart';
 import 'cart_control.dart';
 import 'cart_service.dart';
 
@@ -105,6 +106,13 @@ class _CartScreenState extends State<CartScreen> {
           liveTotals: _cart,
           refreshOrder: buildOrder,
           onComplete: (receipt) async {
+            // A wallet payment only fully settles the order when its share
+            // covered the whole payable total — a partial wallet share (this
+            // month's allowance ran short) leaves the rest due in cash, so
+            // the order stays pending like a cash order, same as the
+            // backend's own order.paymentStatus logic in checkout().
+            final fullyPaidByWallet = receipt.paidViaWallet &&
+                receipt.walletAmountPaid >= _cart.payable.round();
             // Read fresh rather than from whatever was captured when this
             // screen first opened — the very last-minute buy could still be
             // sitting in the cart, uncounted, otherwise.
@@ -116,36 +124,52 @@ class _CartScreenState extends State<CartScreen> {
               paidTotal: _cart.subtotal.round(),
               kind: OrderKind.standard,
               fulfillmentType: receipt.fulfillmentType,
-              paymentStatus: receipt.paidViaWallet
+              paymentStatus: fullyPaidByWallet
                   ? OrderPaymentStatus.paid
                   : OrderPaymentStatus.pending,
             );
             // Write the order through to the backend while the cart lines
             // are still here to copy. Best-effort: an unconfigured backend
-            // (tests) or one that's down must not stop the order.
+            // (tests) or one that's down must not stop the order. Awaited —
+            // unlike every other write-through here — because a wallet
+            // payment already debited the local balance up front: if the
+            // backend refuses the debit (a race, a stale client figure), the
+            // wallet has to be told to reconcile back to the real balance
+            // rather than sit on a spend that never actually happened.
             final user = AuthService.instance.currentUser.value;
             if (user != null) {
-              unawaited(
-                OrderRepository.instance.checkoutStandardOrder(
-                  lines: List.of(_cart.lines),
-                  address: AddressBook.instance.deliverTo,
-                  reference: receipt.bankReference.isEmpty
-                      ? id
-                      : receipt.bankReference,
-                  fulfillmentType: receipt.fulfillmentType,
-                  paymentMethodCode: receipt.method.id,
-                  // A delivering order (wallet or cash) never uploads a
-                  // receipt file — only the bank-transfer path does.
-                  receiptPayerName: receipt.fileName.isEmpty ? null : user.name,
-                  receiptReference: receipt.fileName.isEmpty
-                      ? null
-                      : receipt.bankReference,
-                  receiptAmount: receipt.fileName.isEmpty ? null : _cart.payable,
-                  receiptFileName: receipt.fileName.isEmpty
-                      ? null
-                      : receipt.fileName,
-                ),
+              final orderId = await OrderRepository.instance.checkoutStandardOrder(
+                lines: List.of(_cart.lines),
+                address: AddressBook.instance.deliverTo,
+                reference: receipt.bankReference.isEmpty
+                    ? id
+                    : receipt.bankReference,
+                fulfillmentType: receipt.fulfillmentType,
+                paymentMethodCode: receipt.method.id,
+                walletAmount:
+                    receipt.paidViaWallet ? receipt.walletAmountPaid : null,
+                // A delivering order (wallet or cash) never uploads a
+                // receipt file — only the bank-transfer path does.
+                receiptPayerName: receipt.fileName.isEmpty ? null : user.name,
+                receiptReference: receipt.fileName.isEmpty
+                    ? null
+                    : receipt.bankReference,
+                receiptAmount: receipt.fileName.isEmpty ? null : _cart.payable,
+                receiptFileName: receipt.fileName.isEmpty
+                    ? null
+                    : receipt.fileName,
               );
+              if (receipt.paidViaWallet) {
+                // Whether that debit landed or was rolled back, this is what
+                // brings the wallet back in step with the real, server-held
+                // balance — see WalletService.refreshFromDatabase.
+                unawaited(WalletService.instance.refreshFromDatabase(user.phone));
+                if (orderId == null && placed != null) {
+                  PurchaseService.instance.updateOne(
+                    placed!.copyWith(paymentStatus: OrderPaymentStatus.pending),
+                  );
+                }
+              }
             }
             _cart.clear();
           },

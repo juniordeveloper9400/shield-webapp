@@ -7,6 +7,7 @@ import '../../data/backend/backend_session.dart';
 import '../../data/neon/member_repository.dart';
 import '../persona/persona_service.dart';
 import '../registration/registration_service.dart';
+import '../wallet/wallet_service.dart';
 import 'otp_send_throttle.dart';
 
 /// A signed-in member.
@@ -236,6 +237,7 @@ class AuthService {
       );
       if (signedIn) {
         unawaited(PersonaService.instance.reload(user.phone));
+        unawaited(WalletService.instance.refreshFromDatabase(user.phone));
       }
     } catch (error) {
       debugPrint('_bridgeToBackend failed: $error');
@@ -300,6 +302,7 @@ class AuthService {
       // exchanged one), so it needs the exact same re-check for the exact
       // same reason — see _bridgeToBackend's own doc.
       unawaited(PersonaService.instance.reload(user.phone));
+      unawaited(WalletService.instance.refreshFromDatabase(user.phone));
     }
   }
 
@@ -441,6 +444,10 @@ class AuthService {
     // memory — and visible on the register bar — for whichever account (or
     // none) signs in next on this device.
     RegistrationService.instance.clearForSignOut();
+    // Same reason: without this the next member signed in on this device
+    // would open the wallet screen to the previous member's balance and
+    // ledger for the instant before refreshFromDatabase's next call lands.
+    WalletService.instance.reset();
   }
 
   /// Test hook: puts a member straight into the session, skipping the round
