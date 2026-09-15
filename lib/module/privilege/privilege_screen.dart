@@ -122,7 +122,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
               ..showSnackBar(
                 const SnackBar(
                   content: Text(
-                    'Please complete registration to activate the Health Pass Programme',
+                    'Please complete registration to purchase Sahakar HealthPass',
                   ),
                 ),
               );
@@ -142,19 +142,22 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
             storeSelectable: true,
             order: CheckoutOrder(
               title: load.name,
-              subtitle: 'Health Pass Programme activation',
+              subtitle: 'Sahakar HealthPass purchase',
               amount: load.amount.toDouble(),
               reference:
                   'PV-${DateTime.now().millisecondsSinceEpoch.remainder(100000)}',
               submitLabel: 'Submit receipt',
               lines: [
-                CheckoutLine('Plan amount', load.amount.toDouble()),
+                CheckoutLine('You pay', load.amount.toDouble()),
                 CheckoutLine(
-                  'Wallet bonus',
+                  'Promotional purchase benefit',
                   load.bonus.toDouble(),
                   isCredit: true,
                 ),
-                CheckoutLine('Wallet credit', load.credited.toDouble()),
+                CheckoutLine(
+                  'Eligible purchase value',
+                  load.credited.toDouble(),
+                ),
               ],
             ),
             onComplete: (receipt) async {
@@ -246,8 +249,8 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
           SnackBar(
             content: Text(
               'Receipt submitted · ${load.name} is with the counter for '
-              'approval. ${load.creditedLabel} lands in your wallet once it is '
-              'approved.',
+              'approval. ${load.creditedLabel} in eligible purchase value '
+              'will be added to your wallet once it is approved.',
             ),
           ),
         );
@@ -275,7 +278,7 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
         surfaceTintColor: AppColors.white,
         elevation: 0,
         title: const Text(
-          'Health Pass Programme',
+          'Sahakar HealthPass',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -570,7 +573,7 @@ class _AmountPanel extends StatelessWidget {
   }
 }
 
-/// "Benefits up to ₹33,000" — the figure the card is sold on.
+/// "Eligible purchase value up to ₹33,000" — the figure the card is sold on.
 ///
 /// Its largest load plus the bonus on it, worked out rather than written
 /// down, so it cannot drift from the amounts listed underneath it.
@@ -589,7 +592,7 @@ class _BenefitsHeadline extends StatelessWidget {
           child: Text.rich(
             TextSpan(
               children: [
-                const TextSpan(text: 'Benefits up to '),
+                const TextSpan(text: 'Eligible purchase value up to '),
                 TextSpan(
                   text: tier.benefitsUpToLabel,
                   style: TextStyle(
@@ -760,7 +763,7 @@ class _AmountRow extends StatelessWidget {
                         ),
                         const SizedBox(height: 1),
                         Text(
-                          '+ ${load.bonusLabel} free',
+                          '+ ${load.bonusLabel} promotional benefit',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
@@ -792,7 +795,7 @@ class _AmountRow extends StatelessWidget {
                         ),
                       ),
                       Text(
-                        'credited',
+                        'eligible value',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(fontSize: 10.5, color: quiet),
@@ -801,16 +804,15 @@ class _AmountRow extends StatelessWidget {
                   ),
                 ],
               ),
-              // What the amount comes to month by month, on the row being
-              // activated. A card is a year of medicine bought up front, and
-              // a member weighing ₹10,000 is really asking whether it beats
-              // what they already hand over at the counter each month — which
-              // is a question ₹10,000 does not answer and ₹916 does.
+              // A general validity note rather than a specific monthly
+              // rupee figure — that reads as a guaranteed monthly payout,
+              // which this is not. The actual monthly utilisation limit
+              // lives in the programme terms, not this headline row.
               //
-              // Only on the chosen row: printed under all three it is a fourth
-              // figure per row competing with the amount, the bonus and the
-              // credit, and the comparison it exists to help with is the one
-              // the member has already made by the time they tap.
+              // Only on the chosen row: printed under all three it is a
+              // fourth line per row competing with the amount, the benefit
+              // and the eligible value, and it only matters once one is
+              // actually picked.
               if (isSelected) ...[
                 const SizedBox(height: 9),
                 Divider(
@@ -830,8 +832,8 @@ class _AmountRow extends StatelessWidget {
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
-                        'Covers about ${load.monthlyCoverageLabel} of bills a '
-                        'month for ${PrivilegeProgramme.validityMonths} months',
+                        'Use your eligible purchase benefit over '
+                        '${PrivilegeProgramme.validityMonths} months',
                         style: TextStyle(
                           fontSize: 11.5,
                           height: 1.3,
@@ -875,10 +877,23 @@ class _TermsBox extends StatelessWidget {
             ),
           ),
           SizedBox(height: 8),
-          _TermLine('Every card adds 10%. A bigger card simply loads more.'),
-          _TermLine('The bonus is credited to your SHIELD wallet at once.'),
-          _TermLine('Wallet money is spent on orders and lab bookings.'),
-          _TermLine('The bonus is store credit, and is not withdrawable.'),
+          _TermLine(
+            'Each HealthPass option includes a 10% promotional purchase '
+            'benefit, subject to programme terms.',
+          ),
+          _TermLine(
+            'The promotional purchase benefit is added to your SHIELD '
+            'wallet at once.',
+          ),
+          _TermLine('Wallet value is spent on orders and lab bookings.'),
+          _TermLine(
+            'The promotional purchase benefit is store credit and cannot '
+            'be withdrawn as cash.',
+          ),
+          _TermLine(
+            'Consultations and home-care visits are subject to appointment '
+            'availability and programme terms.',
+          ),
         ],
       ),
     );
@@ -942,6 +957,17 @@ class _ActivateBar extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    if (selected != null)
+                      const Text(
+                        'Eligible purchase value',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
                     Text(
                       selected == null ? '—' : selected.creditedLabel,
                       style: TextStyle(
@@ -982,7 +1008,7 @@ class _ActivateBar extends StatelessWidget {
                   ),
                 ),
                 child: const Text(
-                  'Activate',
+                  'Purchase HealthPass',
                   style: TextStyle(fontSize: 15.5, fontWeight: FontWeight.w700),
                 ),
               ),

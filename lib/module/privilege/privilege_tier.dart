@@ -112,22 +112,6 @@ class PrivilegeLoad {
   /// What lands in the wallet in total.
   int get credited => amount + bonus;
 
-  /// What the card covers a month: everything credited, spread across the year
-  /// the card is live for.
-  ///
-  /// The programme already treats a card as a year of medicine bought up front
-  /// — [PrivilegeProgramme.validityMonths] is both how long a card lives and
-  /// the number of instalments its credit comes due in. This is that same rule
-  /// said in the figure a member recognises: what they spend at a chemist in a
-  /// month. ₹10,000 is a number to weigh against savings; ₹916 a month is a
-  /// number to weigh against a bill they already pay.
-  ///
-  /// The same twelfth the wallet releases, off the same rule, so the figure a
-  /// card is sold on cannot promise a rupee more than the wallet hands over.
-  int get monthlyCoverage => PrivilegeProgramme.monthlyShareOf(credited);
-
-  String get monthlyCoverageLabel => '₹${formatRupees(monthlyCoverage)}';
-
   /// Sixteen digits in four groups: the card, the programme, the load, and
   /// the account it is issued to.
   ///
@@ -157,14 +141,13 @@ class PrivilegeLoad {
   /// can be spent on in total, and what that comes to a month. Neither is
   /// written down anywhere, so neither can drift from the amount above it.
   List<String> get benefits => [
-    'Grab service up to $creditedLabel',
-    '$monthlyCoverageLabel monthly bills coverage',
-    'Free home delivery',
+    'Eligible healthcare purchases up to $creditedLabel',
+    'Complimentary home delivery on eligible orders',
     ...switch (tier.kind) {
       PrivilegeCardKind.silver => [
-        'Home care at ₹50 a visit',
-        'Free dental consultation × $benefitUnits',
-        'Free tele consultation × $benefitUnits',
+        'Eligible home-care visit: ₹50 per visit',
+        '$benefitUnits complimentary dental consultation${benefitUnits == 1 ? '' : 's'}',
+        '$benefitUnits complimentary teleconsultation${benefitUnits == 1 ? '' : 's'}',
         PrivilegeProgramme.dietitianBase,
       ],
       PrivilegeCardKind.gold => [
@@ -173,20 +156,20 @@ class PrivilegeLoad {
         // visits. Read off the card rather than against the figure, so a
         // third gold load would fall on the better side of it.
         if (amount > tier.lowest)
-          'Free home care × 2'
+          '2 complimentary home-care visits'
         else
-          'Home care at ₹20 a visit',
+          'Eligible home-care visit: ₹20 per visit',
         // Flat rates, not counts. Gold buys the consultation cheaply however
         // often it is used, where silver and platinum buy a fixed number of
         // them outright.
-        'Dental consultation at ₹15',
-        'Tele consultation at ₹15',
+        'Eligible dental consultation: ₹15',
+        'Eligible teleconsultation: ₹15',
         PrivilegeProgramme.dietitianBase,
       ],
       PrivilegeCardKind.platinum => [
-        'Free home care × $benefitUnits',
-        'Free dental consultation × $benefitUnits',
-        'Free tele consultation × $benefitUnits',
+        '$benefitUnits complimentary home-care visit${benefitUnits == 1 ? '' : 's'}',
+        '$benefitUnits complimentary dental consultation${benefitUnits == 1 ? '' : 's'}',
+        '$benefitUnits complimentary teleconsultation${benefitUnits == 1 ? '' : 's'}',
         PrivilegeProgramme.dietitianPlatinum,
       ],
     },
@@ -198,7 +181,7 @@ class PrivilegeLoad {
   /// the one line that is a credit rather than a service — it lands in the
   /// wallet, where the rest are things to spend it on.
   List<String> get inclusions => [
-    '$bonusLabel bonus credited to your wallet at once',
+    '$bonusLabel promotional purchase benefit added to your wallet at once',
     ...benefits,
   ];
 
@@ -251,29 +234,29 @@ class PrivilegeProgramme {
   ///
   /// Stated once here rather than repeated on both, so a change to the
   /// programme is a change in one place.
-  static const String dietitianBase = 'Base dietitian consultation free';
+  static const String dietitianBase = '1 complimentary dietitian consultation';
 
-  /// Platinum's version of the same consultation: free for two months rather
-  /// than once. Fixed across all five platinum loads — it is the one benefit
-  /// on that card which does not climb with the amount.
+  /// Platinum's version of the same consultation: valid across two months
+  /// rather than one. Fixed across all five platinum loads — it is the one
+  /// benefit on that card which does not climb with the amount.
   static const String dietitianPlatinum =
-      'Base dietitian consultation free for 2 months';
+      '1 complimentary dietitian consultation, valid for 2 months';
 
   /// The three cards, named so anything built on top of a particular one —
   /// the referral ladder, say — can name it rather than index into the
   /// list and hope the order never changes.
   static const PrivilegeTier silver = PrivilegeTier(
-    name: 'Silver Shield',
+    name: 'HealthPass – Silver',
     kind: PrivilegeCardKind.silver,
     bin: '9010',
     amounts: [10000, 20000, 30000],
-    blurb: 'A year of routine refills for one person.',
+    blurb: '12-month healthcare purchase benefit for one registered member.',
     accent: AppColors.silverAccent,
     tint: AppColors.silverTint,
   );
 
   static const PrivilegeTier gold = PrivilegeTier(
-    name: 'Gold Shield',
+    name: 'HealthPass – Gold',
     kind: PrivilegeCardKind.gold,
     bin: '9020',
     amounts: [40000, 50000],
@@ -283,7 +266,7 @@ class PrivilegeProgramme {
   );
 
   static const PrivilegeTier platinum = PrivilegeTier(
-    name: 'Platinum Shield',
+    name: 'HealthPass – Platinum',
     kind: PrivilegeCardKind.platinum,
     bin: '9030',
     amounts: [60000, 70000, 80000, 90000, 100000],

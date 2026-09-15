@@ -117,7 +117,7 @@ class PrivilegeCardFace extends StatelessWidget {
         const Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _Label('Health Pass', ' card')),
+            Expanded(child: _Label('Sahakar HealthPass')),
             SizedBox(width: 8),
             PrivilegeIssuerMark(),
           ],
@@ -218,10 +218,10 @@ class PrivilegeCardFace extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                // "Gold Shield" is the tier; on a face this size the word
-                // Shield is the one that can go, because the card itself
-                // says it.
-                load.name.split(' ').first.toUpperCase(),
+                // "HealthPass – Gold" is the tier; on a face this size the
+                // word HealthPass is the one that can go, because the card
+                // itself says it.
+                load.name.split(' ').last.toUpperCase(),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: onCard(9, FontWeight.w800).copyWith(letterSpacing: 0.9),
@@ -316,27 +316,17 @@ class PrivilegeCardSurface extends StatelessWidget {
   }
 }
 
-/// A caption on the card front, emboldening the first word the way the
-/// reference card sets "**Credit** card".
+/// The caption on the card front.
 class _Label extends StatelessWidget {
-  final String head;
-  final String tail;
+  final String text;
 
-  const _Label(this.head, [this.tail = '']);
+  const _Label(this.text);
 
   @override
   Widget build(BuildContext context) {
-    final base = PrivilegeCardFace.onCard(11.5, FontWeight.w400);
-    return Text.rich(
-      TextSpan(
-        children: [
-          TextSpan(
-            text: head,
-            style: base.copyWith(fontWeight: FontWeight.w800),
-          ),
-          if (tail.isNotEmpty) TextSpan(text: tail, style: base),
-        ],
-      ),
+    return Text(
+      text,
+      style: PrivilegeCardFace.onCard(11.5, FontWeight.w800),
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
     );

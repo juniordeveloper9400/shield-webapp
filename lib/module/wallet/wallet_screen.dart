@@ -312,9 +312,9 @@ class _PendingCardTile extends StatelessWidget {
                 ? (card.note.isEmpty
                       ? 'The counter did not approve this submission.'
                       : card.note)
-                : '${card.load.creditedLabel} is added to your wallet once the '
-                      'counter approves your receipt. Submitted '
-                      '${formatDate(card.submittedAt)}.',
+                : '${card.load.creditedLabel} in eligible purchase value is '
+                      'added to your wallet once the counter approves your '
+                      'receipt. Submitted ${formatDate(card.submittedAt)}.',
             style: const TextStyle(
               fontSize: 12.5,
               height: 1.4,
@@ -427,7 +427,7 @@ class _LockedWalletCard extends StatelessWidget {
               onPressed: onActivate,
               icon: const Icon(Icons.workspace_premium_rounded, size: 19),
               label: const Text(
-                'Activate your Health Pass Card',
+                'Get your Sahakar HealthPass',
                 style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
               ),
               style: FilledButton.styleFrom(
@@ -469,7 +469,7 @@ class _TopUpAction extends StatelessWidget {
           onPressed: onTopUp,
           icon: const Icon(Icons.workspace_premium_rounded, size: 20),
           label: const Text(
-            'Top up your Health Pass Programme',
+            'Top up your Sahakar HealthPass',
             style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
           ),
           style: FilledButton.styleFrom(
@@ -487,7 +487,8 @@ class _TopUpAction extends StatelessWidget {
         // replaced — a call to action that does not say what it costs or
         // what it pays is asking for a decision nobody can make.
         Text(
-          'Load ${entry.amountLabel} or more and we add 10%.',
+          'Pay ${entry.amountLabel} or more and get a 10% promotional '
+          'purchase benefit.',
           textAlign: TextAlign.center,
           style: const TextStyle(fontSize: 12.5, color: AppColors.textBody),
         ),
@@ -534,7 +535,7 @@ class _ActivatePanel extends StatelessWidget {
           ),
           const SizedBox(height: 18),
           const Text(
-            'Activate your Health Pass Card',
+            'Get your Sahakar HealthPass',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 18,
@@ -546,7 +547,7 @@ class _ActivatePanel extends StatelessWidget {
           Text(
             'Your wallet opens with your first card. Start at '
             '${silver.amountLabel} on ${silver.name} and '
-            '${silver.creditedLabel} lands in it.',
+            '${silver.creditedLabel} in eligible purchase value is added.',
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 13.5,

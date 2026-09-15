@@ -63,7 +63,7 @@ class _PrivilegeCallToActivate extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         const Text(
-                          'Activate your Health Pass Programme',
+                          'Get your Sahakar HealthPass',
                           style: TextStyle(
                             fontSize: 15.5,
                             height: 1.25,
@@ -73,8 +73,8 @@ class _PrivilegeCallToActivate extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Load ${entry.amountLabel}, get ${entry.bonusLabel} '
-                          'free. Every card adds 10%.',
+                          'Pay ${entry.amountLabel}, get ${entry.bonusLabel} '
+                          'promotional purchase benefit.',
                           style: TextStyle(
                             fontSize: 12.5,
                             height: 1.35,
