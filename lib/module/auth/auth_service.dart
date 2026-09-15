@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/backend/backend_session.dart';
 import '../../data/neon/member_repository.dart';
+import '../persona/persona_service.dart';
 import '../registration/registration_service.dart';
 import 'otp_send_throttle.dart';
 
@@ -213,16 +214,29 @@ class AuthService {
   /// `BackendSession.signInWithFirebaseToken`. A missing/expired token or an
   /// unreachable backend just leaves the backend session unset; it never
   /// affects the Firebase sign-in this app already completed.
+  ///
+  /// On success, re-runs the persona check — see this method's callers'
+  /// own doc for why: `currentUser.value = user` fires PersonaService's
+  /// listener synchronously, which reads `BackendHttp.isSignedIn`
+  /// immediately, long before this async bridge has had time for a real
+  /// network round trip. Without this, that first check almost always
+  /// loses the race, resolves a converted agent/investor as "not
+  /// converted" because the backend session did not exist *yet*, and
+  /// nothing ever asks again until the next resume or the 60-second poll
+  /// — read as "my agent card was there, then a refresh removed it."
   Future<void> _bridgeToBackend(AuthUser user) async {
     try {
       final idToken = await _activeGateway.currentIdToken();
       if (idToken == null) {
         return;
       }
-      await BackendSession.instance.signInWithFirebaseToken(
+      final signedIn = await BackendSession.instance.signInWithFirebaseToken(
         idToken,
         name: user.name,
       );
+      if (signedIn) {
+        unawaited(PersonaService.instance.reload(user.phone));
+      }
     } catch (error) {
       debugPrint('_bridgeToBackend failed: $error');
     }
@@ -280,6 +294,12 @@ class AuthService {
     final restored = await BackendSession.instance.restore();
     if (!restored) {
       await _bridgeToBackend(user);
+    } else {
+      // _bridgeToBackend re-runs the persona check itself on success; this
+      // branch bypasses it entirely (a restored session, not a freshly
+      // exchanged one), so it needs the exact same re-check for the exact
+      // same reason — see _bridgeToBackend's own doc.
+      unawaited(PersonaService.instance.reload(user.phone));
     }
   }
 
