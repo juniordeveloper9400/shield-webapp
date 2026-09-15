@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -11,13 +13,42 @@ import 'purchase_service.dart';
 /// top differ by [OrderKind]: a standard order is placed, packed, dispatched,
 /// delivered; a prescription order gains a *received* and a *pharmacist
 /// review* stage in front, because it is read and priced before it is packed.
-class OrderTrackScreen extends StatelessWidget {
+class OrderTrackScreen extends StatefulWidget {
   final Purchase order;
 
   const OrderTrackScreen({super.key, required this.order});
 
   @override
+  State<OrderTrackScreen> createState() => _OrderTrackScreenState();
+}
+
+class _OrderTrackScreenState extends State<OrderTrackScreen> {
+  /// Starts as [OrderTrackScreen.order] and is swapped for the freshly
+  /// merged copy once [PurchaseService.ensureBillLoaded]'s fetch lands, so
+  /// the store's invoice appears in this already-open screen the moment it
+  /// arrives rather than only on the next visit from My Orders.
+  late Purchase _order = widget.order;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_loadBill());
+  }
+
+  Future<void> _loadBill() async {
+    await PurchaseService.instance.ensureBillLoaded(_order);
+    if (!mounted) return;
+    for (final purchase in PurchaseService.instance.purchases) {
+      if (purchase.id == _order.id) {
+        setState(() => _order = purchase);
+        return;
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final order = _order;
     final track = OrderTrack(order);
 
     return Scaffold(
@@ -98,6 +129,10 @@ class OrderTrackScreen extends StatelessWidget {
                 const NeedHelpCard(),
                 const SizedBox(height: 14),
                 const LabPackagePromoCard(),
+                if (order.hasBill) ...[
+                  const SizedBox(height: 14),
+                  StoreInvoiceCard(order: order),
+                ],
                 const SizedBox(height: 14),
                 BillDetailsCard(order: order),
                 const SizedBox(height: 14),

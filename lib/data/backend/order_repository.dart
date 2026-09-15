@@ -6,6 +6,19 @@ import '../../module/location/address_book.dart';
 import 'address_repository.dart';
 import 'backend_http.dart';
 
+/// One order's `app.bill` row, as [OrderRepository.fetchBill] reads it back —
+/// just the two fields [PurchaseService.ensureBillLoaded] actually needs on
+/// top of what the orders list already carries ([Purchase.billAmount] /
+/// [Purchase.billStatus]).
+class OrderBillDetail {
+  /// The store's invoice picture, or null when this bill was priced but
+  /// never had one attached.
+  final String? image;
+  final DateTime? sentAt;
+
+  const OrderBillDetail({required this.image, required this.sentAt});
+}
+
 /// Reads and places standard product orders through `backend/api`'s
 /// `/v1/member/{cart,orders}` routes — see `cart.service.ts`/`order.service.ts`.
 ///
@@ -242,6 +255,41 @@ class OrderRepository {
     } catch (error) {
       BackendHttp.log('OrderRepository.payBillWithWallet failed', error: error);
       return false;
+    }
+  }
+
+  /// The full `app.bill` row for one order — `GET /v1/member/orders/:id/bill`
+  /// (see `order.service.ts`'s `getBillForMember`) — fetched lazily per
+  /// order rather than carried on every row of `listForMember`'s list, since
+  /// [OrderBillDetail.image] can be a large data URI (see [Purchase.billImage]'s
+  /// own doc for why).
+  ///
+  /// [orderId] is the backend's numeric id ([Purchase.backendId]). Null when
+  /// the backend is unreachable, or — a 404 — no bill has been sent for this
+  /// order at all; either way there is nothing here for [PurchaseService.
+  /// ensureBillLoaded] to apply.
+  Future<OrderBillDetail?> fetchBill(int orderId) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final body =
+          await BackendHttp.instance.request('GET', '/v1/member/orders/$orderId/bill')
+              as Map<String, dynamic>;
+      final image = (body['image'] as String?)?.trim();
+      return OrderBillDetail(
+        image: image == null || image.isEmpty ? null : image,
+        sentAt: DateTime.tryParse((body['sentAt'] ?? '').toString()),
+      );
+    } on BackendHttpException catch (error) {
+      // 404 — "no bill sent for this order yet" — the ordinary case for
+      // most orders, not a failure to log.
+      if (error.isNotFound) return null;
+      BackendHttp.log('OrderRepository.fetchBill failed', error: error);
+      return null;
+    } catch (error) {
+      BackendHttp.log('OrderRepository.fetchBill failed', error: error);
+      return null;
     }
   }
 

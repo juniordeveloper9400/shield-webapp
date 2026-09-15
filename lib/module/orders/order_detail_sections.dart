@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../data/backend/order_repository.dart';
+import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
+import '../../widgets/full_screen_image_view.dart';
 import '../../widgets/social_glyphs.dart';
 import '../auth/auth_service.dart';
 import '../checkout/fulfillment_type.dart';
@@ -1629,6 +1632,107 @@ class OrderPayFooter extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Store invoice
+// ---------------------------------------------------------------------------
+
+/// The invoice the store has attached to this order, once one has been sent
+/// from the admin console — ported verbatim from the root SHIELD app's own
+/// `order_detail_sections.dart`, backed here by [PurchaseService.
+/// ensureBillLoaded]'s lazy fetch instead of that app's direct-Neon join.
+///
+/// Distinct from [BillDetailsCard]: that card is a breakdown worked out from
+/// the two figures [Purchase] already carries, and can never disagree with
+/// them because it is derived, not stored. This one is the store's own
+/// document — a picture handed back through the app — and simply is not
+/// there to show until an admin sends it and [ensureBillLoaded] has fetched
+/// it, so the card renders nothing at all rather than a card with an empty
+/// middle.
+class StoreInvoiceCard extends StatelessWidget {
+  final Purchase order;
+
+  const StoreInvoiceCard({super.key, required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = order.billImage;
+    if (image == null) {
+      return const SizedBox.shrink();
+    }
+    final billedAt = order.billedAt;
+
+    return _PlainCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('Invoice from the store', style: _titleStyle),
+          if (billedAt != null) ...[
+            const SizedBox(height: 2),
+            Text('Sent ${formatDate(billedAt)}', style: _mutedStyle),
+          ],
+          const SizedBox(height: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 90,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    color: AppColors.pageTint,
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: AppImage(
+                    image: image,
+                    fit: BoxFit.cover,
+                    fallbackIcon: Icons.receipt_long_rounded,
+                    iconSize: 34,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'The store has sent your bill for this order.',
+                      style: _mutedStyle,
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => FullScreenImageView(
+                            image: image,
+                            title: 'Invoice · ${order.id}',
+                          ),
+                        ),
+                      ),
+                      icon: const Icon(Icons.visibility_outlined, size: 18),
+                      label: const Text('View invoice'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.brandBlue,
+                        padding: EdgeInsets.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        textStyle: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

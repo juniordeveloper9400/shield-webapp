@@ -96,6 +96,19 @@ class Purchase {
   /// price at all.
   final OrderPaymentStatus? billStatus;
 
+  /// The store's own manually-attached invoice picture — `GET /v1/member/
+  /// orders/:id/bill`'s `image` (see `OrderRepository.fetchBill`), not
+  /// something `GET /v1/member/orders` carries on the list row itself (an
+  /// invoice photo can be a large data URI; the list stays cheap and this
+  /// is fetched lazily, once, when an order with [billStatus] set is
+  /// actually opened — see `PurchaseService.ensureBillLoaded`). Null until
+  /// that fetch has landed, same as on a fresh order with no bill sent yet.
+  final String? billImage;
+
+  /// When the store sent [billImage] — `GET /v1/member/orders/:id/bill`'s
+  /// `sentAt`. Null until fetched, same as [billImage].
+  final DateTime? billedAt;
+
   const Purchase({
     required this.id,
     required this.placedOn,
@@ -109,14 +122,22 @@ class Purchase {
     this.paymentStatus = OrderPaymentStatus.pending,
     this.billAmount,
     this.billStatus,
+    this.billImage,
+    this.billedAt,
   });
 
   /// A copy with just the payment fields swapped in — what a wallet "Pay now"
   /// applies once the debit has gone through, so the order and its bill read
-  /// as paid without waiting on the next full server sync.
+  /// as paid without waiting on the next full server sync. [billImage] /
+  /// [billedAt] are for `ensureBillLoaded`'s own lazy-fetch merge instead —
+  /// kept as separate parameters from the payment ones above rather than
+  /// folded into one bigger "any field" copyWith, since the two callers
+  /// never need to set both at once.
   Purchase copyWith({
     OrderPaymentStatus? paymentStatus,
     OrderPaymentStatus? billStatus,
+    String? billImage,
+    DateTime? billedAt,
   }) => Purchase(
     id: id,
     placedOn: placedOn,
@@ -130,7 +151,14 @@ class Purchase {
     paymentStatus: paymentStatus ?? this.paymentStatus,
     billAmount: billAmount,
     billStatus: billStatus ?? this.billStatus,
+    billImage: billImage ?? this.billImage,
+    billedAt: billedAt ?? this.billedAt,
   );
+
+  /// Whether the store has actually sent an invoice picture for this order —
+  /// gates [StoreInvoiceCard], the same way the root SHIELD app's identical
+  /// getter on its own (direct-Neon) `Purchase` does.
+  bool get hasBill => billImage != null;
 
   /// A prescription order still waiting on money: priced or not, nothing has
   /// been paid and it has not been delivered or called off.
@@ -278,6 +306,36 @@ class PurchaseService extends ChangeNotifier {
   Future<void> refresh() {
     _inFlight = null;
     return _inFlight ??= _load();
+  }
+
+  /// Fetches [order]'s bill detail — the store's invoice picture, in
+  /// particular, which the orders list never carries (see [Purchase.billImage]'s
+  /// own doc) — and merges it into the matching entry in [purchases]. Call
+  /// once when an order's detail screen opens; a no-op when there is
+  /// nothing to fetch ([order.billStatus] null — the list join found no
+  /// `app.bill` row at all for this order) or [Purchase.billImage] is
+  /// already set from an earlier call.
+  Future<void> ensureBillLoaded(Purchase order) async {
+    if (order.billStatus == null || order.billImage != null) {
+      return;
+    }
+    final backendId = order.backendId;
+    if (backendId == null) {
+      return;
+    }
+    final bill = await OrderRepository.instance.fetchBill(backendId);
+    if (bill == null) {
+      return;
+    }
+    final index = _purchases.indexWhere((p) => p.id == order.id);
+    if (index < 0) {
+      return;
+    }
+    _purchases[index] = _purchases[index].copyWith(
+      billImage: bill.image,
+      billedAt: bill.sentAt,
+    );
+    notifyListeners();
   }
 
   Future<void> _load() async {
