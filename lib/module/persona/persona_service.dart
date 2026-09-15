@@ -49,6 +49,25 @@ class PersonaService extends ChangeNotifier {
   bool _loading = false;
   bool _attached = false;
 
+  /// Ticks [refreshCurrent] every 60 seconds while someone is signed in — the
+  /// one automatic trigger that does not depend on the app losing and
+  /// regaining focus.
+  ///
+  /// Before this, [attach]'s only refresh triggers were sign-in and
+  /// `RootScreen`'s `AppLifecycleState.resumed` — which on the web build
+  /// fires only when the browser tab itself loses and regains focus. A
+  /// member who stays on the same tab the whole time (the exact case an
+  /// admin testing a conversion is likely to be in, side by side in another
+  /// window they never actually switch to) had no way to see it land short
+  /// of a manual sign-out/sign-in or a hard page reload — read as "the
+  /// agent card takes a long time to show up," when the real cause was
+  /// nothing in that session was ever going to ask again. [refreshCurrent]'s
+  /// own 8-second throttle still applies, so this never stacks with a
+  /// resume that just ran.
+  Timer? _pollTimer;
+
+  static const Duration _pollInterval = Duration(seconds: 60);
+
   /// When [reload] last actually resolved something, so [refreshCurrent]
   /// can skip a redundant one — see that method's doc.
   DateTime? _lastResolvedAt;
@@ -67,13 +86,23 @@ class PersonaService extends ChangeNotifier {
       final phone = auth.currentUser.value?.phone;
       if (phone == null || phone.isEmpty) {
         clear();
-      } else if (phone != _resolvedFor) {
-        unawaited(reload(phone));
+      } else {
+        if (phone != _resolvedFor) {
+          unawaited(reload(phone));
+        }
+        _pollTimer ??= Timer.periodic(
+          _pollInterval,
+          (_) => unawaited(refreshCurrent()),
+        );
       }
     });
     final phone = auth.currentUser.value?.phone;
     if (phone != null && phone.isNotEmpty) {
       unawaited(reload(phone));
+      _pollTimer ??= Timer.periodic(
+        _pollInterval,
+        (_) => unawaited(refreshCurrent()),
+      );
     }
   }
 
@@ -131,6 +160,8 @@ class PersonaService extends ChangeNotifier {
     _phone = null;
     _resolvedFor = null;
     _lastResolvedAt = null;
+    _pollTimer?.cancel();
+    _pollTimer = null;
     AgentService.instance.reset();
     _apply(PersonaSnapshot.none);
   }
@@ -193,6 +224,8 @@ class PersonaService extends ChangeNotifier {
     _resolvedFor = null;
     _lastResolvedAt = null;
     _loading = false;
+    _pollTimer?.cancel();
+    _pollTimer = null;
     _apply(PersonaSnapshot.none);
   }
 }
