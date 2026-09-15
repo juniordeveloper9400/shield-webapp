@@ -26,7 +26,12 @@ dependencies:
   image_picker: ^1.2.3
   # Opens the platform dialer for the call-to-order number.
   url_launcher: ^6.3.2
-  video_player: ^2.11.1
+  # Plays a YouTube link pasted into "Customer Videos" in the admin console —
+  # every customer review clip is a YouTube link now (see
+  # module/home/customer_reviews.dart). The iframe variant (not
+  # youtube_player_flutter) so it also runs on the web build, which this app
+  # ships.
+  youtube_player_iframe: ^6.0.2
   # Used only by backend/db/*.dart (schema apply/dump/wipe/seed tooling) —
   # the app itself (lib/) has no raw-socket Postgres path any more. See
   # migration-plan.md Phase 5: this tooling keeps direct Neon access even
@@ -55,13 +60,16 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^5.0.0
   flutter_launcher_icons: ^0.14.4
+  # A fake `WebViewPlatform` in test/customer_reviews_test.dart, registered so
+  # `youtube_player_iframe`'s controller (a youtube_player_iframe dependency)
+  # can build under `flutter_test`, which has no real WebView.
+  webview_flutter_platform_interface: ^2.15.1
 
 flutter:
   uses-material-design: true
 
   assets:
     - assets/logos/
-    - assets/reviews/
     - assets/products/
     - assets/categories/
     - assets/banners/

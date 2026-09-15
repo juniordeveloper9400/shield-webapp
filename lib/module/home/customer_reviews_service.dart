@@ -25,11 +25,9 @@ enum CustomerReviewsStatus {
 /// "What our customers have to say" — the reel's single source of clips.
 ///
 /// Loads every active row from `app.customer_review_video` once per session
-/// (see [CustomerReviewRepository]) and keeps it in memory. [items] is what
-/// the reel actually shows: the admin's clips when there are any, and the
-/// clips bundled with the app — [CustomerReviews.reviews] — whenever the
-/// admin hasn't added one yet or the database can't be reached, so the reel
-/// is never blank.
+/// (see [CustomerReviewRepository]) and keeps it in memory. [items] is
+/// exactly that list — there is no bundled fallback, so the reel is simply
+/// absent until the admin adds a real (YouTube) clip.
 class CustomerReviewsService extends ChangeNotifier {
   CustomerReviewsService._();
 
@@ -45,10 +43,8 @@ class CustomerReviewsService extends ChangeNotifier {
 
   bool get isLoading => _status == CustomerReviewsStatus.loading;
 
-  /// The clips the reel shows: the admin's, when the admin has switched any
-  /// on; the clips bundled with the app otherwise.
-  List<CustomerReviewItem> get items =>
-      _admin.isNotEmpty ? _admin : CustomerReviews.reviews;
+  /// The clips the reel shows — whatever the admin has switched on.
+  List<CustomerReviewItem> get items => _admin;
 
   Future<void>? _inFlight;
 
