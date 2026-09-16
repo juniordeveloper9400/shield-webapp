@@ -115,7 +115,8 @@ class _CustomerReviewsState extends State<CustomerReviews> {
     }
   }
 
-  /// Opens the tapped clip in YouTube's own embedded player. A card with no
+  /// Opens the tapped clip as an overlay on this same page, in YouTube's own
+  /// embedded player — see [showReviewVideo]. A card with no
   /// [CustomerReviewItem.youtubeId] (a malformed or pre-YouTube leftover row)
   /// has nowhere to go, so the tap is simply a no-op rather than a crash.
   void _openReview(BuildContext context, CustomerReviewItem review) {
@@ -123,14 +124,11 @@ class _CustomerReviewsState extends State<CustomerReviews> {
     if (youtubeId == null) {
       return;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ReviewVideoPlayerScreen(
-          videoId: youtubeId,
-          title: review.name,
-          description: review.subtitle,
-        ),
-      ),
+    showReviewVideo(
+      context,
+      videoId: youtubeId,
+      title: review.name,
+      description: review.subtitle,
     );
   }
 

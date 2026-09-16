@@ -19,6 +19,32 @@ class OrderBillDetail {
   const OrderBillDetail({required this.image, required this.sentAt});
 }
 
+/// One prescription linked to an order, as [OrderRepository.fetchPrescriptions]
+/// reads it back — just enough for [PrescriptionUploadedCard] to show the
+/// real scan rather than a generic icon.
+class OrderPrescription {
+  final int id;
+  final String code;
+
+  /// The member's own uploaded scan (a `data:` URI), or null when this
+  /// prescription was submitted with no photo — a script phoned in, not an
+  /// error case (see `PrescriptionService.upload`'s own doc).
+  final String? image;
+  final String doctor;
+
+  /// An `app.prescription_status` value — `AWAITING_REVIEW` / `READ` /
+  /// `ORDERED`.
+  final String status;
+
+  const OrderPrescription({
+    required this.id,
+    required this.code,
+    required this.image,
+    required this.doctor,
+    required this.status,
+  });
+}
+
 /// Reads and places standard product orders through `backend/api`'s
 /// `/v1/member/{cart,orders}` routes — see `cart.service.ts`/`order.service.ts`.
 ///
@@ -263,6 +289,40 @@ class OrderRepository {
       return null;
     } catch (error) {
       BackendHttp.log('OrderRepository.fetchBill failed', error: error);
+      return null;
+    }
+  }
+
+  /// The prescription(s) submitted into this order — `GET /v1/member/
+  /// orders/:id/prescriptions` (see `order.service.ts`'s
+  /// `getPrescriptionsForOrder`). Empty for a standard order, which never
+  /// has one; null when the backend is unreachable. [orderId] is the
+  /// backend's numeric id ([Purchase.backendId]).
+  ///
+  /// This is what [PrescriptionUploadedCard] actually shows — the member's
+  /// own uploaded scan, not a generic document icon standing in for it —
+  /// fetched lazily per order the same way [fetchBill] is, rather than
+  /// carried on every row of [listForMember]'s list.
+  Future<List<OrderPrescription>?> fetchPrescriptions(int orderId) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows =
+          await BackendHttp.instance.request('GET', '/v1/member/orders/$orderId/prescriptions')
+              as List<dynamic>;
+      return rows.cast<Map<String, dynamic>>().map((row) {
+        final image = (row['image'] as String?)?.trim();
+        return OrderPrescription(
+          id: (row['id'] as num).toInt(),
+          code: (row['code'] ?? '').toString(),
+          image: image == null || image.isEmpty ? null : image,
+          doctor: (row['doctor'] ?? '').toString(),
+          status: (row['status'] ?? '').toString().toUpperCase(),
+        );
+      }).toList(growable: false);
+    } catch (error) {
+      BackendHttp.log('OrderRepository.fetchPrescriptions failed', error: error);
       return null;
     }
   }

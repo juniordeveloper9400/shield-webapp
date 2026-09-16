@@ -113,7 +113,7 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
                 const _ReminderRow(),
                 if (order.kind == OrderKind.prescription) ...[
                   const SizedBox(height: 14),
-                  const PrescriptionUploadedCard(),
+                  PrescriptionUploadedCard(order: order),
                 ],
                 const SizedBox(height: 14),
                 DeliverToCard(order: order),
@@ -286,10 +286,6 @@ class _TrackCard extends StatelessWidget {
                   sub: track.subhead,
                   caretX: caretX,
                 ),
-                if (track.awaitingPayment) ...[
-                  const SizedBox(height: 12),
-                  _PayNudge(track: track),
-                ],
                 const SizedBox(height: 14),
                 const Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 12),
@@ -579,71 +575,6 @@ class _CaretPainter extends CustomPainter {
   bool shouldRepaint(_CaretPainter oldDelegate) => oldDelegate.color != color;
 }
 
-/// The amber "make payment now" strip inside the card, for a prescription
-/// order that has not been paid.
-class _PayNudge extends StatelessWidget {
-  final OrderTrack track;
-
-  const _PayNudge({required this.track});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.goldTint,
-        borderRadius: BorderRadius.circular(10),
-      ),
-      padding: const EdgeInsets.fromLTRB(12, 10, 10, 10),
-      child: Row(
-        children: [
-          const Icon(
-            Icons.schedule_rounded,
-            size: 20,
-            color: AppColors.goldAccent,
-          ),
-          const SizedBox(width: 10),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Make payment now',
-                  style: TextStyle(
-                    fontSize: 13.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
-                  ),
-                ),
-                SizedBox(height: 1),
-                Text(
-                  'To get delivery on time',
-                  style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          OutlinedButton(
-            onPressed: () => _payToast(context),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.goldAccent,
-              side: const BorderSide(color: AppColors.goldAccent),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
-            ),
-            child: const Text(
-              'Pay now',
-              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ReminderRow extends StatelessWidget {
   const _ReminderRow();
 
@@ -694,14 +625,4 @@ class _ReminderRow extends StatelessWidget {
       ),
     );
   }
-}
-
-void _payToast(BuildContext context) {
-  ScaffoldMessenger.of(context)
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      const SnackBar(
-        content: Text('Payment opens once the pharmacist confirms the price.'),
-      ),
-    );
 }

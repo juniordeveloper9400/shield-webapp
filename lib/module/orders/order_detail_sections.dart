@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/backend/order_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
@@ -196,32 +197,105 @@ Widget _linkButton({
 // ---------------------------------------------------------------------------
 
 /// The "prescription uploaded" thumbnail, shown for a prescription order.
-class PrescriptionUploadedCard extends StatelessWidget {
-  const PrescriptionUploadedCard({super.key});
+///
+/// Fetches the real scan the member uploaded — `GET /v1/member/orders/:id/
+/// prescriptions` — rather than the generic document icon this used to show
+/// unconditionally with no data behind it at all: the "View" button used to
+/// just pop a toast saying "Opening your prescription" and open nothing.
+/// Best-effort: while loading, or when the fetch fails, the icon+placeholder
+/// state below is what shows — a plausible "still catching up" look rather
+/// than an error, since [order.backendId] can genuinely be null for an
+/// order this session placed but never heard back from the backend about.
+class PrescriptionUploadedCard extends StatefulWidget {
+  final Purchase order;
+
+  const PrescriptionUploadedCard({super.key, required this.order});
+
+  @override
+  State<PrescriptionUploadedCard> createState() =>
+      _PrescriptionUploadedCardState();
+}
+
+class _PrescriptionUploadedCardState extends State<PrescriptionUploadedCard> {
+  List<OrderPrescription>? _prescriptions;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final backendId = widget.order.backendId;
+    if (backendId == null) {
+      return;
+    }
+    final rows = await OrderRepository.instance.fetchPrescriptions(backendId);
+    if (mounted && rows != null) {
+      setState(() => _prescriptions = rows);
+    }
+  }
+
+  /// The first submitted prescription with an actual scan attached, or null
+  /// while still loading / when none of them have one (a script phoned in).
+  OrderPrescription? get _withImage {
+    final rows = _prescriptions;
+    if (rows == null) return null;
+    for (final rx in rows) {
+      if (rx.image != null) return rx;
+    }
+    return null;
+  }
+
+  /// Reflects what has actually happened to the prescription, rather than
+  /// always claiming a pharmacist is still reading it — the same "priced"
+  /// signal [OrderTrack] itself reads off the order.
+  String get _statusLine {
+    final order = widget.order;
+    if (order.mrpTotal > 0 || order.paidTotal > 0) {
+      return 'Priced and confirmed by the pharmacist.';
+    }
+    return 'The pharmacist is reading this to price your order.';
+  }
 
   @override
   Widget build(BuildContext context) {
+    final rx = _withImage;
+    final count = _prescriptions?.length ?? 0;
+
     return _PlainCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('Prescription uploaded', style: _titleStyle),
+          Text(
+            count > 1 ? 'Prescriptions uploaded' : 'Prescription uploaded',
+            style: _titleStyle,
+          ),
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 90,
-                height: 112,
-                decoration: BoxDecoration(
-                  color: AppColors.pageTint,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: AppColors.border),
-                ),
-                child: const Icon(
-                  Icons.description_rounded,
-                  size: 34,
-                  color: AppColors.brandBlue,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Container(
+                  width: 90,
+                  height: 112,
+                  decoration: BoxDecoration(
+                    color: AppColors.pageTint,
+                    border: Border.all(color: AppColors.border),
+                  ),
+                  child: rx?.image != null
+                      ? AppImage(
+                          image: rx!.image!,
+                          fit: BoxFit.cover,
+                          fallbackIcon: Icons.description_rounded,
+                          iconSize: 34,
+                        )
+                      : const Icon(
+                          Icons.description_rounded,
+                          size: 34,
+                          color: AppColors.brandBlue,
+                        ),
                 ),
               ),
               const SizedBox(width: 14),
@@ -229,26 +303,37 @@ class PrescriptionUploadedCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'The pharmacist is reading this to price your order.',
-                      style: _mutedStyle,
-                    ),
+                    Text(_statusLine, style: _mutedStyle),
+                    if (count > 1) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        '$count prescriptions on this order.',
+                        style: _mutedStyle,
+                      ),
+                    ],
                     const SizedBox(height: 8),
-                    TextButton.icon(
-                      onPressed: () =>
-                          _toast(context, 'Opening your prescription'),
-                      icon: const Icon(Icons.visibility_outlined, size: 18),
-                      label: const Text('View'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: AppColors.brandBlue,
-                        padding: EdgeInsets.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        textStyle: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w800,
+                    if (rx?.image != null)
+                      TextButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => FullScreenImageView(
+                              image: rx!.image!,
+                              title: 'Prescription · ${rx.code}',
+                            ),
+                          ),
+                        ),
+                        icon: const Icon(Icons.visibility_outlined, size: 18),
+                        label: const Text('View'),
+                        style: TextButton.styleFrom(
+                          foregroundColor: AppColors.brandBlue,
+                          padding: EdgeInsets.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          textStyle: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w800,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),

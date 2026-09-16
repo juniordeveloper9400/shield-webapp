@@ -278,6 +278,29 @@ void main() {
     expect(screen.description, youtubeReview.subtitle);
   });
 
+  testWidgets('the video opens as an overlay, not a page — the home feed '
+      'behind it is still there, and the close button dismisses it', (
+    tester,
+  ) async {
+    CustomerReviewsService.instance.debugSeed([youtubeReview]);
+    await pumpReviews(tester);
+
+    await tester.tap(find.text(youtubeReview.name));
+    await tester.pumpAndSettle();
+
+    // The reel it opened from is still in the tree underneath — this is a
+    // dialog over the current page, not a route that replaced it.
+    expect(find.byType(CustomerReviews), findsOneWidget);
+    expect(find.byType(ReviewVideoPlayerScreen), findsOneWidget);
+    expect(find.byIcon(Icons.close_rounded), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.close_rounded));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(ReviewVideoPlayerScreen), findsNothing);
+    expect(find.byType(CustomerReviews), findsOneWidget);
+  });
+
   testWidgets('a card with no YouTube id does nothing when tapped', (
     tester,
   ) async {
