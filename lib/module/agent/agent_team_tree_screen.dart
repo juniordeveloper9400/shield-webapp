@@ -686,16 +686,16 @@ class _MindNode extends StatelessWidget {
     );
   }
 
-  /// "Region · South", "Ward · AC136-L1-W005", or just the bare tier name for
-  /// a slot with no code and no zone.
+  /// "Region · South", "Ward · Valiyangadi", or just the bare tier name for
+  /// a slot with no named place at all.
+  ///
+  /// Always the readable [Agent.area] — never [AgentGeo.codeForId]'s printed
+  /// code (`AC136-L1-W005` and the like). The open "+" position this agent
+  /// filled showed its place by the same readable name (see
+  /// [_MindPlusPill.slotLabel]); this card has to keep showing it, not swap
+  /// it out for a code the moment someone actually registers there.
   static String _slotSubtitle(Agent agent) {
-    final code = agent.areaId == null
-        ? null
-        : AgentGeo.current.codeForId(agent.areaId!);
-    if (code != null) {
-      return '${agent.level.label} · $code';
-    }
-    if (agent.level == AgentLevel.region && agent.areaId != null) {
+    if (agent.area.isNotEmpty) {
       return '${agent.level.label} · ${agent.area}';
     }
     return agent.level.label;

@@ -268,6 +268,16 @@ class AuthService {
       return;
     }
 
+    // A deleted account (see deleteAccount) must not resurrect just because
+    // Firebase kept a local session alive — `false` is the one answer that
+    // actually blocks the restore; `null` ("could not check") falls open,
+    // the same as everywhere else this app treats the database as
+    // best-effort rather than a hard gate.
+    if (await MemberRepository.instance.phoneExists(restored.phone) == false) {
+      await _gateway?.signOut();
+      return;
+    }
+
     // Phone Auth keeps the number but not the name. Take it from the profile,
     // falling back to the members table, then to a neutral placeholder that
     // registration will overwrite.
@@ -454,6 +464,53 @@ class AuthService {
     AddressBook.instance.reset();
   }
 
+  /// Permanently deletes the signed-in member's account and ends the
+  /// session — see [MemberRepository.deleteAccount] for exactly what gets
+  /// cleared (soft-deleted, not a row wiped out from under their order
+  /// history). A no-op when nobody is signed in.
+  ///
+  /// The database side is best-effort, same contract as every other write in
+  /// this app, and is what actually governs the account from here on —
+  /// [MemberRepository.phoneExists] and [restoreSession] both read
+  /// `deleted_at`. The Firebase identity is deleted outright when Firebase
+  /// allows it; when it refuses for want of a recent sign-in
+  /// (`requires-recent-login`), this falls back to a plain sign-out rather
+  /// than leaving the member stuck on a dialog that cannot finish — the
+  /// account already reads as deleted everywhere the app checks. Otherwise
+  /// runs the exact same session-teardown as [logOut] — the backend session,
+  /// wallet and address book must not survive a deleted account any more
+  /// than a plain sign-out.
+  Future<void> deleteAccount() async {
+    final user = currentUser.value;
+    if (user == null) {
+      return;
+    }
+    await MemberRepository.instance.deleteAccount(user.phone);
+    // Same defensive shape as requestOtp/verifyOtp: no Firebase app on this
+    // platform, or the plugin throwing outright, must not stop the account
+    // itself from reading as deleted — that already happened above.
+    var deletedFirebaseUser = false;
+    try {
+      deletedFirebaseUser = await _activeGateway.deleteFirebaseUser();
+    } catch (error) {
+      debugPrint('deleteAccount: gateway unavailable — $error');
+    }
+    if (!deletedFirebaseUser) {
+      try {
+        await _gateway?.signOut();
+      } catch (error) {
+        debugPrint('deleteAccount: sign-out fallback failed — $error');
+      }
+    }
+    unawaited(BackendSession.instance.signOut());
+    _pending = null;
+    _freshSignIn = null;
+    currentUser.value = null;
+    RegistrationService.instance.clearForSignOut();
+    WalletService.instance.reset();
+    AddressBook.instance.reset();
+  }
+
   /// Test hook: puts a member straight into the session, skipping the round
   /// trip, so tests of other screens do not have to drive the whole flow.
   @visibleForTesting
@@ -509,6 +566,13 @@ abstract class AuthGateway {
   /// signed in on this gateway — the credential [BackendSession] exchanges
   /// for a backend-issued session. Never throws.
   Future<String?> currentIdToken();
+
+  /// Deletes the signed-in Firebase identity outright — the account is gone,
+  /// not just signed out of this device. Returns false, changing nothing,
+  /// when there is nobody signed in or Firebase refuses for want of a recent
+  /// sign-in (`requires-recent-login`); the caller falls back to [signOut]
+  /// in that case.
+  Future<bool> deleteFirebaseUser();
 }
 
 /// Firebase Phone Auth. Holds the `verificationId` from [sendCode] and pairs
@@ -744,6 +808,29 @@ class FirebaseAuthGateway implements AuthGateway {
 
   @override
   Future<void> signOut() => _auth.signOut();
+
+  @override
+  Future<bool> deleteFirebaseUser() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      return true;
+    }
+    try {
+      await user.delete();
+      return true;
+    } on fb.FirebaseAuthException catch (e) {
+      // Firebase requires a fresh sign-in for a sensitive op like this once
+      // the session is old enough — expected on a long-lived Phone Auth
+      // session, not a bug. The caller falls back to a plain sign-out; the
+      // member's own account data is already gone from `app.users` by the
+      // time this runs (see AuthService.deleteAccount), so nothing is stuck.
+      debugPrint('deleteFirebaseUser: ${e.code} ${e.message}');
+      return false;
+    } catch (error) {
+      debugPrint('deleteFirebaseUser: $error');
+      return false;
+    }
+  }
 
   OtpError _map(fb.FirebaseAuthException e) {
     // Always surface the raw failure — without this every send/verify error

@@ -4,6 +4,7 @@ import '../../theme/app_colors.dart';
 import '../cart/cart_badge.dart';
 import '../location/address_book.dart';
 import '../location/location_sheet.dart';
+import '../persona/persona_service.dart';
 import '../wallet/wallet_screen.dart';
 import 'points_badge.dart';
 
@@ -66,26 +67,36 @@ class _HomeHeaderState extends State<HomeHeader> {
                   alignment: Alignment.centerRight,
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        // Points, wallet and cart sit together because they
-                        // are the three account figures a member checks most.
-                        // Cart is kept on the outer edge, wallet centred.
-                        const PointsBadge(),
-                        const SizedBox(width: 8),
-                        _CircleAction(
-                          icon: Icons.account_balance_wallet_outlined,
-                          tooltip: 'Wallet',
-                          onTap: () => Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => const WalletScreen(),
+                    child: ListenableBuilder(
+                      listenable: PersonaService.instance,
+                      builder: (context, _) => Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          // Points, wallet and cart sit together because they
+                          // are the three account figures a member checks
+                          // most. Cart is kept on the outer edge, wallet
+                          // centred. An agent's earnings live on their own
+                          // portal card instead — the points coin is a plain
+                          // shopper's reward, not something their role earns
+                          // towards, so it drops out of their header rather
+                          // than sitting there unused.
+                          if (!PersonaService.instance.isAgent) ...[
+                            const PointsBadge(),
+                            const SizedBox(width: 8),
+                          ],
+                          _CircleAction(
+                            icon: Icons.account_balance_wallet_outlined,
+                            tooltip: 'Wallet',
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const WalletScreen(),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        const CartBadge(),
-                      ],
+                          const SizedBox(width: 8),
+                          const CartBadge(),
+                        ],
+                      ),
                     ),
                   ),
                 ),

@@ -23,6 +23,14 @@ class MemberRepository {
   /// Inserts the user on first sign-in, or refreshes their name,
   /// `firebase_uid` and `last_login_at` on a return sign-in. Keyed on the
   /// mobile number, which is unique in `app.users`.
+  ///
+  /// Also clears `deleted_at`: the only way this conflicts against an
+  /// existing row for a *deleted* account is a member who deleted their
+  /// account and is now signing up fresh on the same number — see
+  /// [deleteAccount] — and that is a real reactivation, not a database
+  /// artefact left over from before. Leaving `deleted_at` set here would
+  /// strand them permanently invisible to [phoneExists] despite a working
+  /// session.
   Future<void> upsertOnSignIn({
     required String name,
     required String phone,
@@ -37,12 +45,61 @@ class MemberRepository {
             name          = EXCLUDED.name,
             firebase_uid  = COALESCE(EXCLUDED.firebase_uid, app.users.firebase_uid),
             last_login_at = now(),
-            updated_at    = now()
+            updated_at    = now(),
+            deleted_at    = NULL
         ''',
         [phone, name, firebaseUid],
       );
       NeonHttp.log('upsertOnSignIn: saved $phone');
     });
+  }
+
+  /// Deletes the member's account: soft — `deleted_at` is stamped rather than
+  /// the row removed, so `app."order"`/`app.wallet`/every other table with an
+  /// `ON DELETE CASCADE`/`SET NULL` FK to `app.users(id)` keeps its history
+  /// intact for accounting rather than being silently wiped or orphaned —
+  /// and the personal fields on the row itself are cleared, since a member
+  /// who asked to be deleted should not have their name/DOB/address still
+  /// sitting there just because the row lives on for its order history.
+  /// `phone` is kept: it is the unique key [upsertOnSignIn] re-activates
+  /// against if this same member signs up again later, and every existing
+  /// order/receipt still reads back to *a* real number rather than a blank.
+  ///
+  /// Deliberately more than the admin console's own `deleteUser`
+  /// (`shieldweb/src/api/users.ts`), which only ever stamps `deleted_at` —
+  /// an admin revoking access may need the full record intact (a
+  /// suspension, a dispute), where a member's own "delete my account" is a
+  /// privacy request the fields themselves should not survive. Both read as
+  /// the exact same `deleted_at` on the shared database.
+  ///
+  /// Best-effort like every other write here — see the class doc. Returns
+  /// whether the update actually touched a row, so the caller can tell a
+  /// real deletion from "there was nothing to delete" (no `DATABASE_URL`, or
+  /// the phone was never signed up).
+  Future<bool> deleteAccount(String phone) async {
+    final result = await _run('deleteAccount', () async {
+      final rows = await NeonHttp.instance.query(
+        '''
+          UPDATE app.users
+          SET name = 'Deleted user',
+              email = NULL,
+              gender = NULL,
+              dob = NULL,
+              address = NULL,
+              place = NULL,
+              pincode = NULL,
+              state = NULL,
+              firebase_uid = NULL,
+              deleted_at = now(),
+              updated_at = now()
+          WHERE phone = \$1 AND deleted_at IS NULL
+          RETURNING id
+        ''',
+        [phone],
+      );
+      return rows.isNotEmpty;
+    });
+    return result ?? false;
   }
 
   /// Whether an `app.users` row exists for [phone] — i.e. this number has

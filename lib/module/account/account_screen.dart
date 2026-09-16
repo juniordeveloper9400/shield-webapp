@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_colors.dart';
 import '../../money.dart';
@@ -142,6 +143,11 @@ class AccountScreen extends StatelessWidget {
                 onTap: () {},
               ),
               _MenuItem(
+                icon: Icons.privacy_tip_outlined,
+                label: 'Privacy Policy',
+                onTap: () => _openPrivacyPolicy(context),
+              ),
+              _MenuItem(
                 icon: Icons.settings_outlined,
                 label: 'Settings',
                 onTap: () {},
@@ -161,10 +167,59 @@ class AccountScreen extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 14),
+          _MenuGroup(
+            items: [
+              _MenuItem(
+                icon: Icons.delete_forever_rounded,
+                label: 'Delete Account',
+                isDestructive: true,
+                // A second, harder confirm than log out — this one has no
+                // way back at all.
+                onTap: () => _confirmDeleteAccount(context),
+              ),
+            ],
+          ),
         ],
       ),
     );
   }
+}
+
+/// The privacy policy's own, permanent public page — a plain static file
+/// (`web/privacy.html`, served as-is by Vercel, no sign-in and no Flutter
+/// runtime involved) rather than a screen inside the app. A store listing
+/// (or anyone else) needs a URL they can open without installing anything;
+/// a real "Privacy Policy" link has to actually be one.
+///
+/// Seam kept separate from [SocialLinks] (a distinct, single-purpose
+/// dependency) rather than folded into it — the two have nothing to do with
+/// each other beyond both opening a browser.
+@visibleForTesting
+Future<bool> Function(Uri uri) privacyPolicyOpener =
+    (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+
+const String privacyPolicyUrl = 'https://shieldapp-zeta.vercel.app/privacy.html';
+
+Future<void> _openPrivacyPolicy(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  var opened = false;
+  try {
+    opened = await privacyPolicyOpener(Uri.parse(privacyPolicyUrl));
+  } catch (_) {
+    opened = false;
+  }
+  if (opened) {
+    return;
+  }
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      const SnackBar(
+        content: Text('Could not open the Privacy Policy.'),
+        backgroundColor: AppColors.textDark,
+      ),
+    );
 }
 
 /// Asks for a yes/no before ending the session. Returning early on "Cancel"
@@ -195,6 +250,119 @@ Future<void> _confirmLogOut(BuildContext context) async {
 
   if (confirmed == true) {
     await AuthService.instance.logOut();
+  }
+}
+
+/// Opens the delete-account dialog. The gate swaps back to the login screen
+/// once [AuthService.deleteAccount] clears [AuthService.currentUser], the
+/// same way [_confirmLogOut] leaves it to happen — nothing here navigates by
+/// hand.
+Future<void> _confirmDeleteAccount(BuildContext context) async {
+  await showDialog<void>(
+    context: context,
+    barrierDismissible: false,
+    builder: (_) => const _DeleteAccountDialog(),
+  );
+}
+
+/// Asks a member to type DELETE before their account is actually removed —
+/// a plain Yes/No is too easy to tap through on an action with no undo at
+/// all, unlike [_confirmLogOut]'s.
+class _DeleteAccountDialog extends StatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
+  final _typed = TextEditingController();
+  bool _deleting = false;
+
+  static const _confirmWord = 'DELETE';
+
+  bool get _canConfirm =>
+      _typed.text.trim().toUpperCase() == _confirmWord && !_deleting;
+
+  @override
+  void dispose() {
+    _typed.dispose();
+    super.dispose();
+  }
+
+  Future<void> _confirm() async {
+    if (!_canConfirm) {
+      return;
+    }
+    setState(() => _deleting = true);
+    await AuthService.instance.deleteAccount();
+    if (!mounted) {
+      return;
+    }
+    // Closed either way: on success this leaves currentUser already null, so
+    // the gate underneath swaps to the login screen the same way it does
+    // after a plain log out; on a no-op (nobody was signed in) there is
+    // simply nothing left to confirm.
+    Navigator.of(context).pop();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Delete your account?'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'This permanently removes your profile, saved addresses and '
+            'patients from SHIELD. It cannot be undone, and you will need '
+            'to sign up again — with a fresh account — to use SHIELD on '
+            'this number.',
+          ),
+          const SizedBox(height: 14),
+          Text(
+            'Type $_confirmWord to confirm.',
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _typed,
+            enabled: !_deleting,
+            autofocus: true,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(
+              border: OutlineInputBorder(),
+              hintText: _confirmWord,
+              isDense: true,
+            ),
+            onChanged: (_) => setState(() {}),
+            onSubmitted: (_) => _confirm(),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _deleting
+              ? null
+              : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: _canConfirm ? _confirm : null,
+          style: TextButton.styleFrom(
+            foregroundColor: const Color(0xFFB4322F),
+          ),
+          child: _deleting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Delete Account'),
+        ),
+      ],
+    );
   }
 }
 

@@ -95,6 +95,15 @@ class WalletRepository {
 
   /// Files a privilege-card activation for review.
   ///
+  /// [agentCode] is the "Agent code (optional)" a member may type in at
+  /// checkout — passed straight through as typed; the backend resolves it
+  /// to a real agent (case-insensitively) and stores that on the card, so
+  /// approving it later can credit that agent's own direct-sale commission
+  /// (see `wallet.service.ts`'s `submitCard`/`approveCard`). An unknown or
+  /// mistyped code is never a reason to fail this submission — the backend
+  /// silently drops it rather than crediting nobody, so this call is
+  /// resilient to that the same way.
+  ///
   /// Returns the new card's id (as a string, standing in for the old row's
   /// uuid), or null when nothing was written.
   Future<String?> submitCardForApproval({
@@ -104,6 +113,7 @@ class WalletRepository {
     String? receiptReference,
     String? receiptFileName,
     String? receiptImage,
+    String? agentCode,
   }) async {
     if (!BackendHttp.isConfigured) {
       return null;
@@ -123,6 +133,7 @@ class WalletRepository {
           if (receiptReference != null) 'receiptReference': receiptReference,
           if (receiptFileName != null) 'receiptFileName': receiptFileName,
           if (receiptImage != null && receiptImage.isNotEmpty) 'receiptImage': receiptImage,
+          if (agentCode != null && agentCode.isNotEmpty) 'agentCode': agentCode,
         },
       ) as Map<String, dynamic>;
       return created['id']?.toString();

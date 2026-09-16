@@ -88,6 +88,11 @@ class MenuDrawer extends StatelessWidget {
                         _push(context, const LabCartScreen()),
                     onOpenOrders: () => _go(context, AppTab.orders.index),
                     onOpenRewards: () => _push(context, const RewardsScreen()),
+                    // A converted agent's own portal has its earnings; reward
+                    // points are a plain shopper's incentive, not a role they
+                    // work towards — same reasoning HomeHeader drops the
+                    // points coin for.
+                    showRewards: agent == null,
                   ),
                   // Sits directly under the dashboard: its own call-out row
                   // rather than one of the plain browse links, since it opens
@@ -429,12 +434,16 @@ class _DashboardPanel extends StatelessWidget {
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenRewards;
 
+  /// False for a converted agent — see the call site's own doc.
+  final bool showRewards;
+
   const _DashboardPanel({
     required this.onOpenWallet,
     required this.onOpenCart,
     required this.onOpenLabCart,
     required this.onOpenOrders,
     required this.onOpenRewards,
+    required this.showRewards,
   });
 
   @override
@@ -507,18 +516,19 @@ class _DashboardPanel extends StatelessWidget {
                       onTap: onOpenLabCart,
                     ),
                   ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _StatTile(
-                      icon: Icons.card_giftcard_rounded,
-                      label: 'Reward points',
-                      // The live balance: registering credits it, and a
-                      // promise the dashboard contradicted would not be one.
-                      value: formatRupees(RewardsService.instance.balance),
-                      accent: AppColors.brandGreenDeep,
-                      onTap: onOpenRewards,
+                  if (showRewards)
+                    SizedBox(
+                      width: tileWidth,
+                      child: _StatTile(
+                        icon: Icons.card_giftcard_rounded,
+                        label: 'Reward points',
+                        // The live balance: registering credits it, and a
+                        // promise the dashboard contradicted would not be one.
+                        value: formatRupees(RewardsService.instance.balance),
+                        accent: AppColors.brandGreenDeep,
+                        onTap: onOpenRewards,
+                      ),
                     ),
-                  ),
                 ],
               );
             },
