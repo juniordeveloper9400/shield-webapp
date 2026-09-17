@@ -9,9 +9,8 @@ import '../prescription/upload_prescription_screen.dart';
 class PrescriptionCard extends StatelessWidget {
   const PrescriptionCard({super.key});
 
-  /// The order line. Also the Perinthalmanna branch's number, which is the
-  /// same desk a walk-in order reaches.
-  static const String orderPhone = '9400525063';
+  /// The order line.
+  static const String orderPhone = '8594000970';
 
   /// The alternative to uploading, spelled out: not everyone has a photo of a
   /// prescription to hand, and both other routes end at the same counter.
