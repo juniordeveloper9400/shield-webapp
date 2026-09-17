@@ -8,10 +8,22 @@ class RemotePrescriptionCard {
   final String code;
   final String? uuid;
 
-  /// `AWAITING_REVIEW` / `ORDERED` / `READ` — the console's own status trail.
+  /// `AWAITING_REVIEW` / `READ` / `IN_CART` / `ORDERED` — the console's own
+  /// status trail.
   final String status;
   final String doctor;
   final List<RemotePrescriptionMedicine> medicines;
+
+  /// The rest of what a fresh install (or a reload on the web build) needs
+  /// to rebuild a [PrescriptionRecord] wholesale from the backend, rather
+  /// than only ever refreshing one that already exists locally — see
+  /// `PrescriptionRepository.fetchForMember`'s own doc.
+  final String? patientId;
+  final String fileName;
+  final MedicineDuration? duration;
+  final int? customDays;
+  final DateTime? recurringFrom;
+  final DateTime? recurringUntil;
 
   RemotePrescriptionCard({
     required this.code,
@@ -19,6 +31,12 @@ class RemotePrescriptionCard {
     required this.status,
     required this.doctor,
     required this.medicines,
+    this.patientId,
+    this.fileName = '',
+    this.duration,
+    this.customDays,
+    this.recurringFrom,
+    this.recurringUntil,
   });
 
   /// The pharmacist has entered the lines — the app card can expand.
@@ -117,7 +135,7 @@ class PrescriptionRepository {
   Future<String?> insertUpload({
     required int patientId,
     required String fileName,
-    String? image,
+    List<String> images = const [],
     String doctor = '',
     MedicineDuration? duration,
     int? customDays,
@@ -133,7 +151,7 @@ class PrescriptionRepository {
         '/v1/member/prescriptions',
         body: {
           'patientId': patientId,
-          if (image != null && image.isNotEmpty) 'image': image,
+          if (images.isNotEmpty) 'images': images,
           'fileName': fileName,
           'doctor': doctor,
           if (_durationName(duration) != null) 'duration': _durationName(duration),
@@ -143,7 +161,10 @@ class PrescriptionRepository {
         },
       ) as Map<String, dynamic>;
       final id = created['id']?.toString();
-      BackendHttp.log('PrescriptionRepository.insertUpload: saved $fileName ($id)');
+      BackendHttp.log(
+        'PrescriptionRepository.insertUpload: saved $fileName '
+        '(${images.length} image(s), $id)',
+      );
       return id;
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.insertUpload failed', error: error);
@@ -255,6 +276,12 @@ class PrescriptionRepository {
       status: (row['status'] ?? '').toString().toUpperCase(),
       doctor: (row['doctor'] ?? '').toString(),
       medicines: medicines,
+      patientId: row['patientId']?.toString(),
+      fileName: (row['fileName'] ?? '').toString(),
+      duration: _durationFromName(row['duration']?.toString()),
+      customDays: row['customDays'] == null ? null : _toInt(row['customDays']),
+      recurringFrom: DateTime.tryParse((row['recurringFrom'] ?? '').toString()),
+      recurringUntil: DateTime.tryParse((row['recurringUntil'] ?? '').toString()),
     );
   }
 
@@ -271,6 +298,15 @@ class PrescriptionRepository {
     MedicineDuration.twoMonths => 'TWO_MONTHS',
     MedicineDuration.threeMonths => 'THREE_MONTHS',
     null => null,
+  };
+
+  static MedicineDuration? _durationFromName(String? name) => switch (name) {
+    'ONE_WEEK' => MedicineDuration.oneWeek,
+    'FIFTEEN_DAYS' => MedicineDuration.fifteenDays,
+    'ONE_MONTH' => MedicineDuration.oneMonth,
+    'TWO_MONTHS' => MedicineDuration.twoMonths,
+    'THREE_MONTHS' => MedicineDuration.threeMonths,
+    _ => null,
   };
 
   /// `2026-08-31` — an unambiguous value for the backend's date fields.

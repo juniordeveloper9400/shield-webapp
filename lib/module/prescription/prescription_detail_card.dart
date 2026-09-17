@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../location/address_book.dart';
+import '../location/address_selection_screen.dart';
 import 'prescription_copy.dart';
 import 'prescription_record.dart';
 
@@ -20,11 +22,18 @@ class PrescriptionDetailCard extends StatefulWidget {
   final PrescriptionCopy copy;
   final VoidCallback onDelete;
 
+  /// Places a fresh fulfilment order for this same, already-uploaded
+  /// script — a repeat medicine run without uploading it again. Null hides
+  /// the affordance entirely (only offered once an order has actually been
+  /// placed — see [PrescriptionRecord.ordered]).
+  final VoidCallback? onReorder;
+
   const PrescriptionDetailCard({
     super.key,
     required this.record,
     required this.copy,
     required this.onDelete,
+    this.onReorder,
   });
 
   /// Widths the headings and every row share, so the three columns line up.
@@ -40,6 +49,19 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
 
   PrescriptionRecord get record => widget.record;
   PrescriptionCopy get copy => widget.copy;
+
+  /// Opens the saved-addresses picker and, if something was chosen, pins it
+  /// as this specific record's own delivery address — see
+  /// [PrescriptionRecord.address]'s own doc. Only offered before the order
+  /// is placed; once submitted the address already travelled with the order.
+  Future<void> _pickAddress() async {
+    final chosen = await Navigator.of(context).push<Address>(
+      MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
+    );
+    if (chosen != null) {
+      PrescriptionBook.instance.setAddress(record.id, chosen);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -81,6 +103,48 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
                     icon: Icons.autorenew_rounded,
                   ),
                 ],
+                if (record.isAwaitingOrder) ...[
+                  const SizedBox(height: 9),
+                  InkWell(
+                    onTap: _pickAddress,
+                    borderRadius: BorderRadius.circular(6),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          width: 66,
+                          child: Text(
+                            copy.deliveryDetails,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            record.address == null
+                                ? 'Same as default'
+                                : '${record.address!.receiver}, ${record.address!.summary}',
+                            style: TextStyle(
+                              fontSize: 13.5,
+                              height: 1.3,
+                              fontWeight: FontWeight.w700,
+                              color: record.address == null
+                                  ? AppColors.textMuted
+                                  : AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                        const Icon(
+                          Icons.chevron_right_rounded,
+                          size: 18,
+                          color: AppColors.textMuted,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 13),
                 const Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 11),
@@ -106,7 +170,12 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
               ],
             ),
           ),
-          _DeleteBar(label: copy.delete, onDelete: widget.onDelete),
+          _CardFooter(
+            deleteLabel: copy.delete,
+            onDelete: widget.onDelete,
+            reorderLabel: copy.reorder,
+            onReorder: record.ordered ? widget.onReorder : null,
+          ),
         ],
       ),
     );
@@ -168,6 +237,8 @@ class _Header extends StatelessWidget {
               ],
             ),
           ),
+          const SizedBox(width: 8),
+          _StatusChip(status: record.status, copy: copy),
           if (record.ordered) ...[
             const SizedBox(width: 8),
             Container(
@@ -191,6 +262,51 @@ class _Header extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// The pharmacy's own `app.prescription.status`, shown straight off the
+/// backend rather than only ever inferred from local flags — a member who
+/// knows the counter has "Read" their script but not yet built the intake
+/// card sees exactly that, instead of the card silently staying on its
+/// "before the order" state until medicines actually arrive.
+class _StatusChip extends StatelessWidget {
+  final String status;
+  final PrescriptionCopy copy;
+
+  const _StatusChip({required this.status, required this.copy});
+
+  Color get _tint => switch (status.toUpperCase()) {
+    'READ' => AppColors.chipBlueTint,
+    'IN_CART' => AppColors.offerTint,
+    'ORDERED' => AppColors.greenTint,
+    _ => AppColors.chipSlateTint,
+  };
+
+  Color get _text => switch (status.toUpperCase()) {
+    'READ' => AppColors.brandBlue,
+    'IN_CART' => AppColors.brandBlue,
+    'ORDERED' => AppColors.brandGreenDark,
+    _ => AppColors.textMuted,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: _tint,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        copy.statusLabel(status),
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: _text,
+        ),
       ),
     );
   }
@@ -582,12 +698,21 @@ class _IntakeLegend extends StatelessWidget {
   }
 }
 
-/// The foot of the card: just the one destructive action, kept quiet.
-class _DeleteBar extends StatelessWidget {
-  final String label;
+/// The foot of the card: the one destructive action, plus — once an order
+/// has actually been placed for this script — a way to place another one
+/// without uploading it again.
+class _CardFooter extends StatelessWidget {
+  final String deleteLabel;
   final VoidCallback onDelete;
+  final String reorderLabel;
+  final VoidCallback? onReorder;
 
-  const _DeleteBar({required this.label, required this.onDelete});
+  const _CardFooter({
+    required this.deleteLabel,
+    required this.onDelete,
+    required this.reorderLabel,
+    required this.onReorder,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -596,22 +721,46 @@ class _DeleteBar extends StatelessWidget {
         color: AppColors.white,
         border: Border(top: BorderSide(color: AppColors.border)),
       ),
-      padding: const EdgeInsets.fromLTRB(6, 4, 12, 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: onDelete,
-          icon: const Icon(Icons.delete_outline_rounded, size: 18),
-          label: Text(label, maxLines: 1, overflow: TextOverflow.ellipsis),
-          style: TextButton.styleFrom(
-            foregroundColor: AppColors.danger,
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
+      padding: const EdgeInsets.fromLTRB(6, 4, 8, 4),
+      child: Row(
+        children: [
+          TextButton.icon(
+            onPressed: onDelete,
+            icon: const Icon(Icons.delete_outline_rounded, size: 18),
+            label: Text(
+              deleteLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            style: TextButton.styleFrom(
+              foregroundColor: AppColors.danger,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              textStyle: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
-        ),
+          const Spacer(),
+          if (onReorder != null)
+            TextButton.icon(
+              onPressed: onReorder,
+              icon: const Icon(Icons.replay_rounded, size: 18),
+              label: Text(
+                reorderLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.brandBlue,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

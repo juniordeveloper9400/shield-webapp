@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../dates.dart';
+import '../location/address_book.dart';
 import '../patients/patient_book.dart';
 import 'medicine_duration.dart';
 
@@ -194,6 +195,22 @@ class PrescriptionRecord {
   /// "we're on it" state; once [medicines] arrive the card expands.
   bool ordered;
 
+  /// Where this specific prescription's fulfilment order is delivered.
+  /// Null defers to the shared [AddressBook.deliverTo] at checkout time —
+  /// most members never need more than one address, so nothing forces a
+  /// choice here. Set explicitly when a member is uploading several
+  /// prescriptions at once for different family members who each need their
+  /// own delivery address; [PrescriptionCheckoutScreen] groups records by
+  /// their resolved address and places one order per distinct address.
+  Address? address;
+
+  /// The backend's own `app.prescription.status` — `AWAITING_REVIEW`,
+  /// `READ`, `IN_CART`, or `ORDERED` — kept alongside the locally-derived
+  /// [ordered] flag so the card can show the pharmacist's actual state
+  /// rather than only ever inferring it. Starts at `AWAITING_REVIEW`, the
+  /// backend's own default for a freshly uploaded script.
+  String status;
+
   /// The `uuid` of this prescription's row in `app.prescription` on the
   /// backend, once one has been written. Null when the record has only ever
   /// lived in memory — a build with no `DATABASE_URL`, or a save made while
@@ -212,7 +229,9 @@ class PrescriptionRecord {
     List<PrescriptionMedicine>? medicines,
     this.inCart = false,
     this.ordered = false,
+    this.status = 'AWAITING_REVIEW',
     this.remoteId,
+    this.address,
   }) : medicines = medicines ?? <PrescriptionMedicine>[];
 
   /// "RX-0004" — the prescription's number, as it is quoted at the counter
@@ -298,6 +317,7 @@ class PrescriptionBook extends ChangeNotifier {
     int? customDays,
     RecurringSchedule? recurring,
     List<PrescriptionMedicine>? medicines,
+    Address? address,
   }) {
     final record = PrescriptionRecord(
       id: 'rx${_nextId++}',
@@ -308,6 +328,7 @@ class PrescriptionBook extends ChangeNotifier {
       customDays: customDays,
       recurring: recurring,
       medicines: medicines,
+      address: address,
     );
     _records.add(record);
     notifyListeners();
@@ -332,6 +353,17 @@ class PrescriptionBook extends ChangeNotifier {
       return;
     }
     _records[index].remoteId = remoteId;
+    notifyListeners();
+  }
+
+  /// Sets or clears which address this specific prescription's order ships
+  /// to — see [PrescriptionRecord.address]'s own doc.
+  void setAddress(String id, Address? address) {
+    final index = indexOf(id);
+    if (index == -1) {
+      return;
+    }
+    _records[index].address = address;
     notifyListeners();
   }
 
@@ -376,12 +408,15 @@ class PrescriptionBook extends ChangeNotifier {
   /// Folds in the pharmacist's intake card once it has been read back from the
   /// backend: the medicine lines and, if it carries one, the prescriber.
   /// [ordered] is set true when the backend row shows the order was placed on
-  /// another device.
+  /// another device. [status] is the backend's own real status string —
+  /// stored as-is so the card can show it directly rather than only ever
+  /// inferring a state from the other flags.
   void applyIntakeCard(
     String id, {
     required List<PrescriptionMedicine> medicines,
     String doctor = '',
     bool ordered = false,
+    String? status,
   }) {
     final index = indexOf(id);
     if (index == -1) {
@@ -399,6 +434,10 @@ class PrescriptionBook extends ChangeNotifier {
     }
     if (ordered && !record.ordered) {
       record.ordered = true;
+      changed = true;
+    }
+    if (status != null && status.isNotEmpty && record.status != status) {
+      record.status = status;
       changed = true;
     }
     if (changed) {

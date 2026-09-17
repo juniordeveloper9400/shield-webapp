@@ -29,7 +29,18 @@ class PickedFile {
   /// the bytes could not be read.
   final String? dataUrl;
 
-  const PickedFile({required this.name, required this.bytes, this.dataUrl});
+  /// The same image, as raw bytes, so this form can open its own full-screen
+  /// preview (see [ReceiptFormController.previewBytes]) without decoding
+  /// [dataUrl] back out of base64 on every rebuild. Null in tests and
+  /// whenever [dataUrl] is.
+  final Uint8List? previewBytes;
+
+  const PickedFile({
+    required this.name,
+    required this.bytes,
+    this.dataUrl,
+    this.previewBytes,
+  });
 }
 
 /// Opens the camera or the gallery.
@@ -67,6 +78,7 @@ class ReceiptPicker {
       name: picked.name,
       bytes: bytes.length,
       dataUrl: 'data:image/jpeg;base64,${base64Encode(bytes)}',
+      previewBytes: bytes,
     );
   }
 }

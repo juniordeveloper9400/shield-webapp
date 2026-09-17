@@ -11,6 +11,9 @@ import '../../widgets/upload_picker.dart';
 import '../auth/auth_service.dart';
 import '../auth/auth_widgets.dart';
 import '../auth/otp_field.dart';
+import '../registration/registration_flow.dart';
+import '../registration/registration_required_screen.dart';
+import '../registration/registration_service.dart';
 import 'agent_model.dart';
 import 'agent_otp_verifier.dart';
 import 'agent_photo_picker.dart';
@@ -127,6 +130,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
   void initState() {
     super.initState();
     _otp.addListener(_clearErrorOnEdit);
+    _phone.addListener(_onPhoneChanged);
     // Make sure the geo hierarchy is (being) loaded — usually already done by
     // the tree, but the form can also be opened from the agent detail screen.
     AgentGeo.instance.ensureLoaded();
@@ -308,10 +312,23 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     ];
   }
 
+  /// Whether the mobile number typed so far is a complete, valid one — the
+  /// gate that reveals the rest of the form. Recomputed on every keystroke
+  /// via [_onPhoneChanged] rather than cached, since it is cheap and the
+  /// controller is the single source of truth.
+  bool get _phoneReady => AgentService.validatePhone(_phone.text.trim()) == null;
+
+  void _onPhoneChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
   @override
   void dispose() {
     _cooldown?.cancel();
     AgentOtpVerifier.current.discard();
+    _phone.removeListener(_onPhoneChanged);
     for (final c in [
       _first,
       _middle,
@@ -631,6 +648,27 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // The submission behind this whole screen goes out under whoever is
+    // actually signed in right now — not the KYC details typed into the
+    // form (see backend/api's MemberAgentController.submitRequest, which
+    // reads name/phone off the caller's own session, and AgentService
+    // .approveRequest, which re-checks the same thing on the way out).
+    // Both refuse a request from a member whose own SHIELD registration
+    // isn't complete, so there is no point opening this multi-step KYC +
+    // OTP flow at all until that's true — better to say so up front than
+    // let someone fill the whole thing in for a submit that can only fail.
+    return ListenableBuilder(
+      listenable: RegistrationService.instance,
+      builder: (context, _) => RegistrationService.instance.isRegistered
+          ? _buildForm(context)
+          : RegistrationRequiredScreen(
+              title: 'Agent registration',
+              onComplete: () => RegistrationFlow.show(context),
+            ),
+    );
+  }
+
+  Widget _buildForm(BuildContext context) {
     return PopScope(
       canPop: _step == _Step.details,
       onPopInvokedWithResult: (didPop, _) {
@@ -672,68 +710,20 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
 
   Widget _buildDetails() {
     final levels = _levelsUnder(_parent);
+    final phoneReady = _phoneReady;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        const AuthHeading(
+        AuthHeading(
           title: 'Register an agent',
-          subtitle:
-              'Place them in your team, capture their details, then verify '
-              'their mobile number with a one-time code.',
+          subtitle: phoneReady
+              ? 'Place them in your team, capture their details, then '
+                  'verify their mobile number with a one-time code.'
+              : 'Start with their mobile number — the rest of the form '
+                  'appears once it checks out.',
         ),
         const SizedBox(height: 20),
-
-        Center(
-          child: _PhotoPickerField(
-            photo: _photo,
-            onPick: _pickPhoto,
-            onRemove: () => setState(() => _photo = null),
-          ),
-        ),
-        const SizedBox(height: 22),
-
-        _Label('Reports to'),
-        DropdownButtonFormField<String>(
-          initialValue: _parent.id,
-          isExpanded: true,
-          decoration: shieldFieldDecoration(),
-          items: [
-            for (final agent in _parentChoices)
-              DropdownMenuItem(
-                value: agent.id,
-                child: Text(
-                  '${agent.name} · ${agent.level.label}',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-          ],
-          onChanged: _onParentChanged,
-        ),
-        const SizedBox(height: 14),
-
-        _Label('Level'),
-        DropdownButtonFormField<AgentLevel>(
-          initialValue: _level,
-          isExpanded: true,
-          decoration: shieldFieldDecoration(),
-          items: [
-            for (final level in levels)
-              DropdownMenuItem(value: level, child: Text(level.label)),
-          ],
-          onChanged: (level) {
-            if (level != null) {
-              setState(() {
-                _level = level;
-                _normalizeCascade();
-              });
-            }
-          },
-        ),
-        for (final tier in _cascadeTiers)
-          if (_showPicker(tier)) ..._cascadePicker(tier),
-        const SizedBox(height: 18),
 
         Form(
           key: _formKey,
@@ -744,136 +734,192 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               LabelledField(
-                label: 'First name',
-                hint: 'First name',
-                controller: _first,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                validator: (v) =>
-                    AgentService.validateName(v, field: 'first name'),
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Middle name (optional)',
-                hint: 'Middle name',
-                controller: _middle,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                validator: AgentService.validateMiddleName,
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Last name',
-                hint: 'Last name',
-                controller: _last,
-                textCapitalization: TextCapitalization.words,
-                inputFormatters: [LengthLimitingTextInputFormatter(30)],
-                validator: (v) =>
-                    AgentService.validateName(v, field: 'last name'),
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
                 label: 'Mobile number',
                 hint: '10-digit mobile number',
                 controller: _phone,
                 prefixText: '+91  ',
                 keyboardType: TextInputType.phone,
+                autofocus: true,
                 inputFormatters: [
                   FilteringTextInputFormatter.digitsOnly,
                   LengthLimitingTextInputFormatter(10),
                 ],
                 validator: AgentService.validatePhone,
               ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Date of birth',
-                hint: 'Select date',
-                controller: _dobText,
-                readOnly: true,
-                onTap: _pickDob,
-                icon: Icons.event_rounded,
-                validator: (_) => _dob == null ? 'Date of birth is required'
-                    : null,
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Aadhaar number',
-                hint: '12-digit Aadhaar',
-                controller: _aadhaar,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(12),
-                ],
-                validator: AgentService.validateAadhaar,
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'PAN',
-                hint: 'ABCDE1234F',
-                controller: _pan,
-                textCapitalization: TextCapitalization.characters,
-                inputFormatters: [
-                  FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
-                  LengthLimitingTextInputFormatter(10),
-                  TextInputFormatter.withFunction(
-                    (_, next) => next.copyWith(text: next.text.toUpperCase()),
+
+              if (phoneReady) ...[
+                const SizedBox(height: 22),
+                Center(
+                  child: _PhotoPickerField(
+                    photo: _photo,
+                    onPick: _pickPhoto,
+                    onRemove: () => setState(() => _photo = null),
                   ),
-                ],
-                validator: AgentService.validatePan,
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Address',
-                hint: 'House / street / locality',
-                controller: _address,
-                textCapitalization: TextCapitalization.words,
-                maxLines: 2,
-                validator: (v) =>
-                    AgentService.validateRequired(v, 'address'),
-              ),
-              const SizedBox(height: 14),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: LabelledField(
-                      label: 'PIN code',
-                      hint: '6 digits',
-                      controller: _pincode,
-                      keyboardType: TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(6),
-                      ],
-                      validator: AgentService.validatePincode,
+                ),
+                const SizedBox(height: 22),
+
+                _Label('Reports to'),
+                DropdownButtonFormField<String>(
+                  initialValue: _parent.id,
+                  isExpanded: true,
+                  decoration: shieldFieldDecoration(),
+                  items: [
+                    for (final agent in _parentChoices)
+                      DropdownMenuItem(
+                        value: agent.id,
+                        child: Text(
+                          '${agent.name} · ${agent.level.label}',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: _onParentChanged,
+                ),
+                const SizedBox(height: 14),
+
+                _Label('Level'),
+                DropdownButtonFormField<AgentLevel>(
+                  initialValue: _level,
+                  isExpanded: true,
+                  decoration: shieldFieldDecoration(),
+                  items: [
+                    for (final level in levels)
+                      DropdownMenuItem(value: level, child: Text(level.label)),
+                  ],
+                  onChanged: (level) {
+                    if (level != null) {
+                      setState(() {
+                        _level = level;
+                        _normalizeCascade();
+                      });
+                    }
+                  },
+                ),
+                for (final tier in _cascadeTiers)
+                  if (_showPicker(tier)) ..._cascadePicker(tier),
+                const SizedBox(height: 18),
+
+                LabelledField(
+                  label: 'First name',
+                  hint: 'First name',
+                  controller: _first,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  validator: (v) =>
+                      AgentService.validateName(v, field: 'first name'),
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Middle name (optional)',
+                  hint: 'Middle name',
+                  controller: _middle,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  validator: AgentService.validateMiddleName,
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Last name',
+                  hint: 'Last name',
+                  controller: _last,
+                  textCapitalization: TextCapitalization.words,
+                  inputFormatters: [LengthLimitingTextInputFormatter(30)],
+                  validator: (v) =>
+                      AgentService.validateName(v, field: 'last name'),
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Date of birth',
+                  hint: 'Select date',
+                  controller: _dobText,
+                  readOnly: true,
+                  onTap: _pickDob,
+                  icon: Icons.event_rounded,
+                  validator: (_) =>
+                      _dob == null ? 'Date of birth is required' : null,
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Aadhaar number',
+                  hint: '12-digit Aadhaar',
+                  controller: _aadhaar,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(12),
+                  ],
+                  validator: AgentService.validateAadhaar,
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'PAN',
+                  hint: 'ABCDE1234F',
+                  controller: _pan,
+                  textCapitalization: TextCapitalization.characters,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+                    LengthLimitingTextInputFormatter(10),
+                    TextInputFormatter.withFunction(
+                      (_, next) =>
+                          next.copyWith(text: next.text.toUpperCase()),
                     ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: LabelledField(
-                      label: 'Place',
-                      hint: 'Town / village',
-                      controller: _place,
-                      textCapitalization: TextCapitalization.words,
-                      validator: (v) =>
-                          AgentService.validateRequired(v, 'place'),
+                  ],
+                  validator: AgentService.validatePan,
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Address',
+                  hint: 'House / street / locality',
+                  controller: _address,
+                  textCapitalization: TextCapitalization.words,
+                  maxLines: 2,
+                  validator: (v) =>
+                      AgentService.validateRequired(v, 'address'),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: LabelledField(
+                        label: 'PIN code',
+                        hint: '6 digits',
+                        controller: _pincode,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        validator: AgentService.validatePincode,
+                      ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              LabelledField(
-                label: 'Bank account number',
-                hint: 'Account the commission is paid into',
-                controller: _account,
-                keyboardType: TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter.digitsOnly,
-                  LengthLimitingTextInputFormatter(18),
-                ],
-                validator: AgentService.validateAccountNumber,
-              ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: LabelledField(
+                        label: 'Place',
+                        hint: 'Town / village',
+                        controller: _place,
+                        textCapitalization: TextCapitalization.words,
+                        validator: (v) =>
+                            AgentService.validateRequired(v, 'place'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                LabelledField(
+                  label: 'Bank account number',
+                  hint: 'Account the commission is paid into',
+                  controller: _account,
+                  keyboardType: TextInputType.number,
+                  inputFormatters: [
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(18),
+                  ],
+                  validator: AgentService.validateAccountNumber,
+                ),
+              ],
             ],
           ),
         ),
@@ -939,6 +985,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     );
   }
 }
+
 
 /// The optional profile photo, captured here at registration and nowhere
 /// else — the agent's own detail screen only ever shows it. Tapping the

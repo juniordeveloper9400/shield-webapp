@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../theme/app_colors.dart';
 import 'agent_direct_sale.dart';
@@ -132,7 +133,13 @@ class _MyTeamBar extends StatelessWidget {
   }
 }
 
-/// Who the portal belongs to: name, tier and code, in the tier's colour.
+/// Who the portal belongs to: name, tier and code, in the tier's colour —
+/// and, underneath, the same code again as an actual invitation: a customer
+/// who checks out with it on their order attributes that sale to this agent
+/// (see `WalletRepository.submitCardForApproval`'s `agentCode` doc), so the
+/// code sitting here as plain text was never actually usable for that —
+/// nothing to copy, nothing to send. [_AgentCodeInvite] is what turns it
+/// into one.
 class _AgentStrip extends StatelessWidget {
   final Agent agent;
 
@@ -148,55 +155,169 @@ class _AgentStrip extends StatelessWidget {
         border: Border.all(color: agent.level.accent.withValues(alpha: 0.4)),
       ),
       padding: const EdgeInsets.all(14),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: agent.level.accent,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              agent.initials,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: AppColors.white,
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  agent.name,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: agent.level.accent,
+                  shape: BoxShape.circle,
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  agent.initials,
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
+                    color: AppColors.white,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  '${agent.level.label} agent · ${agent.agentCode}',
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      agent.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${agent.level.label} agent · ${agent.agentCode}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w600,
+                        color: AppColors.textBody,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(height: 1, color: agent.level.accent.withValues(alpha: 0.25)),
+          const SizedBox(height: 12),
+          _AgentCodeInvite(agent: agent),
+        ],
+      ),
+    );
+  }
+}
+
+/// The agent's code, made actually shareable — a customer who enters it at
+/// checkout (the "Agent code (optional)" field on the order summary) has
+/// their purchase counted as this agent's direct sale. Mirrors
+/// `refer_earn_screen.dart`'s `_CodeCard`/`_InviteButton` (same shape, same
+/// share-sheet approach) rather than inventing a second way to do this.
+class _AgentCodeInvite extends StatelessWidget {
+  final Agent agent;
+
+  const _AgentCodeInvite({required this.agent});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Your agent code',
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: AppColors.textBody,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.white,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: agent.level.accent.withValues(alpha: 0.5),
+                    width: 1.3,
+                  ),
+                ),
+                child: Text(
+                  agent.agentCode,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textBody,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    color: AppColors.textDark,
                   ),
                 ),
-              ],
+              ),
             ),
-          ),
-        ],
+            const SizedBox(width: 10),
+            _AgentInviteButton(agent: agent),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _AgentInviteButton extends StatelessWidget {
+  final Agent agent;
+
+  const _AgentInviteButton({required this.agent});
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton.icon(
+      onPressed: () async {
+        final messenger = ScaffoldMessenger.of(context);
+        try {
+          await SharePlus.instance.share(
+            ShareParams(
+              subject: 'My SHIELD agent code',
+              text:
+                  "I'm a SHIELD agent — ${agent.name}. Enter my agent code "
+                  '${agent.agentCode} when you check out on the SHIELD app '
+                  'so your order is placed through me.',
+            ),
+          );
+        } on Exception {
+          // Platforms without a share sheet (some desktop browsers) throw
+          // rather than silently doing nothing.
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Sharing is not available here')),
+          );
+        }
+      },
+      icon: const Icon(Icons.share_rounded, size: 17),
+      label: const Text(
+        'Invite',
+        style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
+      ),
+      style: FilledButton.styleFrom(
+        backgroundColor: agent.level.accent,
+        foregroundColor: AppColors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }

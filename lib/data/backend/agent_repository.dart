@@ -2,6 +2,47 @@ import '../../module/agent/agent_directory.dart';
 import '../../module/agent/agent_model.dart';
 import 'backend_http.dart';
 
+/// One of the caller's own submitted `app.agent_request` rows — see
+/// [AgentRepository.fetchOwnRequests].
+class OwnAgentRequest {
+  final int id;
+
+  /// `PENDING` · `APPROVED` · `REJECTED`.
+  final String status;
+  final AgentLevel level;
+  final String area;
+  final DateTime createdAt;
+
+  /// The admin's reason, set only when [status] is `REJECTED`.
+  final String reviewerNote;
+
+  const OwnAgentRequest({
+    required this.id,
+    required this.status,
+    required this.level,
+    required this.area,
+    required this.createdAt,
+    required this.reviewerNote,
+  });
+
+  bool get isPending => status == 'PENDING';
+  bool get isRejected => status == 'REJECTED';
+}
+
+/// What [AgentRepository.submitOwnAgentRequest] resolves to: the new
+/// request's id on success, or the backend's own refusal message — see
+/// that method's own doc for why this one write doesn't collapse a failure
+/// down to a bare null the way every other repository call here does.
+class AgentRequestOutcome {
+  final int? id;
+  final String? error;
+
+  const AgentRequestOutcome.success(this.id) : error = null;
+  const AgentRequestOutcome.failure(this.error) : id = null;
+
+  bool get ok => error == null;
+}
+
 /// Reads and writes the agent roster through `backend/api`'s `/v1/agent/*`
 /// routes — see `agent.service.ts`.
 ///
@@ -51,6 +92,96 @@ class AgentRepository {
                 as List<dynamic>;
         return rows.cast<Map<String, dynamic>>().map(_toRequestAgent).toList();
       });
+
+  /// The caller's own submitted agent requests, newest first
+  /// (`GET /v1/agent/requests`) — what "Become a SHIELD Agent" reads to show
+  /// "your application is under review" instead of the form again once one
+  /// is already in, and what tells it a rejected one can be resubmitted.
+  /// Null when unavailable.
+  Future<List<OwnAgentRequest>?> fetchOwnRequests() =>
+      _run('fetchOwnRequests', () async {
+        final rows =
+            await BackendHttp.instance.request('GET', '/v1/agent/requests')
+                as List<dynamic>;
+        return rows.cast<Map<String, dynamic>>().map(_toOwnRequest).toList();
+      });
+
+  static OwnAgentRequest _toOwnRequest(Map<String, dynamic> row) =>
+      OwnAgentRequest(
+        id: row['id'] as int,
+        status: (row['status'] ?? 'PENDING').toString(),
+        level: _levelByName[(row['requestedLevel'] ?? 'WARD').toString()] ??
+            AgentLevel.ward,
+        area: (row['requestedArea'] ?? '').toString(),
+        createdAt:
+            DateTime.tryParse((row['createdAt'] ?? '').toString()) ??
+                DateTime.now(),
+        reviewerNote: (row['reviewerNote'] ?? '').toString(),
+      );
+
+  /// Files a member's own request to become an agent — the same
+  /// `POST /v1/agent/requests` [insertAgentRequest] uses for a recruiter
+  /// adding someone else, but with the caller's identity resolved
+  /// server-side from their own session (see `agent.service.ts`'s
+  /// `submitRequest`) rather than a `parentAgentId` — there is no recruiter
+  /// here to place them under, so the admin console assigns the real parent
+  /// at approval time.
+  ///
+  /// Unlike every other write in this file, this does not swallow a failure
+  /// into a bare `null`: "Become an Agent" is the one screen where silently
+  /// saying "sent" for an application that never reached admin — a stale
+  /// connection, a real refusal like an incomplete registration — would
+  /// defeat the entire point of it existing. See [AgentRequestOutcome].
+  Future<AgentRequestOutcome> submitOwnAgentRequest({
+    required AgentLevel level,
+    required String area,
+    String? areaId,
+    required String firstName,
+    String middleName = '',
+    required String lastName,
+    required DateTime dob,
+    required String aadhaar,
+    required String pan,
+    required String address,
+    required String pincode,
+    required String place,
+    required String accountNumber,
+  }) async {
+    if (!BackendHttp.isConfigured) {
+      return const AgentRequestOutcome.failure(
+        'Not connected — check your connection and try again.',
+      );
+    }
+    try {
+      final body = await BackendHttp.instance.request(
+        'POST',
+        '/v1/agent/requests',
+        body: {
+          'requestedLevel': level.name.toUpperCase(),
+          'requestedArea': area,
+          if (areaId != null) 'requestedAreaId': areaId,
+          'firstName': firstName,
+          'middleName': middleName,
+          'lastName': lastName,
+          'dob': _isoDate(dob),
+          'aadhaar': aadhaar,
+          'pan': pan,
+          'address': address,
+          'pincode': pincode,
+          'place': place,
+          'accountNumber': accountNumber,
+        },
+      ) as Map<String, dynamic>;
+      return AgentRequestOutcome.success(body['id'] as int?);
+    } on BackendHttpException catch (error) {
+      return AgentRequestOutcome.failure(error.message);
+    } catch (error) {
+      BackendHttp.log('AgentRepository.submitOwnAgentRequest failed', error: error);
+      return const AgentRequestOutcome.failure(
+        'Something went wrong. Please try again.',
+      );
+    }
+  }
 
   /// Files an agent-registration request (`POST /v1/agent/requests`) for the
   /// admin console to approve. Returns the request row id, or null on

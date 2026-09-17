@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../../data/backend/address_repository.dart';
 import '../../data/backend/prescription_repository.dart';
 import '../../dates.dart';
+import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
 import '../auth/auth_service.dart';
@@ -12,10 +13,11 @@ import '../checkout/checkout_chrome.dart';
 import '../checkout/fulfillment_type.dart';
 import '../checkout/payment_method.dart';
 import '../location/address_book.dart';
-import '../location/address_form_screen.dart';
+import '../location/address_selection_screen.dart';
 import '../orders/purchase_service.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
+import '../wallet/wallet_service.dart';
 import 'prescription_record.dart';
 import 'prescription_order_placed_screen.dart';
 
@@ -90,6 +92,12 @@ class _PrescriptionCheckoutScreenState
     setState(() => _method = method);
   }
 
+  /// Every record resolves to a real address — its own, or the shared
+  /// default — so nothing in this checkout is left with nowhere to ship.
+  bool get _everyRecordHasAddress => widget.records.every(
+    (record) => (record.address ?? AddressBook.instance.deliverTo) != null,
+  );
+
   Future<void> _placeOrder() async {
     if (_placing) {
       return;
@@ -97,7 +105,7 @@ class _PrescriptionCheckoutScreenState
     // A delivery address is only needed when the order actually ships — a
     // pickup order has nowhere to deliver to.
     final needsAddress = _fulfillment == FulfillmentType.homeDelivery;
-    if (needsAddress && AddressBook.instance.deliverTo == null) {
+    if (needsAddress && !_everyRecordHasAddress) {
       ScaffoldMessenger.of(context)
         ..hideCurrentSnackBar()
         ..showSnackBar(
@@ -155,28 +163,63 @@ class _PrescriptionCheckoutScreenState
   }
 
   /// Resolves each record's backend prescription id (pinned at upload time
-  /// — see `PrescriptionFormController._persist`), creates a delivery
-  /// address, and submits the fulfilment order. A record never synced to
-  /// the backend (a network blip at upload time) is left out rather than
+  /// — see `PrescriptionFormController._persist`), groups the records by
+  /// delivery address, and submits one fulfilment order per distinct
+  /// address. A record with its own [PrescriptionRecord.address] (chosen at
+  /// upload, for a member sending several prescriptions to different family
+  /// members) ships separately from the rest; every record left unset falls
+  /// back to the shared [AddressBook.deliverTo] and travels together in one
+  /// order, exactly as before this could ever differ. A record never synced
+  /// to the backend (a network blip at upload time) is left out rather than
   /// failing the whole submission — same best-effort contract as every
   /// write here.
+  ///
+  /// Grouped by object identity, not by matching field values: two records
+  /// that happen to have separately-created but identical-looking addresses
+  /// place two orders instead of one combined order — a minor inefficiency
+  /// (an extra `AddressRepository.create` call), not a correctness issue,
+  /// and the same class of thing `AddressRepository`'s own doc already notes
+  /// about `create` having no dedup.
+  ///
+  /// The real backend order id(s) `submitForOrder` returns are not written
+  /// onto the local [Purchase] directly — [PurchaseService.refresh] re-lists
+  /// from `GET /v1/member/orders` instead, which is where [Purchase.backendId]
+  /// actually comes from ([Purchase.fromRow]). Without this, a just-placed
+  /// order stays `backendId: null` until some other refresh happens to run,
+  /// and `PrescriptionUploadedCard` — which needs [Purchase.backendId] to
+  /// fetch the uploaded script — silently shows its placeholder icon instead.
   Future<void> _submitToBackend() async {
-    final prescriptionIds = [
-      for (final record in widget.records)
-        if (int.tryParse(record.remoteId ?? '') case final id?) id,
-    ];
-    if (prescriptionIds.isEmpty) {
+    final groups = <Address?, List<int>>{};
+    for (final record in widget.records) {
+      final prescriptionId = int.tryParse(record.remoteId ?? '');
+      if (prescriptionId == null) {
+        continue;
+      }
+      final resolved = record.address ?? AddressBook.instance.deliverTo;
+      (groups[resolved] ??= []).add(prescriptionId);
+    }
+    if (groups.isEmpty) {
       return;
     }
-    final address = AddressBook.instance.deliverTo;
-    final addressId =
-        address == null ? null : await AddressRepository.instance.create(address);
-    await PrescriptionRepository.instance.submitForOrder(
-      prescriptionIds: prescriptionIds,
-      addressId: addressId,
-      fulfillmentType: _fulfillment,
-      paymentMethodCode: _method.id,
-    );
+
+    var anySubmitted = false;
+    for (final entry in groups.entries) {
+      final address = entry.key;
+      final addressId =
+          address == null ? null : await AddressRepository.instance.create(address);
+      final orderId = await PrescriptionRepository.instance.submitForOrder(
+        prescriptionIds: entry.value,
+        addressId: addressId,
+        fulfillmentType: _fulfillment,
+        paymentMethodCode: _method.id,
+      );
+      if (orderId != null) {
+        anySubmitted = true;
+      }
+    }
+    if (anySubmitted) {
+      await PurchaseService.instance.refresh();
+    }
   }
 
   @override
@@ -245,7 +288,7 @@ class _PrescriptionCheckoutScreenState
         builder: (context, _) => _PlaceOrderBar(
           busy: _placing,
           hasAddress: _fulfillment == FulfillmentType.storePickup ||
-              AddressBook.instance.deliverTo != null,
+              _everyRecordHasAddress,
           onPressed: _placeOrder,
         ),
       ),
@@ -297,40 +340,64 @@ class _SummaryCard extends StatelessWidget {
           for (final record in records)
             Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.brandBlue,
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      record.number,
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                        color: AppColors.white,
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 3,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.brandBlue,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          record.number,
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          record.patient.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  // Only shown when this record ships to its own address —
+                  // otherwise it silently rides along with whichever address
+                  // the "Delivery address" card below settles on, same as
+                  // before a record could carry one of its own.
+                  if (record.address != null) ...[
+                    const SizedBox(height: 3),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 44),
+                      child: Text(
+                        '→ ${record.address!.receiver}, ${record.address!.summary}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      record.patient.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                  ),
+                  ],
                 ],
               ),
             ),
@@ -520,7 +587,7 @@ class _DeliveryCard extends StatelessWidget {
 
   void _edit(BuildContext context) {
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AddressFormScreen()),
+      MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
     );
   }
 
@@ -636,14 +703,35 @@ class _PaymentCard extends StatelessWidget {
             style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
-          for (final method in PaymentMethods.forOrder) ...[
-            _MethodTile(
-              method: method,
-              selected: method.id == selected.id,
-              onTap: () => onSelect(method),
-            ),
-            const SizedBox(height: 8),
-          ],
+          // The wallet tile listens to WalletService directly so its balance
+          // stays live without this screen tracking it itself — same pattern
+          // as the standard cart checkout's own wallet tile, just without a
+          // known order total yet to split against (a prescription is priced
+          // later, at the counter).
+          ListenableBuilder(
+            listenable: WalletService.instance,
+            builder: (context, _) {
+              final wallet = WalletService.instance;
+              return Column(
+                children: [
+                  for (final method in PaymentMethods.forOrder) ...[
+                    _MethodTile(
+                      method: method,
+                      selected: method.id == selected.id,
+                      onTap: () => onSelect(method),
+                      subtitle: method.id == PaymentMethods.wallet.id
+                          ? (wallet.isActivated
+                              ? 'Balance: ₹${formatRupees(wallet.balance)} — any shortfall '
+                                    'once priced is collected in cash'
+                              : 'Get a Sahakar HealthPass first')
+                          : null,
+                    ),
+                    const SizedBox(height: 8),
+                  ],
+                ],
+              );
+            },
+          ),
         ],
       ),
     );
@@ -655,10 +743,14 @@ class _MethodTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap;
 
+  /// Overrides [PaymentMethod.blurb] — the wallet tile's live balance line.
+  final String? subtitle;
+
   const _MethodTile({
     required this.method,
     required this.selected,
     required this.onTap,
+    this.subtitle,
   });
 
   @override
@@ -703,7 +795,7 @@ class _MethodTile extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      method.blurb,
+                      subtitle ?? method.blurb,
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.textMuted,

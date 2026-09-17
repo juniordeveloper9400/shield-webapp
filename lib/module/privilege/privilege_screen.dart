@@ -50,6 +50,17 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
   bool _syncing = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Otherwise the screen opens with nothing chosen at all — no amount
+    // shown as selected, "Activate" with nothing to act on — until the
+    // member happens to swipe or tap one. The carousel already opens on the
+    // first tier; the amount on it should open just as picked as the card
+    // itself visibly is.
+    _selected = _faceAt(0);
+  }
+
+  @override
   void dispose() {
     _pages.dispose();
     super.dispose();
@@ -203,6 +214,10 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
                   // looking at a "pending" plan the console will never see.
                   WalletService.instance.discardPending(submittedAt);
                   _reachedDatabase = false;
+                  // Captured now, not read later off the SnackBar branch —
+                  // by then another submission could already have reset it.
+                  _lastSubmitError =
+                      WalletRepository.instance.lastSubmitCardError;
                 }
               }
               // Pin the branch chosen on the checkout to the account, so every
@@ -227,15 +242,16 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
         // Reset for the next attempt — this flag only ever means "the most
         // recent submission", never a lasting error state.
         _reachedDatabase = true;
+        final message = _lastSubmitError ??
+            'Could not reach the server to file this receipt. Check '
+                'your connection and submit it again — nothing has gone '
+                'to the counter yet.';
+        _lastSubmitError = null;
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
           ..showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Could not reach the server to file this receipt. Check '
-                'your connection and submit it again — nothing has gone '
-                'to the counter yet.',
-              ),
+            SnackBar(
+              content: Text(message),
               backgroundColor: AppColors.danger,
             ),
           );
@@ -267,6 +283,13 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
   /// wrong" — for a build with no database at all, which behaves as it always
   /// has: a local-only submission with no console to reach.
   bool _reachedDatabase = true;
+
+  /// The backend's own reason for the most recent failed submission (e.g.
+  /// the receipt-upload rate limit), captured off
+  /// [WalletRepository.lastSubmitCardError] the moment `onComplete` sees
+  /// `_reachedDatabase` go false — before anything else can reset it. Null
+  /// falls back to the generic connectivity message.
+  String? _lastSubmitError;
 
   @override
   Widget build(BuildContext context) {

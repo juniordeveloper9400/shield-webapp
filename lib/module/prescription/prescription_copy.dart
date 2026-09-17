@@ -52,6 +52,25 @@ class PrescriptionCopy {
   final String optionalTag;
   final String photoOptionalNote;
   final String noFileAttached;
+
+  /// "Add up to {n} photos of your prescription — front and back, or extra
+  /// pages." — `{n}` is replaced by [maxImagesNote].
+  final String addUpToPhotosTemplate;
+
+  /// "You can add {n} more photo{s}." — `{n}` and `{s}` are replaced by
+  /// [addAnotherImageNote]; Malayalam's template has no plural to swap in
+  /// and simply omits `{s}`.
+  final String morePhotosTemplate;
+
+  /// Shown once, above the upload tiles, before any photo has been added.
+  String maxImagesNote(int max) =>
+      addUpToPhotosTemplate.replaceAll('{n}', '$max');
+
+  /// Shown under the upload tiles once at least one photo has been added,
+  /// while more can still be attached.
+  String addAnotherImageNote(int remaining) => morePhotosTemplate
+      .replaceAll('{n}', '$remaining')
+      .replaceAll('{s}', remaining == 1 ? '' : 's');
   final String customDays;
   final String customDaysHint;
   final String keepInMind;
@@ -110,7 +129,24 @@ class PrescriptionCopy {
   final String units;
   final String addToCart;
   final String inCart;
+
+  // ---- Status chip, straight off app.prescription.status ----
+  final String statusAwaitingReview;
+  final String statusRead;
+  final String statusOrdered;
+
+  /// Short chip label for the backend's own status token
+  /// (`AWAITING_REVIEW`/`READ`/`IN_CART`/`ORDERED`) — [inCart] doubles as the
+  /// `IN_CART` label, since it already says the same thing.
+  String statusLabel(String status) => switch (status.toUpperCase()) {
+    'READ' => statusRead,
+    'IN_CART' => inCart,
+    'ORDERED' => statusOrdered,
+    _ => statusAwaitingReview,
+  };
+
   final String delete;
+  final String reorder;
   final String prescriptionRemoved;
   final String undo;
   final String sentToCart;
@@ -138,6 +174,8 @@ class PrescriptionCopy {
     required this.optionalTag,
     required this.photoOptionalNote,
     required this.noFileAttached,
+    required this.addUpToPhotosTemplate,
+    required this.morePhotosTemplate,
     required this.customDays,
     required this.customDaysHint,
     required this.keepInMind,
@@ -184,7 +222,11 @@ class PrescriptionCopy {
     required this.units,
     required this.addToCart,
     required this.inCart,
+    required this.statusAwaitingReview,
+    required this.statusRead,
+    required this.statusOrdered,
     required this.delete,
+    required this.reorder,
     required this.prescriptionRemoved,
     required this.undo,
     required this.sentToCart,
@@ -220,6 +262,10 @@ class PrescriptionCopy {
         "Can't upload right now? Skip it — our pharmacist will call you to "
         'check the details.',
     noFileAttached: 'No file attached',
+    addUpToPhotosTemplate:
+        'Add up to {n} photos of your prescription — front and back, or '
+        'extra pages.',
+    morePhotosTemplate: 'You can add {n} more photo{s}.',
     customDays: 'Custom days',
     customDaysHint: 'Enter number of days',
     keepInMind: 'Please keep in mind:',
@@ -305,7 +351,11 @@ class PrescriptionCopy {
     units: 'units',
     addToCart: 'Add to cart',
     inCart: 'In cart',
+    statusAwaitingReview: 'Awaiting review',
+    statusRead: 'Read',
+    statusOrdered: 'Ordered',
     delete: 'Delete',
+    reorder: 'Reorder',
     prescriptionRemoved: 'Prescription removed',
     undo: 'Undo',
     sentToCart: 'sent to the cart',
@@ -342,6 +392,10 @@ class PrescriptionCopy {
         'ഇപ്പോൾ അപ്‌ലോഡ് ചെയ്യാൻ കഴിയുന്നില്ലേ? ഒഴിവാക്കാം — വിശദാംശങ്ങൾ '
         'പരിശോധിക്കാൻ ഞങ്ങളുടെ ഫാർമസിസ്റ്റ് വിളിക്കും.',
     noFileAttached: 'ഫയൽ അറ്റാച്ച് ചെയ്തിട്ടില്ല',
+    addUpToPhotosTemplate:
+        'നിങ്ങളുടെ കുറിപ്പടിയുടെ {n} ഫോട്ടോകൾ വരെ ചേർക്കാം — മുൻവശവും '
+        'പിൻവശവും, അല്ലെങ്കിൽ കൂടുതൽ പേജുകൾ.',
+    morePhotosTemplate: 'ഇനിയും {n} ഫോട്ടോ ചേർക്കാം.',
     customDays: 'ദിവസം നൽകുക',
     customDaysHint: 'എത്ര ദിവസമെന്ന് ടൈപ്പ് ചെയ്യുക',
     keepInMind: 'ശ്രദ്ധിക്കുക:',
@@ -430,7 +484,11 @@ class PrescriptionCopy {
     units: 'എണ്ണം',
     addToCart: 'കാർട്ടിൽ ചേർക്കുക',
     inCart: 'കാർട്ടിലുണ്ട്',
+    statusAwaitingReview: 'അവലോകനം കാത്തിരിക്കുന്നു',
+    statusRead: 'വായിച്ചു',
+    statusOrdered: 'ഓർഡർ ചെയ്തു',
     delete: 'ഇല്ലാതാക്കുക',
+    reorder: 'വീണ്ടും ഓർഡർ ചെയ്യുക',
     prescriptionRemoved: 'കുറിപ്പടി നീക്കി',
     undo: 'തിരികെ',
     sentToCart: 'കാർട്ടിലേക്ക് അയച്ചു',

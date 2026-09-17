@@ -11,6 +11,8 @@ import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/upload_picker.dart';
 import '../auth/auth_service.dart';
+import '../location/address_book.dart';
+import '../location/address_picker.dart';
 import '../patients/patient_book.dart';
 import '../patients/patient_picker.dart';
 import 'medicine_duration.dart';
@@ -22,6 +24,27 @@ import 'prescription_record.dart';
 /// Cap from the on-screen guidance.
 const int kPrescriptionMaxBytes = 5 * 1024 * 1024;
 
+/// Up to this many photos per prescription — a script is often more than
+/// one page (front/back, or several pages of a longer prescription).
+const int kPrescriptionMaxImages = 3;
+
+/// One picked photo, before it is submitted: the file itself, its size, and
+/// (when readable) the bytes the form shows a thumbnail and full-screen view
+/// from.
+class PickedPrescriptionImage {
+  final XFile file;
+  final int bytes;
+  final Uint8List? preview;
+
+  const PickedPrescriptionImage({
+    required this.file,
+    required this.bytes,
+    this.preview,
+  });
+
+  bool get tooLarge => bytes > kPrescriptionMaxBytes;
+}
+
 /// Everything the upload form holds, kept apart from the widgets that draw it.
 ///
 /// The same form is shown twice — inline on an empty screen, and inside the
@@ -29,17 +52,21 @@ const int kPrescriptionMaxBytes = 5 * 1024 * 1024;
 /// sits outside the form in both cases. A controller is what lets that button
 /// ask whether the form is ready without the two copies drifting apart.
 class PrescriptionFormController extends ChangeNotifier {
-  XFile? file;
-  int bytes = 0;
+  /// Up to [kPrescriptionMaxImages] photos, in the order they were added —
+  /// a script is often more than one page.
+  final List<PickedPrescriptionImage> images = [];
 
-  /// The picked image's bytes, held so the form can show a thumbnail and open
-  /// a full-screen view before the file is ever submitted. Null when the pick
-  /// came from a path the form could not read (a bare test double, say).
-  Uint8List? preview;
+  bool get canAddMoreImages => images.length < kPrescriptionMaxImages;
 
   bool busy = false;
 
   Patient? patient;
+
+  /// Where this prescription's own order ships — see
+  /// [PrescriptionRecord.address]'s own doc. Null until chosen; the checkout
+  /// screen falls back to the shared [AddressBook.deliverTo] for a record
+  /// left unset.
+  Address? address;
 
   MedicineDuration? duration;
   bool isCustomDuration = false;
@@ -55,7 +82,7 @@ class PrescriptionFormController extends ChangeNotifier {
     return DateTime(now.year, now.month, now.day);
   }
 
-  bool get tooLarge => bytes > kPrescriptionMaxBytes;
+  bool get anyTooLarge => images.any((image) => image.tooLarge);
 
   bool get hasDuration => isCustomDuration
       ? (customDays != null && customDays! > 0)
@@ -74,10 +101,10 @@ class PrescriptionFormController extends ChangeNotifier {
   // Only who it is for is actually required — the pharmacist can read the
   // dispense quantity off the script itself, or off a call, so a member with
   // no photo to hand yet and no fixed idea of how much they need can still
-  // send the prescription and have both filled in for them. A file that was
-  // picked still has to be under the size cap, and a recurring order still
-  // needs a real schedule once switched on.
-  bool get isComplete => !tooLarge && patient != null && hasSchedule;
+  // send the prescription and have both filled in for them. Any file that
+  // was picked still has to be under the size cap, and a recurring order
+  // still needs a real schedule once switched on.
+  bool get isComplete => !anyTooLarge && patient != null && hasSchedule;
 
   String get supplyLabel {
     if (isCustomDuration && customDays != null && customDays! > 0) {
@@ -95,22 +122,27 @@ class PrescriptionFormController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void setFile(XFile picked, int length, {Uint8List? preview}) {
-    file = picked;
-    bytes = length;
-    this.preview = preview;
+  /// Appends a newly picked photo — a no-op past [kPrescriptionMaxImages],
+  /// since the tiles that call this are hidden once the cap is reached.
+  void addImage(XFile picked, int length, {Uint8List? preview}) {
+    if (!canAddMoreImages) return;
+    images.add(PickedPrescriptionImage(file: picked, bytes: length, preview: preview));
     notifyListeners();
   }
 
-  void clearFile() {
-    file = null;
-    bytes = 0;
-    preview = null;
+  void removeImageAt(int index) {
+    if (index < 0 || index >= images.length) return;
+    images.removeAt(index);
     notifyListeners();
   }
 
   void setPatient(Patient value) {
     patient = value;
+    notifyListeners();
+  }
+
+  void setAddress(Address value) {
+    address = value;
     notifyListeners();
   }
 
@@ -161,11 +193,14 @@ class PrescriptionFormController extends ChangeNotifier {
       patient: patient!,
       // '' when no photo was attached — the pharmacist fills the script in
       // from the call instead. [PrescriptionDetailCard] shows a placeholder
-      // for the empty case rather than a blank title line.
-      fileName: file?.name ?? '',
+      // for the empty case rather than a blank title line. Only the first
+      // page's name is kept for that display purpose; every page is still
+      // sent to the backend below.
+      fileName: images.isEmpty ? '' : images.first.file.name,
       duration: isCustomDuration ? null : duration,
       customDays: isCustomDuration ? customDays : null,
       recurring: schedule,
+      address: address,
     );
     unawaited(_persist(book, record));
     return record;
@@ -180,23 +215,32 @@ class PrescriptionFormController extends ChangeNotifier {
       return;
     }
     final patient = record.patient;
-    // The script itself, so the pharmacy console can read it and build the
-    // intake card from it. Try a small re-encoded JPEG first; if the image
-    // package cannot decode it (an odd format, a screenshot), fall back to the
-    // raw bytes as-is so the counter still gets a picture. Best-effort either
-    // way — the row is kept even with no image.
-    String? image;
-    final rawImage = preview;
-    if (rawImage != null) {
+    // Every picked page, so the pharmacy console can read the whole script
+    // and build the intake card from it. Try a small re-encoded JPEG first
+    // per image; if the image package cannot decode one (an odd format, a
+    // screenshot), fall back to its raw bytes as-is so the counter still
+    // gets a picture. Best-effort either way — a page that cannot be
+    // encoded at all is simply dropped rather than failing the whole
+    // upload, and the row is kept even with none.
+    final encodedImages = <String>[];
+    for (final picked in images) {
+      final rawImage = picked.preview;
+      if (rawImage == null) {
+        continue;
+      }
+      String? image;
       try {
         image = await prescriptionImageDataUrl(rawImage);
       } catch (error) {
-        debugPrint('prescription: could not encode the script image — $error');
+        debugPrint('prescription: could not encode a script image — $error');
       }
       if ((image == null || image.isEmpty) &&
           rawImage.length <= 4 * 1024 * 1024) {
-        final mime = _mimeForName(file?.name ?? '');
+        final mime = _mimeForName(picked.file.name);
         image = 'data:$mime;base64,${base64Encode(rawImage)}';
+      }
+      if (image != null && image.isNotEmpty) {
+        encodedImages.add(image);
       }
     }
     try {
@@ -224,7 +268,7 @@ class PrescriptionFormController extends ChangeNotifier {
       final id = await PrescriptionRepository.instance.insertUpload(
         patientId: int.parse(patientId),
         fileName: record.fileName,
-        image: image,
+        images: encodedImages,
         doctor: record.doctor,
         duration: record.duration,
         customDays: record.customDays,
@@ -298,22 +342,25 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
     super.dispose();
   }
 
-  /// Opens the picked image full-screen so the member can check the page is
+  /// Opens one picked image full-screen so the member can check the page is
   /// readable before committing to it. Only offered once its bytes are to hand.
-  void _viewFile(BuildContext context) {
-    final data = _form.preview;
-    final picked = _form.file;
-    if (data == null || picked == null) {
+  void _viewImage(BuildContext context, int index) {
+    final picked = _form.images[index];
+    final data = picked.preview;
+    if (data == null) {
       return;
     }
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => PrescriptionImageView(bytes: data, name: picked.name),
+        builder: (_) => PrescriptionImageView(bytes: data, name: picked.file.name),
       ),
     );
   }
 
   Future<void> _pick(ImageSource source) async {
+    if (!_form.canAddMoreImages) {
+      return;
+    }
     _form.setBusy(true);
     try {
       final picked = await _picker.pickImage(source: source);
@@ -326,7 +373,7 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
       if (!mounted) {
         return;
       }
-      _form.setFile(picked, data.length, preview: data);
+      _form.addImage(picked, data.length, preview: data);
     } on Exception {
       if (!mounted) {
         return;
@@ -381,27 +428,43 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
             ],
             // IntrinsicHeight + stretch keeps both tiles the same height as
             // the taller of the two, without either reserving extra space.
-            IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  UploadSourceTile(
-                    icon: Icons.add_a_photo_outlined,
-                    label: copy.useCamera,
-                    enabled: !_form.busy,
-                    onTap: () => _pick(ImageSource.camera),
-                  ),
-                  const SizedBox(width: 14),
-                  UploadSourceTile(
-                    icon: Icons.add_photo_alternate_outlined,
-                    label: copy.useGallery,
-                    enabled: !_form.busy,
-                    onTap: () => _pick(ImageSource.gallery),
-                  ),
-                ],
+            // Hidden once the cap is reached — there is nothing more to add.
+            if (_form.canAddMoreImages) ...[
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    UploadSourceTile(
+                      icon: Icons.add_a_photo_outlined,
+                      label: copy.useCamera,
+                      enabled: !_form.busy,
+                      onTap: () => _pick(ImageSource.camera),
+                    ),
+                    const SizedBox(width: 14),
+                    UploadSourceTile(
+                      icon: Icons.add_photo_alternate_outlined,
+                      label: copy.useGallery,
+                      enabled: !_form.busy,
+                      onTap: () => _pick(ImageSource.gallery),
+                    ),
+                  ],
+                ),
               ),
-            ),
-            if (_form.file == null) ...[
+              const SizedBox(height: 8),
+              Text(
+                _form.images.isEmpty
+                    ? copy.maxImagesNote(kPrescriptionMaxImages)
+                    : copy.addAnotherImageNote(
+                        kPrescriptionMaxImages - _form.images.length,
+                      ),
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  height: 1.35,
+                  color: AppColors.textMuted,
+                ),
+              ),
+            ],
+            if (_form.images.isEmpty) ...[
               const SizedBox(height: 10),
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -421,18 +484,20 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
                 ],
               ),
             ],
-            if (_form.file != null) ...[
+            for (var i = 0; i < _form.images.length; i++) ...[
               const SizedBox(height: 18),
               UploadedFileCard(
-                name: _form.file!.name,
-                bytes: _form.bytes,
-                tooLarge: _form.tooLarge,
+                name: _form.images[i].file.name,
+                bytes: _form.images[i].bytes,
+                tooLarge: _form.images[i].tooLarge,
                 limitLabel: '5 MB',
                 removeLabel: copy.remove,
-                onRemove: _form.clearFile,
-                previewBytes: _form.preview,
+                onRemove: () => _form.removeImageAt(i),
+                previewBytes: _form.images[i].preview,
                 viewLabel: copy.viewFile,
-                onView: _form.preview == null ? null : () => _viewFile(context),
+                onView: _form.images[i].preview == null
+                    ? null
+                    : () => _viewImage(context, i),
               ),
             ],
             const SizedBox(height: 18),
@@ -441,6 +506,16 @@ class _PrescriptionFormBodyState extends State<PrescriptionFormBody> {
               label: copy.patientLabel,
               hint: copy.patientHint,
               onSelect: _form.setPatient,
+            ),
+            const SizedBox(height: 12),
+            // Optional here — a record left without one falls back to the
+            // shared delivery address at checkout (see
+            // PrescriptionRecord.address's own doc). Only worth answering
+            // explicitly when this prescription (of possibly several being
+            // uploaded together) needs to ship somewhere different.
+            AddressPicker(
+              selected: _form.address,
+              onSelect: _form.setAddress,
             ),
             const SizedBox(height: 20),
             _DurationPicker(

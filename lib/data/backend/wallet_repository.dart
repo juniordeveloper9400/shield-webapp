@@ -87,6 +87,15 @@ class WalletRepository {
 
   bool get isAvailable => BackendHttp.isConfigured;
 
+  /// Set by [submitCardForApproval] right before it returns null for a real
+  /// (not unconfigured/unreachable) failure — the backend's own reason,
+  /// when it gave one, so the checkout screen can tell "you're being rate
+  /// limited, wait an hour" apart from "check your connection and retry
+  /// right now," which is actively wrong advice for the first case. Reset
+  /// to null at the start of every call, so a stale reason from a previous
+  /// attempt can never be read as this one's.
+  String? lastSubmitCardError;
+
   /// The load amounts and bonus rate are already bundled client-side
   /// (`lib/module/privilege/privilege_tier.dart`) — this only needs to
   /// resolve [tierKind] to the numeric id `submitWalletCardSchema` requires,
@@ -115,6 +124,7 @@ class WalletRepository {
     String? receiptImage,
     String? agentCode,
   }) async {
+    lastSubmitCardError = null;
     if (!BackendHttp.isConfigured) {
       return null;
     }
@@ -137,6 +147,13 @@ class WalletRepository {
         },
       ) as Map<String, dynamic>;
       return created['id']?.toString();
+    } on BackendHttpException catch (error) {
+      lastSubmitCardError = error.isTooManyRequests
+          ? "You've submitted too many receipts recently — wait an hour "
+              'and try again.'
+          : null;
+      BackendHttp.log('WalletRepository.submitCardForApproval failed', error: error);
+      return null;
     } catch (error) {
       BackendHttp.log('WalletRepository.submitCardForApproval failed', error: error);
       return null;

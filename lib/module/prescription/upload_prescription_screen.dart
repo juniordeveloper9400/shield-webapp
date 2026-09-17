@@ -4,7 +4,8 @@ import '../../data/backend/prescription_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
 import '../location/address_book.dart';
-import '../location/address_form_screen.dart';
+import '../location/address_selection_screen.dart';
+import '../patients/patient_book.dart';
 import 'prescription_checkout_screen.dart';
 import 'prescription_copy.dart';
 import 'prescription_detail_card.dart';
@@ -81,43 +82,83 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
-  /// Reads the pharmacist-built intake cards from Neon and folds them into the
-  /// in-memory records — so a card that was "waiting on the pharmacist" fills
-  /// in and expands. Runs on open and on pull-to-refresh. Best-effort.
+  /// Reads every prescription the backend has on file for this member and
+  /// folds it into the in-memory book — so a card that was "waiting on the
+  /// pharmacist" fills in and expands, AND a prescription uploaded in an
+  /// earlier session (or on another device) reappears here instead of
+  /// staying invisible until it happens to be re-uploaded. Runs on open and
+  /// on pull-to-refresh. Best-effort throughout: a card whose patient
+  /// cannot be resolved locally (their own record has not synced down yet)
+  /// is left for a later refresh rather than failing the rest.
   Future<void> _refreshFromBackend() async {
     final phone = AuthService.instance.currentUser.value?.phone;
-    if (phone == null || _book.isEmpty) {
+    if (phone == null) {
       return;
     }
     final cards = await PrescriptionRepository.instance.fetchForMember(phone);
     if (cards == null || !mounted) {
       return;
     }
-    final byUuid = {for (final card in cards) card.uuid: card};
-    for (final record in _book.records) {
-      final card = byUuid[record.remoteId];
-      if (card == null) {
+    final knownRemoteIds = _book.records.map((r) => r.remoteId).toSet();
+    for (final card in cards) {
+      if (knownRemoteIds.contains(card.uuid)) {
+        _applyCard(card);
         continue;
       }
-      _book.applyIntakeCard(
-        record.id,
+      // Never seen locally this session — rebuild the record wholesale.
+      final patient = card.patientId == null
+          ? null
+          : PatientBook.instance.patients
+              .where((p) => p.remoteId == card.patientId)
+              .firstOrNull;
+      if (patient == null) {
+        continue;
+      }
+      final recurring = card.recurringFrom == null
+          ? null
+          : RecurringSchedule(from: card.recurringFrom!, until: card.recurringUntil);
+      final record = _book.add(
+        patient: patient,
+        fileName: card.fileName,
         doctor: card.doctor,
-        ordered: card.status == 'ORDERED' || card.status == 'READ',
-        medicines: [
-          for (final m in card.medicines)
-            PrescriptionMedicine(
-              name: m.name,
-              pack: m.pack,
-              intake: IntakePattern(
-                morning: m.morning,
-                afternoon: m.afternoon,
-                night: m.night,
-              ),
-              totalUnits: m.totalUnits > 0 ? m.totalUnits : null,
-            ),
-        ],
+        duration: card.duration,
+        customDays: card.customDays,
+        recurring: recurring,
       );
+      _book.attachRemoteId(record.id, card.uuid ?? '');
+      _applyCard(card, recordId: record.id);
     }
+  }
+
+  /// Folds one backend card's medicines/status/ordered-ness into the local
+  /// record it matches — by [recordId] when just created, otherwise by
+  /// looking its own [RemotePrescriptionCard.uuid] back up in the book.
+  void _applyCard(RemotePrescriptionCard card, {String? recordId}) {
+    final id = recordId ??
+        _book.records.firstWhere((r) => r.remoteId == card.uuid).id;
+    _book.applyIntakeCard(
+      id,
+      doctor: card.doctor,
+      // READ only means the pharmacist has sent the intake card back — the
+      // member has not placed the fulfilment order yet, so it must not be
+      // conflated with ORDERED here (that used to make a merely-read
+      // prescription's card claim an order had already been placed).
+      ordered: card.status == 'ORDERED',
+      status: card.status,
+      medicines: [
+        for (final m in card.medicines)
+          PrescriptionMedicine(
+            name: m.name,
+            pack: m.pack,
+            intake: IntakePattern(
+              morning: m.morning,
+              afternoon: m.afternoon,
+              night: m.night,
+            ),
+            totalUnits: m.totalUnits > 0 ? m.totalUnits : null,
+          ),
+      ],
+    );
   }
 
   void _submitInlineForm() {
@@ -150,6 +191,23 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => PrescriptionCheckoutScreen(records: pending),
+      ),
+    );
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  /// Places a fresh fulfilment order for a prescription that already has
+  /// one — the same uploaded script and intake card, a new order and a new
+  /// chance to pick the address and payment method. Goes through the same
+  /// checkout screen as a first-time order rather than resubmitting
+  /// silently: a repeat medicine run still deserves a chance to change
+  /// where it ships.
+  Future<void> _reorder(PrescriptionRecord record) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PrescriptionCheckoutScreen(records: [record]),
       ),
     );
     if (mounted) {
@@ -292,6 +350,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               record: record,
               copy: _copy,
               onDelete: () => _delete(record),
+              onReorder: () => _reorder(record),
             ),
           ),
         // Once something is uploaded the next question is where it goes, so
@@ -624,7 +683,7 @@ class _DeliveryDetailsCard extends StatelessWidget {
 
   Future<void> _edit(BuildContext context) {
     return Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AddressFormScreen()),
+      MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
     );
   }
 

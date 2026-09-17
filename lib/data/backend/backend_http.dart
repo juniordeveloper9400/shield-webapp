@@ -324,6 +324,7 @@ class BackendHttpException implements Exception {
   bool get isNotFound => statusCode == 404;
   bool get isForbidden => statusCode == 403;
   bool get isConflict => statusCode == 409;
+  bool get isTooManyRequests => statusCode == 429;
 
   @override
   String toString() => 'BackendHttpException($statusCode $code): $message';

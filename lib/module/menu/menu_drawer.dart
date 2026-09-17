@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 
 import '../../money.dart';
@@ -13,6 +14,7 @@ import '../health/health_section.dart';
 import '../investment/investment_plan_screen.dart';
 import '../labtest/lab_cart_screen.dart';
 import '../labtest/lab_cart_service.dart';
+import '../orders/purchase_service.dart';
 import '../rewards/rewards_service.dart';
 import '../refer/refer_earn_screen.dart';
 import '../rewards/rewards_screen.dart';
@@ -96,11 +98,14 @@ class MenuDrawer extends StatelessWidget {
                   ),
                   // Sits directly under the dashboard: its own call-out row
                   // rather than one of the plain browse links, since it opens
-                  // a full feature screen and not a category listing.
-                  _InvestmentPlanRow(
-                    onTap: () =>
-                        _push(context, const InvestmentPlanScreen()),
-                  ),
+                  // a full feature screen and not a category listing. Not
+                  // offered on the web build — investment promotion is kept
+                  // to the installed app only.
+                  if (!kIsWeb)
+                    _InvestmentPlanRow(
+                      onTap: () =>
+                          _push(context, const InvestmentPlanScreen()),
+                    ),
                   // Categories is no longer a tab, so the browse links push
                   // it as a route rather than switching to a destination that
                   // is not in the bar.
@@ -491,7 +496,7 @@ class _DashboardPanel extends StatelessWidget {
                     child: _StatTile(
                       icon: Icons.collections_bookmark_outlined,
                       label: 'Active orders',
-                      value: '2',
+                      value: '${PurchaseService.instance.activeCount}',
                       accent: AppColors.brandGreenDeep,
                       onTap: onOpenOrders,
                     ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/module/account/account_screen.dart';
+import 'package:shield/module/agent/agent_service.dart';
 import 'package:shield/module/auth/auth_service.dart';
 
 class _RecordingOpener {
@@ -60,9 +61,11 @@ void main() {
 
   setUp(() {
     AuthService.instance.reset();
+    AgentService.instance.reset();
   });
   tearDown(() {
     AuthService.instance.reset();
+    AgentService.instance.reset();
   });
 
   group('AuthService.deleteAccount', () {
@@ -192,5 +195,17 @@ void main() {
 
       expect(recorder.opened, Uri.parse(privacyPolicyUrl));
     });
+
+    testWidgets(
+      'offers "Become a SHIELD Agent" to a member who is not one, not "Agent Portal"',
+      (tester) async {
+        AuthService.instance.signInAs(phone: '9000000099');
+
+        await pump(tester, const AccountScreen());
+
+        expect(find.text('Become a SHIELD Agent'), findsOneWidget);
+        expect(find.text('Agent Portal'), findsNothing);
+      },
+    );
   });
 }

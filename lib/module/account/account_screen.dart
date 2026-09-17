@@ -3,6 +3,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../theme/app_colors.dart';
 import '../../money.dart';
+import '../agent/agent_portal_screen.dart';
+import '../agent/agent_service.dart';
+import '../agent/become_agent_screen.dart';
 import '../auth/auth_service.dart';
 import '../cart/cart_screen.dart';
 import '../investor/investor_portal_screen.dart';
@@ -21,9 +24,9 @@ class AccountScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final investor = InvestorService.instance.investorForPhone(
-      AuthService.instance.currentUser.value?.phone,
-    );
+    final phone = AuthService.instance.currentUser.value?.phone;
+    final investor = InvestorService.instance.investorForPhone(phone);
+    final agent = AgentService.instance.agentForPhone(phone);
 
     return Scaffold(
       backgroundColor: AppColors.pageTint,
@@ -81,6 +84,33 @@ class AccountScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
+          // An approved agent gets straight through to their portal; a
+          // plain member — the common case — gets the way to apply.
+          // Neither shows for a recruit whose application is still with
+          // the admin console: BecomeAgentScreen itself reads that status
+          // and shows "under review" instead of the form, so this row
+          // still opens something useful for them, not a dead end.
+          _MenuGroup(
+            items: [
+              agent != null
+                  ? _MenuItem(
+                      icon: Icons.badge_rounded,
+                      label: 'Agent Portal',
+                      trailing: agent.agentCode,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => AgentPortalScreen(agent: agent),
+                        ),
+                      ),
+                    )
+                  : _MenuItem(
+                      icon: Icons.how_to_reg_outlined,
+                      label: 'Become a SHIELD Agent',
+                      onTap: () => BecomeAgentScreen.open(context),
+                    ),
+            ],
+          ),
+          const SizedBox(height: 14),
           _MenuGroup(
             items: [
               _MenuItem(

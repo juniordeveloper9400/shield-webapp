@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
+import 'package:image_picker/image_picker.dart' hide PickedFile;
 
 import '../../dates.dart';
 import '../../money.dart';
@@ -11,6 +11,7 @@ import '../home/product_showcase.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
 import '../patients/patient_book.dart';
+import '../prescription/prescription_image_view.dart';
 import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
@@ -1824,6 +1825,20 @@ class _BankTransferPanel extends StatelessWidget {
   }
 }
 
+/// Opens the picked receipt full-screen so the member can check it is
+/// readable before submitting — the same view the prescription upload uses.
+void _viewReceipt(BuildContext context, PickedFile file) {
+  final bytes = file.previewBytes;
+  if (bytes == null) {
+    return;
+  }
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => PrescriptionImageView(bytes: bytes, name: file.name),
+    ),
+  );
+}
+
 class _ReceiptPanel extends StatelessWidget {
   final ReceiptFormController controller;
   final TextEditingController bankReference;
@@ -1883,6 +1898,10 @@ class _ReceiptPanel extends StatelessWidget {
               readyLabel: 'ready to submit',
               removeLabel: 'Remove receipt',
               onRemove: controller.clearFile,
+              previewBytes: file.previewBytes,
+              onView: file.previewBytes == null
+                  ? null
+                  : () => _viewReceipt(context, file),
             ),
           const SizedBox(height: 12),
           TextField(
