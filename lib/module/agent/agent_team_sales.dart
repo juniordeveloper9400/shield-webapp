@@ -243,8 +243,8 @@ class _SummaryDetails extends StatelessWidget {
             const SizedBox(width: 6),
             Expanded(
               child: Text(
-                'Override commission at ${AgentService.commissionPercent}% of '
-                'team sales',
+                'Override commission decays with distance — closer team '
+                'members earn you more than deeper ones',
                 style: const TextStyle(
                   fontSize: 12.5,
                   color: AppColors.textBody,

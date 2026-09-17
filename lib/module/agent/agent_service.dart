@@ -29,8 +29,23 @@ class AgentService extends ChangeNotifier {
   /// The smallest amount a withdrawal request may ask for.
   static const int minWithdrawal = 500;
 
-  /// The share of downline sales an agent earns as override commission.
-  static const int commissionPercent = 2;
+  /// The decaying override an agent earns on a downline member's own
+  /// personal sales, indexed by how many real `parentId` hops separate the
+  /// two — hop 1 (the member's own immediate manager) down to hop 6 (the
+  /// deepest possible, ward up to national). Mirrors the real backend split
+  /// exactly (`app.approve_wallet_card_activation`'s `v_hop_rates`,
+  /// migrations 0036-0039): each hop's rate here times
+  /// [commissionPoolPercent] gives the same percentage of the sale amount
+  /// the backend actually credits — e.g. hop 1 is 10% of the 10% pool = 1%
+  /// of the sale. There used to be one flat `commissionPercent` (2%) applied
+  /// to every downline member regardless of distance; that only happened to
+  /// be correct for a member 6 hops away and badly under-counted anyone
+  /// closer, so it's gone in favour of walking the real chain below.
+  static const List<int> hopOverridePercents = [10, 6, 5, 4, 3, 2];
+
+  /// The whole commission pool set aside from a loaded amount — 10%, same
+  /// as [directCommissionPercent]'s own 60%-of-this-pool doc explains.
+  static const int commissionPoolPercent = 10;
 
   /// The whole roster, seed agents and added ones alike.
   final List<Agent> _agents = [...AgentDirectory.seed];
@@ -304,9 +319,17 @@ class AgentService extends ChangeNotifier {
       customersOf(agent).where((c) => c.isActive).length;
 
   /// The share of a plan's load the selling agent keeps as their direct
-  /// commission — richer than the [commissionPercent] override on downline
-  /// volume, because a direct sale is the agent's own work.
-  static const int directCommissionPercent = 5;
+  /// commission — richer than the [hopOverridePercents] override any single
+  /// upline agent earns on downline volume, because a direct sale is the
+  /// agent's own work. Mirrors the
+  /// real backend split (`app.approve_wallet_card_activation`, migrations
+  /// 0033-0040): 10% of the load is the commission pool, and 60% of that
+  /// pool goes to the direct seller — 10% × 60% = 6%. This was a stale 5%
+  /// left over from before that function existed; it must track whatever
+  /// `COMMISSION_POOL_RATE × DIRECT_SALE_SHARE_RATE` comes to on the
+  /// backend (`wallet.service.ts`), or this card's own number stops
+  /// matching what the agent is actually paid.
+  static const int directCommissionPercent = 6;
 
   /// What [agent] earned on one card.
   int commissionOnPlan(CustomerPlan plan) =>
@@ -328,6 +351,15 @@ class AgentService extends ChangeNotifier {
   @visibleForTesting
   void addCustomer(AgentCustomer customer) {
     _customers.add(customer);
+    notifyListeners();
+  }
+
+  /// Drops a fully-formed [agent] straight onto the roster — for building a
+  /// synthetic parent chain in a test without going through the
+  /// registration flow.
+  @visibleForTesting
+  void addAgent(Agent agent) {
+    _agents.add(agent);
     notifyListeners();
   }
 
@@ -695,17 +727,44 @@ class AgentService extends ChangeNotifier {
     agent,
   ).fold(0, (sum, member) => sum + member.displayPersonalSales);
 
-  /// Override commission [agent] earns on that downline volume.
-  int teamCommission(Agent agent) =>
-      teamSalesTotal(agent) * commissionPercent ~/ 100;
+  /// How many real `parentId` hops separate [member] from [ancestor] —
+  /// 1 when [ancestor] is [member]'s own immediate parent, 2 for a
+  /// grandparent, and so on. Null when [ancestor] is not actually found by
+  /// walking [member]'s real chain within [hopOverridePercents]' own
+  /// length — a broken or unusually deep chain simply earns no override
+  /// past that point, the same way the backend's own hop-walk stops rather
+  /// than guessing (see `approve_wallet_card_activation`'s own doc).
+  int? _hopDistance(Agent ancestor, Agent member) {
+    final chain = ancestorsOf(member.id);
+    final index = chain.indexWhere((a) => a.id == ancestor.id);
+    if (index == -1 || index >= hopOverridePercents.length) {
+      return null;
+    }
+    return index + 1;
+  }
 
   /// What the viewing agent earns as override commission from one team
-  /// member's own sales — [commissionPercent]% of [Agent.personalSales]. The
-  /// per-row figure the team roster shows against each name; [teamCommission]
-  /// is the same rate taken over the whole downline at once rather than
-  /// member by member.
-  int commissionFrom(Agent member) =>
-      member.displayPersonalSales * commissionPercent ~/ 100;
+  /// member's own sales — the exact same decaying hop rate the backend
+  /// actually credits, not a flat guess: [member]'s real distance from
+  /// [agent] picks the rate out of [hopOverridePercents], applied to
+  /// [commissionPoolPercent] of what they personally sold. Zero when
+  /// [member] is more hops away than the table covers, or their chain
+  /// never actually reaches [agent] (see [_hopDistance]).
+  int commissionFrom(Agent agent, Agent member) {
+    final hop = _hopDistance(agent, member);
+    if (hop == null) {
+      return 0;
+    }
+    final pool = member.displayPersonalSales * commissionPoolPercent ~/ 100;
+    return pool * hopOverridePercents[hop - 1] ~/ 100;
+  }
+
+  /// Override commission [agent] earns across their whole downline — the
+  /// sum of [commissionFrom] over every real team member, each at their own
+  /// real distance from [agent] rather than one flat rate for all of them.
+  int teamCommission(Agent agent) => teamOf(
+    agent,
+  ).fold(0, (sum, member) => sum + commissionFrom(agent, member));
 
   /// The members of [agent]'s downline that sit at [level], for the per-tier
   /// breakdown on the Team Sales card.

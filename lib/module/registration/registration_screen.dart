@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/backend/referral_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/age_badge.dart';
 import '../../widgets/labelled_field.dart';
@@ -34,6 +37,12 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _address = TextEditingController();
   final _place = TextEditingController();
   final _pincode = TextEditingController();
+
+  /// Whatever an agent gave the member to type in, or a fellow member's own
+  /// invite code — see `ReferralRepository.applyCode`'s own doc. Shown only
+  /// on a first registration (see [_submit]); an edit has nothing to read a
+  /// fresh code from.
+  final _referralCode = TextEditingController();
 
   /// Filled by the picker only, never typed into — see the field below.
   final _dobText = TextEditingController();
@@ -88,6 +97,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _place.dispose();
     _pincode.dispose();
     _dobText.dispose();
+    _referralCode.dispose();
     super.dispose();
   }
 
@@ -161,6 +171,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
+    // The referral edge is only ever recorded on a first registration — an
+    // edit shows no code field to read one from (see the field's own doc).
+    final isFirstRegistration = !_service.isRegistered;
+
     _service.save(
       Registration(
         name: _name.text.trim(),
@@ -175,6 +189,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         storeId: _storeId!,
       ),
     );
+
+    // Best-effort and fire-and-forget: a bad or already-used code must not
+    // hold up the celebration screen below. Resolves to either an agent's
+    // own code or a fellow member's referral code — see
+    // `ReferralRepository.applyCode`'s own doc.
+    final referralCode = _referralCode.text.trim();
+    if (isFirstRegistration && referralCode.isNotEmpty) {
+      unawaited(ReferralRepository.instance.applyCode(referralCode));
+    }
 
     // Show the confirmation on this route while it is still up, then close the
     // form once the member dismisses it.
@@ -405,6 +428,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
         if (_submitted && _state == null)
           const _FieldError('State is required'),
+        if (!widget.isEditing) ...[
+          const SizedBox(height: 14),
+          LabelledField(
+            label: 'Referral ID',
+            hint: 'From an agent, or a friend on SHIELD (optional)',
+            controller: _referralCode,
+            icon: Icons.card_giftcard_outlined,
+            textCapitalization: TextCapitalization.characters,
+          ),
+        ],
       ],
     );
   }

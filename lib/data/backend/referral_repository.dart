@@ -5,12 +5,9 @@ import 'backend_http.dart';
 /// `backend/api`'s `/v1/member/referrals/*` routes — see
 /// `referral.service.ts`.
 ///
-/// Recording someone else's code at signup (`recordSignup`) has no client
-/// call site to port — no registration or auth screen has ever had a field
-/// for entering one (confirmed dead in the old direct-Neon version too) —
-/// so it isn't ported. Advancing the member's own inbound referral to
-/// `TRANSACTED` also isn't ported: the backend does that automatically now,
-/// inside the checkout transaction itself (`order.service.ts`'s `checkout`).
+/// Advancing the member's own inbound referral to `TRANSACTED` isn't
+/// ported: the backend does that automatically now, inside the checkout
+/// transaction itself (`order.service.ts`'s `checkout`).
 ///
 /// Best-effort, like every repository here: an unconfigured backend or the
 /// network down leaves reads at null so the caller keeps whatever it
@@ -66,6 +63,32 @@ class ReferralRepository {
       );
     } catch (error) {
       BackendHttp.log('ReferralRepository.progressFor failed', error: error);
+      return null;
+    }
+  }
+
+  /// Resolves whatever was typed into the "Referral ID" field at
+  /// registration — `POST /v1/member/referrals/apply-code`, see
+  /// `ReferralService.applySignupCode`'s own doc for what it can resolve
+  /// to (an agent's own code, or a fellow member's referral code — the one
+  /// field accepts either, and they never collide). Fire-and-forget by
+  /// design, same as every other write here: a bad or already-used code
+  /// must never hold up registration, so the caller does not need to
+  /// react to the result — this only returns it for callers that want to.
+  Future<String?> applyCode(String code) async {
+    final trimmed = code.trim();
+    if (!BackendHttp.isConfigured || trimmed.isEmpty) {
+      return null;
+    }
+    try {
+      final body = await BackendHttp.instance.request(
+        'POST',
+        '/v1/member/referrals/apply-code',
+        body: {'code': trimmed},
+      ) as Map<String, dynamic>;
+      return body['linked'] as String?;
+    } catch (error) {
+      BackendHttp.log('ReferralRepository.applyCode failed', error: error);
       return null;
     }
   }
