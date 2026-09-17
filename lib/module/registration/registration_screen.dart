@@ -39,9 +39,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _pincode = TextEditingController();
 
   /// Whatever an agent gave the member to type in, or a fellow member's own
-  /// invite code — see `ReferralRepository.applyCode`'s own doc. Shown only
-  /// on a first registration (see [_submit]); an edit has nothing to read a
-  /// fresh code from.
+  /// invite code — see `ReferralRepository.applyCode`'s own doc. Shown on
+  /// every visit to this form, not just a first registration: the backend
+  /// itself enforces "at most one agent, at most one referrer, ever," so a
+  /// member who skipped this the first time can still add one later.
   final _referralCode = TextEditingController();
 
   /// Filled by the picker only, never typed into — see the field below.
@@ -171,10 +172,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    // The referral edge is only ever recorded on a first registration — an
-    // edit shows no code field to read one from (see the field's own doc).
-    final isFirstRegistration = !_service.isRegistered;
-
     _service.save(
       Registration(
         name: _name.text.trim(),
@@ -191,11 +188,16 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     );
 
     // Best-effort and fire-and-forget: a bad or already-used code must not
-    // hold up the celebration screen below. Resolves to either an agent's
-    // own code or a fellow member's referral code — see
-    // `ReferralRepository.applyCode`'s own doc.
+    // hold up the celebration screen below. Offered on an edit too, not
+    // just a first registration — a member who skipped it the first time
+    // round can still add one later; the backend itself is what actually
+    // enforces "at most one agent, at most one referrer, ever"
+    // (`ReferralService.applySignupCode`), so a repeat or late call here is
+    // always safe to just try. Resolves to either an agent's own code or a
+    // fellow member's referral code — see `ReferralRepository.applyCode`'s
+    // own doc.
     final referralCode = _referralCode.text.trim();
-    if (isFirstRegistration && referralCode.isNotEmpty) {
+    if (referralCode.isNotEmpty) {
       unawaited(ReferralRepository.instance.applyCode(referralCode));
     }
 
@@ -428,16 +430,14 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         ),
         if (_submitted && _state == null)
           const _FieldError('State is required'),
-        if (!widget.isEditing) ...[
-          const SizedBox(height: 14),
-          LabelledField(
-            label: 'Referral ID',
-            hint: 'From an agent, or a friend on SHIELD (optional)',
-            controller: _referralCode,
-            icon: Icons.card_giftcard_outlined,
-            textCapitalization: TextCapitalization.characters,
-          ),
-        ],
+        const SizedBox(height: 14),
+        LabelledField(
+          label: 'Referral ID',
+          hint: 'From an agent, or a friend on SHIELD (optional)',
+          controller: _referralCode,
+          icon: Icons.card_giftcard_outlined,
+          textCapitalization: TextCapitalization.characters,
+        ),
       ],
     );
   }

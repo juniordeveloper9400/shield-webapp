@@ -196,6 +196,22 @@ void main() {
       expect(recorder.opened, Uri.parse(privacyPolicyUrl));
     });
 
+    testWidgets('Terms & Conditions opens the public terms page', (
+      tester,
+    ) async {
+      AuthService.instance.signInAs();
+      final original = termsOpener;
+      final recorder = _RecordingOpener();
+      termsOpener = recorder.call;
+      addTearDown(() => termsOpener = original);
+
+      await pump(tester, const AccountScreen());
+      await tester.tap(find.text('Terms & Conditions'));
+      await tester.pumpAndSettle();
+
+      expect(recorder.opened, Uri.parse(termsUrl));
+    });
+
     testWidgets(
       'offers "Become a SHIELD Agent" to a member who is not one, not "Agent Portal"',
       (tester) async {

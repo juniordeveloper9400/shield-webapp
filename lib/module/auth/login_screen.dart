@@ -1,10 +1,12 @@
 import 'dart:async';
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../theme/app_colors.dart';
 import '../../widgets/labelled_field.dart';
+import '../../widgets/legal_links.dart';
 import 'auth_service.dart';
 import 'auth_widgets.dart';
 import 'otp_field.dart';
@@ -577,15 +579,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 14),
         _ModeSwitchLink(mode: _mode, onSwitch: _switchMode),
         const SizedBox(height: 12),
-        const Text(
-          'By continuing you agree to the Terms of Use and Privacy Policy.',
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.4,
-            color: AppColors.textMuted,
-          ),
-        ),
+        const _TermsAndPrivacyNote(),
       ],
     );
   }
@@ -741,6 +735,67 @@ class _ModeSwitchLink extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// "By continuing you agree to the Terms of Use and Privacy Policy." — with
+/// both actually opening their real pages ([termsUrl] / [privacyPolicyUrl]
+/// in `account_screen.dart`, the same static pages the Account menu opens),
+/// not just naming them in inert text. Its own small [State] purely so the
+/// two [TapGestureRecognizer]s it needs for inline taps get disposed
+/// properly rather than leaking.
+class _TermsAndPrivacyNote extends StatefulWidget {
+  const _TermsAndPrivacyNote();
+
+  @override
+  State<_TermsAndPrivacyNote> createState() => _TermsAndPrivacyNoteState();
+}
+
+class _TermsAndPrivacyNoteState extends State<_TermsAndPrivacyNote> {
+  late final TapGestureRecognizer _terms;
+  late final TapGestureRecognizer _privacy;
+
+  @override
+  void initState() {
+    super.initState();
+    // openTerms / openPrivacyPolicy (legal_links.dart) already swallow a
+    // failed launch and just report false — nothing more to do with that
+    // here, since this note sits on the auth screen itself with no
+    // dedicated messenger worth interrupting sign-in for on a dead link.
+    _terms = TapGestureRecognizer()..onTap = openTerms;
+    _privacy = TapGestureRecognizer()..onTap = openPrivacyPolicy;
+  }
+
+  @override
+  void dispose() {
+    _terms.dispose();
+    _privacy.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    const muted = TextStyle(fontSize: 12, height: 1.4, color: AppColors.textMuted);
+    const link = TextStyle(
+      fontSize: 12,
+      height: 1.4,
+      fontWeight: FontWeight.w700,
+      color: AppColors.brandBlue,
+      decoration: TextDecoration.underline,
+    );
+    return Text.rich(
+      TextSpan(
+        style: muted,
+        children: [
+          const TextSpan(text: 'By continuing you agree to the '),
+          TextSpan(text: 'Terms of Use', style: link, recognizer: _terms),
+          const TextSpan(text: ' and '),
+          TextSpan(text: 'Privacy Policy', style: link, recognizer: _privacy),
+          const TextSpan(text: '.'),
+        ],
+      ),
+      textAlign: TextAlign.center,
     );
   }
 }

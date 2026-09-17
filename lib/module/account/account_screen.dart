@@ -1,8 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
+
+// Re-exported so this file stays the one import `delete_account_test.dart`
+// (and anywhere else that reaches these straight off `AccountScreen`)
+// already uses — see `legal_links.dart`'s own doc for why the links
+// themselves live there instead, shared with the sign-in screen's note.
+export '../../widgets/legal_links.dart';
 
 import '../../theme/app_colors.dart';
 import '../../money.dart';
+import '../../widgets/legal_links.dart';
 import '../agent/agent_portal_screen.dart';
 import '../agent/agent_service.dart';
 import '../agent/become_agent_screen.dart';
@@ -178,6 +184,11 @@ class AccountScreen extends StatelessWidget {
                 onTap: () => _openPrivacyPolicy(context),
               ),
               _MenuItem(
+                icon: Icons.description_outlined,
+                label: 'Terms & Conditions',
+                onTap: () => _openTerms(context),
+              ),
+              _MenuItem(
                 icon: Icons.settings_outlined,
                 label: 'Settings',
                 onTap: () {},
@@ -216,29 +227,9 @@ class AccountScreen extends StatelessWidget {
   }
 }
 
-/// The privacy policy's own, permanent public page — a plain static file
-/// (`web/privacy.html`, served as-is by Vercel, no sign-in and no Flutter
-/// runtime involved) rather than a screen inside the app. A store listing
-/// (or anyone else) needs a URL they can open without installing anything;
-/// a real "Privacy Policy" link has to actually be one.
-///
-/// Seam kept separate from [SocialLinks] (a distinct, single-purpose
-/// dependency) rather than folded into it — the two have nothing to do with
-/// each other beyond both opening a browser.
-@visibleForTesting
-Future<bool> Function(Uri uri) privacyPolicyOpener =
-    (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
-
-const String privacyPolicyUrl = 'https://shieldapp-zeta.vercel.app/privacy.html';
-
 Future<void> _openPrivacyPolicy(BuildContext context) async {
   final messenger = ScaffoldMessenger.of(context);
-  var opened = false;
-  try {
-    opened = await privacyPolicyOpener(Uri.parse(privacyPolicyUrl));
-  } catch (_) {
-    opened = false;
-  }
+  final opened = await openPrivacyPolicy();
   if (opened) {
     return;
   }
@@ -247,6 +238,22 @@ Future<void> _openPrivacyPolicy(BuildContext context) async {
     ..showSnackBar(
       const SnackBar(
         content: Text('Could not open the Privacy Policy.'),
+        backgroundColor: AppColors.textDark,
+      ),
+    );
+}
+
+Future<void> _openTerms(BuildContext context) async {
+  final messenger = ScaffoldMessenger.of(context);
+  final opened = await openTerms();
+  if (opened) {
+    return;
+  }
+  messenger
+    ..hideCurrentSnackBar()
+    ..showSnackBar(
+      const SnackBar(
+        content: Text('Could not open the Terms & Conditions.'),
         backgroundColor: AppColors.textDark,
       ),
     );
