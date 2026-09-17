@@ -87,6 +87,26 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _storeId = profile?.storeId;
     _storePickedByHand = profile != null;
 
+    _loadSavedReferralCode();
+  }
+
+  /// Shows a code the member already used back to them on a later visit to
+  /// this form, rather than only while they are still typing it in — a code
+  /// submitted and then never seen again reads as "did that even work?".
+  /// Best-effort and silent: nothing here overrides a code the member is
+  /// already mid-typing.
+  Future<void> _loadSavedReferralCode() async {
+    if (_referralCode.text.isNotEmpty) {
+      return;
+    }
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone == null || phone.isEmpty) {
+      return;
+    }
+    final code = await ReferralRepository.instance.usedCodeFor(phone);
+    if (code != null && mounted && _referralCode.text.isEmpty) {
+      setState(() => _referralCode.text = code);
+    }
   }
 
   @override

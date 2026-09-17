@@ -9,10 +9,10 @@ import 'purchase_service.dart';
 
 /// Where an order has got to, drawn as a graph.
 ///
-/// Opened from the **Track order** button in My Orders. The stages across the
-/// top differ by [OrderKind]: a standard order is placed, packed, dispatched,
-/// delivered; a prescription order gains a *received* and a *pharmacist
-/// review* stage in front, because it is read and priced before it is packed.
+/// Opened from the **Track order** button in My Orders. Every order — standard
+/// or prescription — walks the same four stages: placed, the store contacting
+/// the member (to confirm/price a prescription; already true of a
+/// pre-priced standard order), billed, delivered. See `OrderTrack`.
 class OrderTrackScreen extends StatefulWidget {
   final Purchase order;
 
@@ -110,17 +110,11 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 28),
               children: [
-                const _ReminderRow(),
                 if (order.kind == OrderKind.prescription) ...[
-                  const SizedBox(height: 14),
                   PrescriptionUploadedCard(order: order),
+                  const SizedBox(height: 14),
                 ],
-                const SizedBox(height: 14),
                 DeliverToCard(order: order),
-                const SizedBox(height: 14),
-                const EmailIdCard(),
-                const SizedBox(height: 14),
-                DeliveryUpdatesCard(order: order),
                 if (order.status == OrderStatus.processing) ...[
                   const SizedBox(height: 14),
                   CancelOrderCard(order: order),
@@ -573,56 +567,4 @@ class _CaretPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_CaretPainter oldDelegate) => oldDelegate.color != color;
-}
-
-class _ReminderRow extends StatelessWidget {
-  const _ReminderRow();
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.offerTint,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: () {
-          ScaffoldMessenger.of(context)
-            ..hideCurrentSnackBar()
-            ..showSnackBar(
-              const SnackBar(
-                content: Text('We will call you when it is time to reorder.'),
-              ),
-            );
-        },
-        borderRadius: BorderRadius.circular(12),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-          child: Row(
-            children: [
-              const Icon(
-                Icons.event_available_rounded,
-                size: 20,
-                color: AppColors.brandBlue,
-              ),
-              const SizedBox(width: 10),
-              const Expanded(
-                child: Text(
-                  'Set reminder call for next order',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 22,
-                color: AppColors.textMuted,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 }

@@ -1,19 +1,21 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../data/backend/order_repository.dart';
+import '../../data/backend/store_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
+import '../../phone.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../../widgets/full_screen_image_view.dart';
 import '../../widgets/social_glyphs.dart';
 import '../auth/auth_service.dart';
 import '../checkout/fulfillment_type.dart';
+import '../home/prescription_card.dart' show PrescriptionCard;
 import '../location/address_book.dart';
-import 'order_contact_service.dart';
+import '../registration/registration_service.dart';
 import 'purchase_service.dart';
 
 /// The blocks that sit under the tracker graph on `OrderTrackScreen` — where
@@ -396,351 +398,6 @@ class DeliverToCard extends StatelessWidget {
   }
 }
 
-/// Where order updates are emailed. Reads [OrderContactService]: a link to
-/// add one until it is set, then the address itself with change/remove.
-class EmailIdCard extends StatelessWidget {
-  const EmailIdCard({super.key});
-
-  Future<void> _edit(BuildContext context) async {
-    final contacts = OrderContactService.instance;
-    final value = await _promptForText(
-      context,
-      title: contacts.hasEmail ? 'Edit email ID' : 'Add email ID',
-      label: 'Email ID',
-      hint: 'you@example.com',
-      initialValue: contacts.email,
-      keyboardType: TextInputType.emailAddress,
-      validate: _validateEmail,
-    );
-    if (value != null) {
-      contacts.setEmail(value);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _InfoCard(
-      title: 'Email ID',
-      child: ListenableBuilder(
-        listenable: OrderContactService.instance,
-        builder: (context, _) {
-          final email = OrderContactService.instance.email;
-          if (email == null) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const Text(
-                  'We will send all updates related to your order to this '
-                  'email ID',
-                  style: _mutedStyle,
-                ),
-                const SizedBox(height: 12),
-                _line,
-                const SizedBox(height: 4),
-                _linkButton(
-                  icon: Icons.add_rounded,
-                  label: 'Add email ID',
-                  onPressed: () => _edit(context),
-                ),
-              ],
-            );
-          }
-          return _SavedContactRow(
-            value: email,
-            caption: 'Order updates are sent here',
-            onEdit: () => _edit(context),
-            onRemove: () => OrderContactService.instance.setEmail(null),
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// The number order updates go to, plus a second one added from here.
-class DeliveryUpdatesCard extends StatelessWidget {
-  final Purchase order;
-
-  const DeliveryUpdatesCard({super.key, required this.order});
-
-  Future<void> _edit(BuildContext context) async {
-    final contacts = OrderContactService.instance;
-    final value = await _promptForText(
-      context,
-      title: contacts.hasAlternateNumber
-          ? 'Edit alternate number'
-          : 'Add alternate number',
-      label: 'Alternate number',
-      hint: '10-digit mobile number',
-      initialValue: contacts.alternateNumber,
-      keyboardType: TextInputType.phone,
-      formatters: [
-        FilteringTextInputFormatter.digitsOnly,
-        LengthLimitingTextInputFormatter(10),
-      ],
-      validate: (text) => AuthService.validatePhone(text),
-    );
-    if (value != null) {
-      contacts.setAlternateNumber(value);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final user = AuthService.instance.currentUser.value;
-    final phone =
-        user?.phone ?? AddressBook.instance.deliverTo?.phone ?? '9400000000';
-
-    return _InfoCard(
-      title: 'Get delivery updates on',
-      child: ListenableBuilder(
-        listenable: OrderContactService.instance,
-        builder: (context, _) {
-          final alternate = OrderContactService.instance.alternateNumber;
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text(
-                      'Registered number',
-                      style: TextStyle(
-                        fontSize: 13.5,
-                        color: AppColors.textMuted,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    phone,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textDark,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              _line,
-              const SizedBox(height: 4),
-              if (alternate == null)
-                _linkButton(
-                  icon: Icons.add_rounded,
-                  label: 'Add alternate number',
-                  onPressed: () => _edit(context),
-                )
-              else
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: _SavedContactRow(
-                    value: alternate,
-                    caption: 'Alternate number',
-                    onEdit: () => _edit(context),
-                    onRemove: () =>
-                        OrderContactService.instance.setAlternateNumber(null),
-                  ),
-                ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-/// A saved email or number: the value, a one-line caption, and change/remove.
-class _SavedContactRow extends StatelessWidget {
-  final String value;
-  final String caption;
-  final VoidCallback onEdit;
-  final VoidCallback onRemove;
-
-  const _SavedContactRow({
-    required this.value,
-    required this.caption,
-    required this.onEdit,
-    required this.onRemove,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                caption,
-                style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
-              ),
-            ],
-          ),
-        ),
-        _CompactButton(label: 'Change', onPressed: onEdit),
-        _CompactButton(label: 'Remove', onPressed: onRemove, danger: true),
-      ],
-    );
-  }
-}
-
-class _CompactButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onPressed;
-  final bool danger;
-
-  const _CompactButton({
-    required this.label,
-    required this.onPressed,
-    this.danger = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return TextButton(
-      onPressed: onPressed,
-      style: TextButton.styleFrom(
-        foregroundColor: danger ? AppColors.danger : AppColors.brandBlue,
-        minimumSize: Size.zero,
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
-      ),
-      child: Text(label),
-    );
-  }
-}
-
-/// Null when [value] is a usable email address.
-String? _validateEmail(String value) {
-  final text = value.trim();
-  if (text.isEmpty) {
-    return 'Email is required';
-  }
-  if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)) {
-    return 'Enter a valid email address';
-  }
-  return null;
-}
-
-/// Pops a one-field dialog and resolves to the entered text, or null if the
-/// member backed out. [validate] returns null when the text is acceptable.
-Future<String?> _promptForText(
-  BuildContext context, {
-  required String title,
-  required String label,
-  required String hint,
-  required String? Function(String) validate,
-  String? initialValue,
-  TextInputType keyboardType = TextInputType.text,
-  List<TextInputFormatter> formatters = const [],
-}) {
-  return showDialog<String>(
-    context: context,
-    builder: (context) => _InputDialog(
-      title: title,
-      label: label,
-      hint: hint,
-      initialValue: initialValue,
-      keyboardType: keyboardType,
-      formatters: formatters,
-      validate: validate,
-    ),
-  );
-}
-
-class _InputDialog extends StatefulWidget {
-  final String title;
-  final String label;
-  final String hint;
-  final String? initialValue;
-  final TextInputType keyboardType;
-  final List<TextInputFormatter> formatters;
-  final String? Function(String) validate;
-
-  const _InputDialog({
-    required this.title,
-    required this.label,
-    required this.hint,
-    required this.initialValue,
-    required this.keyboardType,
-    required this.formatters,
-    required this.validate,
-  });
-
-  @override
-  State<_InputDialog> createState() => _InputDialogState();
-}
-
-class _InputDialogState extends State<_InputDialog> {
-  late final TextEditingController _controller = TextEditingController(
-    text: widget.initialValue ?? '',
-  );
-  String? _error;
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  void _save() {
-    final text = _controller.text.trim();
-    final error = widget.validate(text);
-    if (error != null) {
-      setState(() => _error = error);
-      return;
-    }
-    Navigator.of(context).pop(text);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        keyboardType: widget.keyboardType,
-        inputFormatters: widget.formatters,
-        onChanged: (_) {
-          if (_error != null) {
-            setState(() => _error = null);
-          }
-        },
-        onSubmitted: (_) => _save(),
-        decoration: InputDecoration(
-          labelText: widget.label,
-          hintText: widget.hint,
-          errorText: _error,
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        FilledButton(
-          onPressed: _save,
-          style: FilledButton.styleFrom(backgroundColor: AppColors.brandBlue),
-          child: const Text('Save'),
-        ),
-      ],
-    );
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Actions
 // ---------------------------------------------------------------------------
@@ -817,19 +474,55 @@ class CancelOrderCard extends StatelessWidget {
 }
 
 /// Support hours and a call button.
-class NeedHelpCard extends StatelessWidget {
+/// "Need Help?" — dials the phone number of whichever branch is serving
+/// this member's account (`RegistrationService`'s own `store`), resolved
+/// for real from `backend/api` via [StoreRepository] (`ShieldStore.phone`,
+/// the client-side fixture field, is always blank — see its own doc).
+/// Falls back to `PrescriptionCard.orderPhone`, SHIELD's own general order
+/// line, whenever that branch has no number on file yet — the button never
+/// goes nowhere.
+class NeedHelpCard extends StatefulWidget {
   const NeedHelpCard({super.key});
 
   @override
+  State<NeedHelpCard> createState() => _NeedHelpCardState();
+}
+
+class _NeedHelpCardState extends State<NeedHelpCard> {
+  String? _resolvedPhone;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_resolvePhone());
+  }
+
+  Future<void> _resolvePhone() async {
+    final store = RegistrationService.instance.profile?.store;
+    final phone = store == null
+        ? null
+        : await StoreRepository.instance.phoneForCode(store.id);
+    if (!mounted) {
+      return;
+    }
+    setState(() => _resolvedPhone = phone);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final store = RegistrationService.instance.profile?.store;
+    final phone = _resolvedPhone ?? PrescriptionCard.orderPhone;
+
     return _PlainCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           const Text('Need Help?', style: _titleStyle),
           const SizedBox(height: 4),
-          const Text(
-            'Call us between 8:00 am to 10:00 pm',
+          Text(
+            store == null
+                ? 'Call us between 8:00 am to 10:00 pm'
+                : '${store.name} · ${store.hours}',
             style: _mutedStyle,
           ),
           const SizedBox(height: 12),
@@ -837,8 +530,8 @@ class NeedHelpCard extends StatelessWidget {
           const SizedBox(height: 4),
           _linkButton(
             icon: Icons.call_rounded,
-            label: 'Call us',
-            onPressed: () => _toast(context, 'Connecting you to SHIELD support'),
+            label: 'Call us · $phone',
+            onPressed: () => Dialer.call(context, phone),
           ),
         ],
       ),

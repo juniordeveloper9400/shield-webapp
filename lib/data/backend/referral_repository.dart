@@ -39,9 +39,11 @@ class ReferralRepository {
 
   /// The member's real standing: how many invites have transacted, how many
   /// went on to activate a privilege plan, and the Sahakar money that
-  /// earned — computed here client-side from the raw activated-card amounts
-  /// the backend returns, via [ReferralLadder.planCommissionOn], the exact
-  /// same formula and place it has always lived.
+  /// actually earned — `sahakarMoneyEarned`, the real sum of every
+  /// `app.referral.commission_amount` credited to this member as an
+  /// inviter (see `ReferralService.getProgress`'s own doc), not a
+  /// client-side 2% projection the way this used to work before the
+  /// backend actually paid the commission out.
   Future<ReferralProgress?> progressFor(String phone) async {
     if (!BackendHttp.isConfigured) {
       return null;
@@ -52,14 +54,10 @@ class ReferralRepository {
       final directReferrals = _int(body['directReferrals']);
       final activatedCards = (body['activatedWalletCards'] as List<dynamic>)
           .cast<Map<String, dynamic>>();
-      var sahakarMoney = 0;
-      for (final card in activatedCards) {
-        sahakarMoney += ReferralLadder.planCommissionOn(_int(card['amount']));
-      }
       return ReferralProgress(
         directReferrals: directReferrals,
         plansActivated: activatedCards.length,
-        sahakarMoney: sahakarMoney,
+        sahakarMoney: _int(body['sahakarMoneyEarned']),
       );
     } catch (error) {
       BackendHttp.log('ReferralRepository.progressFor failed', error: error);
@@ -89,6 +87,28 @@ class ReferralRepository {
       return body['linked'] as String?;
     } catch (error) {
       BackendHttp.log('ReferralRepository.applyCode failed', error: error);
+      return null;
+    }
+  }
+
+  /// The code the signed-in member themselves signed up with, if any —
+  /// `GET /v1/member/referrals/used-code`, see `ReferralService.getUsedCode`'s
+  /// own doc. Lets the registration form show a member's own referral/agent
+  /// code back to them on a later visit, rather than only while they are
+  /// still typing it in. [phone] is accepted for parity with the other
+  /// signatures here but unused — the backend resolves identity from the
+  /// session. Null when nothing applied, or the backend is unreachable.
+  Future<String?> usedCodeFor(String phone) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final body =
+          await BackendHttp.instance.request('GET', '/v1/member/referrals/used-code')
+              as Map<String, dynamic>;
+      return body['code'] as String?;
+    } catch (error) {
+      BackendHttp.log('ReferralRepository.usedCodeFor failed', error: error);
       return null;
     }
   }

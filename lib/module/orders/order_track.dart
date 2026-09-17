@@ -41,28 +41,28 @@ class OrderTrack {
       case OrderStatus.delivered:
         return titles.length - 1;
       case OrderStatus.outForDelivery:
-        // The dispatch stage — second from the end on both routes.
+        // Billed and on its way — second from the end.
         return titles.length - 2;
       case OrderStatus.cancelled:
         return 0;
       case OrderStatus.processing:
-        if (order.kind == OrderKind.prescription) {
-          // Reading and pricing, then packing once the bill is in.
-          return _priced ? 2 : 1;
-        }
-        return 1;
+        // A prescription order sits with the store until it is read and
+        // priced; a standard order is already priced at checkout, so
+        // [_priced] is true from the moment it is placed and this stage is
+        // never actually shown for one.
+        return _priced ? 2 : 1;
     }
   }
 
-  List<String> get _stageTitles => order.kind == OrderKind.prescription
-      ? const [
-          'Prescription received',
-          'Pharmacist review',
-          'Order confirmed',
-          'Dispatched',
-          'Delivered',
-        ]
-      : const ['Order placed', 'Packed', 'Dispatched', 'Delivered'];
+  /// One stage sequence for every order, prescription or standard: placed,
+  /// the store getting in touch (only ever lingered on by a prescription
+  /// order, which is read and priced after the fact), billed, delivered.
+  List<String> get _stageTitles => const [
+    'Order placed',
+    'Store will contact',
+    'Billed',
+    'Delivered',
+  ];
 
   /// The graph, newest stage last.
   ///
@@ -122,13 +122,10 @@ class OrderTrack {
       case OrderStatus.outForDelivery:
         return 'Out for delivery — it reaches you today.';
       case OrderStatus.processing:
-        if (order.kind == OrderKind.prescription && !_priced) {
-          return 'A pharmacist is reading your prescription and pricing it.';
+        if (!_priced) {
+          return 'Your store will contact you to confirm and price this order.';
         }
-        if (order.kind == OrderKind.prescription) {
-          return 'Priced and confirmed. Your order is being packed.';
-        }
-        return 'We have your order and are packing it now.';
+        return 'Billed and confirmed. Your order is being packed.';
       case OrderStatus.delivered:
       case OrderStatus.cancelled:
         return '';
