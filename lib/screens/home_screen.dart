@@ -25,9 +25,53 @@ import '../module/investor/investor_access_card.dart';
 import '../module/investor/investor_service.dart';
 import '../module/privilege/privilege_card.dart';
 import '../module/search/search_screen.dart';
+import '../module/wallet/wallet_service.dart';
 
-class HomeScreen extends StatelessWidget {
+/// The privilege card and savings figure at the top of the feed
+/// ([PrivilegeCard], [EarningsSection]) both read [WalletService] straight
+/// off whatever it already holds — they never fetch. Nothing else on the
+/// path from sign-in to this screen's first frame is guaranteed to have
+/// finished a wallet fetch by then (`auth_service.dart`'s bridge calls are
+/// `unawaited`, racing the first frame rather than blocking it), so without
+/// this a member who already activated a plan sees the "Activate" card and
+/// a zero balance until something else happens to re-fetch — which today
+/// only ever happens by opening the Wallet screen itself. Home needs the
+/// exact same self-refresh [WalletScreen] already does: on open, and again
+/// on every return to the foreground.
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refreshWallet();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _refreshWallet();
+    }
+  }
+
+  void _refreshWallet() {
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone != null) {
+      WalletService.instance.refreshFromDatabase(phone);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
