@@ -61,7 +61,7 @@ class OrderTrack {
     'Order placed',
     'Store will contact',
     'Billed',
-    'Delivered',
+    'Completed',
   ];
 
   /// The graph, newest stage last.
@@ -116,7 +116,7 @@ class OrderTrack {
       return 'This order was cancelled. Nothing was charged.';
     }
     if (isDelivered) {
-      return 'Delivered. Thanks for shopping with SHIELD.';
+      return 'Completed. Thanks for shopping with SHIELD.';
     }
     switch (order.status) {
       case OrderStatus.outForDelivery:

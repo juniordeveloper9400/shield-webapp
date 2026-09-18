@@ -24,9 +24,10 @@ class OrderTrackScreen extends StatefulWidget {
 
 class _OrderTrackScreenState extends State<OrderTrackScreen> {
   /// Starts as [OrderTrackScreen.order] and is swapped for the freshly
-  /// merged copy once [PurchaseService.ensureBillLoaded]'s fetch lands, so
-  /// the store's invoice appears in this already-open screen the moment it
-  /// arrives rather than only on the next visit from My Orders.
+  /// reloaded copy once [_loadBill] lands, so a bill sent (or paid) while
+  /// this screen is already open — the admin console runs on its own,
+  /// independent of whatever this member happens to be looking at — shows
+  /// up here rather than only on the next visit from My Orders.
   late Purchase _order = widget.order;
 
   @override
@@ -35,7 +36,21 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
     unawaited(_loadBill());
   }
 
+  /// A full reload, not just [PurchaseService.ensureBillLoaded]'s own bill
+  /// image fetch: payment status, bill amount and bill status can all move
+  /// while the member is sitting on this exact screen (the admin console
+  /// sends a bill, or collects it — a wallet-and-cash split, an OTP
+  /// verification, none of it triggered from this device), and nothing
+  /// else would otherwise prompt an already-open Track Order to catch up.
   Future<void> _loadBill() async {
+    await PurchaseService.instance.refresh();
+    if (!mounted) return;
+    for (final purchase in PurchaseService.instance.purchases) {
+      if (purchase.id == _order.id) {
+        setState(() => _order = purchase);
+        break;
+      }
+    }
     await PurchaseService.instance.ensureBillLoaded(_order);
     if (!mounted) return;
     for (final purchase in PurchaseService.instance.purchases) {
@@ -143,7 +158,7 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
 String _statusHeadline(OrderStatus status) {
   switch (status) {
     case OrderStatus.delivered:
-      return 'Order delivered';
+      return 'Order completed';
     case OrderStatus.outForDelivery:
       return 'Out for delivery';
     case OrderStatus.processing:

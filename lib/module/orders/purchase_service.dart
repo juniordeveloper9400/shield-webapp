@@ -467,6 +467,20 @@ class PurchaseService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Drops [id]'s optimistic local copy — called when the real backend
+  /// checkout behind a [record] call turns out to have failed. Without
+  /// this, an order that was never actually written to `app."order"` would
+  /// still sit in "My Orders" claiming to be placed, with nothing for the
+  /// admin console (which reads the real table) to ever show for it. A
+  /// no-op when [id] isn't (any longer) on file.
+  void discard(String id) {
+    final before = _purchases.length;
+    _purchases.removeWhere((p) => p.id == id);
+    if (_purchases.length != before) {
+      notifyListeners();
+    }
+  }
+
   @visibleForTesting
   void reset() {
     _purchases.clear();

@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "1086152719549-v0e3gfblorj4nf2usu8umqovg1q03sh7.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zabnix.shield",
+            "certificate_hash": "9cc76912de1bb4788fbbdb9bc09f51efdb40a53c"
+          }
+        },
+        {
           "client_id": "1086152719549-vobt93tannvqrehdo2ibrq2lqcreqtos.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {

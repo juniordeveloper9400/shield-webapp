@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/backend/backend_http.dart';
 import '../../data/backend/order_repository.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
@@ -168,11 +169,23 @@ class _CartScreenState extends State<CartScreen> {
                 // brings the wallet back in step with the real, server-held
                 // balance — see WalletService.refreshFromDatabase.
                 unawaited(WalletService.instance.refreshFromDatabase(user.phone));
-                if (orderId == null && placed != null) {
-                  PurchaseService.instance.updateOne(
-                    placed!.copyWith(paymentStatus: OrderPaymentStatus.pending),
-                  );
-                }
+              }
+              // checkoutStandardOrder returns null two different ways: the
+              // backend isn't configured at all (a test build, or one with
+              // no BACKEND_API_BASE_URL — nothing to write through to, by
+              // design), or it IS configured and the write itself failed
+              // (a network blip, a validation error). Only the second is a
+              // real problem — the member was just shown "Order placed" for
+              // an order that only ever existed on this one device, and the
+              // admin console (reading the real table) would never see it.
+              // Drop the optimistic local copy and say so, rather than
+              // letting it sit in My Orders lying about having been placed.
+              if (orderId == null && placed != null && BackendHttp.isConfigured) {
+                PurchaseService.instance.discard(placed!.id);
+                throw const CheckoutFailedException(
+                  'Could not place your order — check your connection and '
+                  'try again.',
+                );
               }
             }
             _cart.clear();

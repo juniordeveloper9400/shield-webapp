@@ -2,6 +2,25 @@ import 'package:flutter/foundation.dart';
 
 import '../../money.dart';
 
+/// Thrown from a `CheckoutScreen.onComplete` implementation when the order
+/// genuinely never made it to the backend — as opposed to this app's usual
+/// best-effort repositories, which swallow a failed write and return null so
+/// a flaky network never blocks the member from finishing checkout. Checkout
+/// itself is the one write that can't be allowed to fail silently: showing
+/// "Order placed" for an order nothing but this device ever heard of is what
+/// let a member believe they'd ordered something the admin console — reading
+/// the real table — never saw at all. `CheckoutScreen` catches this and
+/// keeps the member on the checkout screen with [message], rather than
+/// moving on to `successScreen`.
+class CheckoutFailedException implements Exception {
+  final String message;
+
+  const CheckoutFailedException(this.message);
+
+  @override
+  String toString() => message;
+}
+
 /// One line of the bill a checkout is settling.
 ///
 /// The amounts are carried as numbers rather than as pre-formatted strings so
