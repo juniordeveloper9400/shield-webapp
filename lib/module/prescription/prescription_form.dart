@@ -219,28 +219,53 @@ class PrescriptionFormController extends ChangeNotifier {
     // and build the intake card from it. Try a small re-encoded JPEG first
     // per image; if the image package cannot decode one (an odd format, a
     // screenshot), fall back to its raw bytes as-is so the counter still
-    // gets a picture. Best-effort either way — a page that cannot be
-    // encoded at all is simply dropped rather than failing the whole
-    // upload, and the row is kept even with none.
+    // gets a picture.
+    //
+    // The whole per-image block is one try/catch, not just the encode call:
+    // a script the pharmacy console never got to see (this exact bug,
+    // reported live) traced back to nothing throwing loudly enough to show
+    // up anywhere — the encode failed silently, and whatever ran after it
+    // for that image never got a chance to fall back. Wrapping the entire
+    // block means a failure anywhere in it — encode, mime lookup, the
+    // fallback itself — still leaves the raw bytes as the very last resort
+    // tried, and the one case that logs instead of quietly moving on is
+    // when even *that* didn't produce anything, which is the only
+    // genuinely inexplicable outcome left.
     final encodedImages = <String>[];
     for (final picked in images) {
       final rawImage = picked.preview;
       if (rawImage == null) {
+        debugPrint(
+          'prescription: ${picked.file.name} has no bytes to encode at all '
+          '— the picker never delivered a preview for it',
+        );
         continue;
       }
-      String? image;
       try {
-        image = await prescriptionImageDataUrl(rawImage);
+        String? image;
+        try {
+          image = await prescriptionImageDataUrl(rawImage);
+        } catch (error) {
+          debugPrint(
+            'prescription: could not re-encode ${picked.file.name} — $error',
+          );
+        }
+        // Always the fallback once the encode has nothing — kPrescriptionMaxBytes
+        // already gated what could be picked in the first place (see
+        // UploadPrescriptionScreen.maxBytes), so there is no smaller cap to
+        // re-check here; re-checking it a second time with its own copy of
+        // the constant is exactly the kind of two-sources-of-truth gap that
+        // silently drops a page if they ever come apart.
+        image ??= 'data:${_mimeForName(picked.file.name)};base64,'
+            '${base64Encode(rawImage)}';
+        if (image.isNotEmpty) {
+          encodedImages.add(image);
+        }
       } catch (error) {
-        debugPrint('prescription: could not encode a script image — $error');
-      }
-      if ((image == null || image.isEmpty) &&
-          rawImage.length <= kPrescriptionMaxBytes) {
-        final mime = _mimeForName(picked.file.name);
-        image = 'data:$mime;base64,${base64Encode(rawImage)}';
-      }
-      if (image != null && image.isNotEmpty) {
-        encodedImages.add(image);
+        debugPrint(
+          'prescription: ${picked.file.name} could not be attached by any '
+          'means — $error',
+        );
       }
     }
     try {
