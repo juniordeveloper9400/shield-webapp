@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../data/backend/order_repository.dart';
+import '../../data/backend/prescription_repository.dart';
 import '../../data/backend/store_repository.dart';
 import '../../dates.dart';
 import '../../money.dart';
@@ -221,6 +222,13 @@ class PrescriptionUploadedCard extends StatefulWidget {
 class _PrescriptionUploadedCardState extends State<PrescriptionUploadedCard> {
   List<OrderPrescription>? _prescriptions;
 
+  /// Keyed by [OrderPrescription.id] — the pharmacist's own intake card for
+  /// each prescription on this order, once the counter has sent one
+  /// ("Send intake card" / "Update intake card" in the admin console). Only
+  /// ever populated for a prescription whose [OrderPrescription.status] is
+  /// past `AWAITING_REVIEW`, since nothing has been entered before then.
+  final Map<int, RemotePrescriptionCard> _intakeCards = {};
+
   @override
   void initState() {
     super.initState();
@@ -235,6 +243,21 @@ class _PrescriptionUploadedCardState extends State<PrescriptionUploadedCard> {
     final rows = await OrderRepository.instance.fetchPrescriptions(backendId);
     if (mounted && rows != null) {
       setState(() => _prescriptions = rows);
+    }
+    if (rows == null) {
+      return;
+    }
+    // One detail call per prescription that could plausibly have an intake
+    // card by now — same N+1 shape PrescriptionRepository.fetchForMember
+    // already accepts for a member's own script count.
+    for (final rx in rows) {
+      if (rx.status == 'AWAITING_REVIEW') {
+        continue;
+      }
+      final card = await PrescriptionRepository.instance.fetchOne(rx.id);
+      if (mounted && card != null && card.hasIntakeCard) {
+        setState(() => _intakeCards[rx.id] = card);
+      }
     }
   }
 
@@ -341,6 +364,136 @@ class _PrescriptionUploadedCardState extends State<PrescriptionUploadedCard> {
               ),
             ],
           ),
+          // The pharmacist's own intake card, the moment the admin console
+          // sends (or updates) one — every medicine, its dose and how much
+          // to dispense, exactly as entered at the counter. Per prescription
+          // when this order carries more than one, so a card never gets
+          // shown under the wrong script's name.
+          for (final rx in _prescriptions ?? const <OrderPrescription>[])
+            if (_intakeCards[rx.id] case final card?) ...[
+              const SizedBox(height: 14),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 12),
+              _IntakeCardBlock(
+                title: count > 1 ? 'Intake card · ${rx.code}' : 'Intake card',
+                card: card,
+              ),
+            ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The pharmacist-built medicine list under the uploaded scan — read-only,
+/// unlike `PrescriptionDetailCard` (the "My Prescriptions" screen's own
+/// editable version of the same data), since a member reading this on Track
+/// Order is confirming what the counter sent, not adjusting anything.
+class _IntakeCardBlock extends StatelessWidget {
+  final String title;
+  final RemotePrescriptionCard card;
+
+  const _IntakeCardBlock({required this.title, required this.card});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: _titleStyle),
+        if (card.doctor.trim().isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text('Dr. ${card.doctor}', style: _mutedStyle),
+        ],
+        const SizedBox(height: 8),
+        for (final medicine in card.medicines) _IntakeMedicineLine(medicine),
+      ],
+    );
+  }
+}
+
+class _IntakeMedicineLine extends StatelessWidget {
+  final RemotePrescriptionMedicine medicine;
+
+  const _IntakeMedicineLine(this.medicine);
+
+  /// "Morning & night", spelled out from the three-digit code — the same
+  /// wording `IntakePattern.labelWith` gives the editable card, kept as a
+  /// plain function here rather than pulling in that class (and the
+  /// `PrescriptionCopy` localisation it takes its slot names from) for one
+  /// read-only line.
+  String get _spelled {
+    const slots = ['Morning', 'Afternoon', 'Night'];
+    final counts = [medicine.morning, medicine.afternoon, medicine.night];
+    final parts = <String>[
+      for (var i = 0; i < 3; i++)
+        if (counts[i] > 0)
+          counts[i] > 1 ? '${slots[i]} ×${counts[i]}' : slots[i],
+    ];
+    if (parts.isEmpty) {
+      return 'Not set';
+    }
+    return parts.length == 1 ? parts.single : parts.join(' & ');
+  }
+
+  String get _code =>
+      '${medicine.morning}${medicine.afternoon}${medicine.night}';
+
+  @override
+  Widget build(BuildContext context) {
+    final detail = medicine.pack.isEmpty
+        ? _spelled
+        : '${medicine.pack} · $_spelled';
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  medicine.name,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    height: 1.25,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(detail, style: _mutedStyle),
+              ],
+            ),
+          ),
+          const SizedBox(width: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: AppColors.offerTint,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              _code,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w800,
+                color: AppColors.brandBlue,
+              ),
+            ),
+          ),
+          if (medicine.totalUnits > 0) ...[
+            const SizedBox(width: 8),
+            Text(
+              '×${medicine.totalUnits}',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
         ],
       ),
     );

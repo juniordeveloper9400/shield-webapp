@@ -453,7 +453,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         const SizedBox(height: 14),
         LabelledField(
           label: 'Referral ID',
-          hint: 'From an agent, or a friend on SHIELD (optional)',
+          hint: "From an agent, or a friend's SHIELD Member ID (optional)",
           controller: _referralCode,
           icon: Icons.card_giftcard_outlined,
           textCapitalization: TextCapitalization.characters,

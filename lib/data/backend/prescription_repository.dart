@@ -207,6 +207,25 @@ class PrescriptionRepository {
     }
   }
 
+  /// One prescription's own intake card — the same detail call
+  /// [fetchForMember] makes per script, exposed standalone for a caller that
+  /// already knows the id (Track Order's `PrescriptionUploadedCard`, keyed
+  /// off the id `OrderRepository.fetchPrescriptions` already returned)
+  /// rather than needing the whole account's list first.
+  Future<RemotePrescriptionCard?> fetchOne(int id) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final detail = await BackendHttp.instance.request('GET', '/v1/member/prescriptions/$id')
+          as Map<String, dynamic>;
+      return _toCard(detail);
+    } catch (error) {
+      BackendHttp.log('PrescriptionRepository.fetchOne failed', error: error);
+      return null;
+    }
+  }
+
   /// Submits one or more uploaded prescriptions for fulfilment —
   /// `POST /v1/member/prescription-orders`. An unpriced order shell the
   /// pharmacist prices at the counter, mirroring the old direct-Neon

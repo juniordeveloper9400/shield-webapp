@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 // Re-exported so this file stays the one import `delete_account_test.dart`
 // (and anywhere else that reaches these straight off `AccountScreen`)
@@ -18,7 +19,7 @@ import '../investor/investor_portal_screen.dart';
 import '../investor/investor_service.dart';
 import '../location/address_form_screen.dart';
 import '../patients/manage_patients_screen.dart';
-import '../refer/refer_earn_screen.dart';
+import '../refer/referral_service.dart';
 import '../registration/registration_flow.dart';
 import '../registration/registration_service.dart';
 import '../wallet/wallet_screen.dart';
@@ -168,11 +169,6 @@ class AccountScreen extends StatelessWidget {
           const SizedBox(height: 14),
           _MenuGroup(
             items: [
-              _MenuItem(
-                icon: Icons.card_giftcard_rounded,
-                label: 'Refer & Earn',
-                onTap: () => ReferEarnScreen.open(context),
-              ),
               _MenuItem(
                 icon: Icons.headset_mic_outlined,
                 label: 'Help & Support',
@@ -408,10 +404,21 @@ class _ProfileCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Listens so completing the form fills the store line in without the tab
+    // Loads the member's own code the moment this card is first shown,
+    // rather than waiting for a visit to Refer & Earn — the Member ID line
+    // below needs it just as much as that screen's own invite-code card
+    // does, and this is the one place asking for it costs nothing extra
+    // (ReferralService.attach() already runs it on sign-in in most cases;
+    // this only fills a gap for a session where that hasn't landed yet).
+    ReferralService.instance.ensureLoaded();
+    // Listens so completing the form fills the store line in, and the real
+    // Member ID replaces the placeholder once it loads, without the tab
     // having to be left and come back.
     return ListenableBuilder(
-      listenable: RegistrationService.instance,
+      listenable: Listenable.merge([
+        RegistrationService.instance,
+        ReferralService.instance,
+      ]),
       builder: (context, _) => _build(context),
     );
   }
@@ -419,6 +426,7 @@ class _ProfileCard extends StatelessWidget {
   Widget _build(BuildContext context) {
     final user = AuthService.instance.currentUser.value;
     final store = RegistrationService.instance.profile?.store;
+    final memberId = ReferralService.instance.code;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -471,6 +479,44 @@ class _ProfileCard extends StatelessWidget {
                   style: const TextStyle(
                     fontSize: 14,
                     color: AppColors.textMuted,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                InkWell(
+                  onTap: () async {
+                    await Clipboard.setData(ClipboardData(text: memberId));
+                    if (!context.mounted) return;
+                    ScaffoldMessenger.of(context)
+                      ..hideCurrentSnackBar()
+                      ..showSnackBar(
+                        const SnackBar(
+                          content: Text('Member ID copied'),
+                        ),
+                      );
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          'Member ID: $memberId',
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brandBlue,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      const Icon(
+                        Icons.copy_rounded,
+                        size: 13,
+                        color: AppColors.brandBlue,
+                      ),
+                    ],
                   ),
                 ),
                 if (store != null) ...[
