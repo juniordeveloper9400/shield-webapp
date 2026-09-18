@@ -255,14 +255,17 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
     final remoteId = record.remoteId;
     if (remoteId != null) {
-      final deleted = await PrescriptionRepository.instance.softDelete(
+      final error = await PrescriptionRepository.instance.softDelete(
         remoteId,
       );
       if (!mounted) {
         return;
       }
-      if (!deleted) {
-        _say(_copy.deleteFailedMessage);
+      if (error != null) {
+        // The detail is temporarily in the message itself (not just the
+        // dev log) while this exact failure is being tracked down live —
+        // see softDelete's own doc.
+        _say('${_copy.deleteFailedMessage} ($error)');
         return;
       }
     }

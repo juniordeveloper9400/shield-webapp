@@ -172,22 +172,28 @@ class PrescriptionRepository {
     }
   }
 
-  /// Soft-deletes a prescription row. Returns whether it actually happened —
-  /// unlike this class's other writes, the caller needs to know: taking the
-  /// card off the local book *before* this call lands (or without checking
-  /// whether it succeeded) leaves a real race with the next refresh, which
-  /// re-fetches the still-there backend row and quietly rebuilds the very
-  /// card the member just deleted.
-  Future<bool> softDelete(String id) async {
+  /// Soft-deletes a prescription row. Returns null on success, or the
+  /// underlying failure's own detail (a `BackendHttpException`'s status/code
+  /// or, off backend/network entirely, its message) — unlike this class's
+  /// other writes, the caller needs more than a plain yes/no here: taking
+  /// the card off the local book *before* this call lands (or without
+  /// checking whether it succeeded) leaves a real race with the next
+  /// refresh, which re-fetches the still-there backend row and quietly
+  /// rebuilds the very card the member just deleted. Surfacing the real
+  /// reason (rather than a blanket "try again") is what let this exact bug
+  /// — an id that looked fine locally but the backend rejected for a
+  /// specific, discoverable reason — actually get diagnosed instead of
+  /// staying a guess.
+  Future<String?> softDelete(String id) async {
     if (!BackendHttp.isConfigured) {
-      return false;
+      return 'backend not configured';
     }
     try {
       await BackendHttp.instance.request('DELETE', '/v1/member/prescriptions/$id');
-      return true;
+      return null;
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.softDelete failed', error: error);
-      return false;
+      return error.toString();
     }
   }
 

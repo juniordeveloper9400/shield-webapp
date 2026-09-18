@@ -128,7 +128,10 @@ void main() {
         // confirmed backend delete, so a failure can never look like a
         // silent success that later reappears on refresh.
         expect(book.length, 1);
-        expect(find.text('Could not delete this — check your connection and try again.'), findsOneWidget);
+        expect(
+          find.textContaining('Could not delete this'),
+          findsOneWidget,
+        );
       },
     );
   });
