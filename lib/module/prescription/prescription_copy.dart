@@ -150,6 +150,9 @@ class PrescriptionCopy {
   final String prescriptionRemoved;
   final String undo;
   final String sentToCart;
+  final String deleteConfirmTitle;
+  final String deleteConfirmMessage;
+  final String cancel;
 
   // ---- Order-first flow ----
   final String proceedToDelivery;
@@ -230,6 +233,9 @@ class PrescriptionCopy {
     required this.prescriptionRemoved,
     required this.undo,
     required this.sentToCart,
+    required this.deleteConfirmTitle,
+    required this.deleteConfirmMessage,
+    required this.cancel,
     required this.proceedToDelivery,
     required this.beforeOrderNote,
     required this.orderPlacedTitle,
@@ -359,6 +365,11 @@ class PrescriptionCopy {
     prescriptionRemoved: 'Prescription removed',
     undo: 'Undo',
     sentToCart: 'sent to the cart',
+    deleteConfirmTitle: 'Delete this prescription?',
+    deleteConfirmMessage:
+        "This removes it, and anything the pharmacist has already read off "
+        "it, for good — it can't be undone.",
+    cancel: 'Cancel',
     proceedToDelivery: 'Proceed to delivery',
     beforeOrderNote:
         'Place the order below. The pharmacist then reads the script and '
@@ -492,6 +503,11 @@ class PrescriptionCopy {
     prescriptionRemoved: 'കുറിപ്പടി നീക്കി',
     undo: 'തിരികെ',
     sentToCart: 'കാർട്ടിലേക്ക് അയച്ചു',
+    deleteConfirmTitle: 'ഈ കുറിപ്പടി ഇല്ലാതാക്കണോ?',
+    deleteConfirmMessage:
+        'ഫാർമസിസ്റ്റ് ഇതിനകം വായിച്ചത് ഉൾപ്പെടെ ഇത് പൂർണ്ണമായും നീക്കും — '
+        'ഇത് പഴയപടിയാക്കാൻ കഴിയില്ല.',
+    cancel: 'റദ്ദാക്കുക',
     proceedToDelivery: 'ഡെലിവറിയിലേക്ക് തുടരുക',
     beforeOrderNote:
         'താഴെ ഓർഡർ നൽകുക. ശേഷം ഫാർമസിസ്റ്റ് കുറിപ്പടി വായിച്ച് '

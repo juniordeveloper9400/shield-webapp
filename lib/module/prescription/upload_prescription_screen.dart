@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../data/backend/prescription_repository.dart';
@@ -215,23 +217,46 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
-  void _delete(PrescriptionRecord record) {
-    final index = _book.indexOf(record.id);
+  /// Confirms, then deletes for good: on the backend (a no-op if the record
+  /// never made it there, or already belongs to someone else) and off the
+  /// local book either way, so a failed backend call never leaves a card the
+  /// member just confirmed deleting still sitting on screen. Replaces the
+  /// old "delete straight away, offer Undo" pattern — an Undo that only ever
+  /// restored the local copy was never real once the backend row was really
+  /// gone, so a confirmation asked up front is the honest version of this.
+  Future<void> _delete(PrescriptionRecord record) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(_copy.deleteConfirmTitle),
+        content: Text(_copy.deleteConfirmMessage),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text(_copy.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(foregroundColor: AppColors.danger),
+            child: Text(_copy.delete),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) {
+      return;
+    }
+    final remoteId = record.remoteId;
     _book.remove(record.id);
+    if (remoteId != null) {
+      unawaited(PrescriptionRepository.instance.softDelete(remoteId));
+    }
+    if (!mounted) {
+      return;
+    }
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(_copy.prescriptionRemoved),
-          action: SnackBarAction(
-            label: _copy.undo,
-            // Deleting a card takes the pharmacy's whole reading of it with
-            // it, so the way back is offered rather than a confirmation
-            // asked for.
-            onPressed: () => _book.insert(index, record),
-          ),
-        ),
-      );
+      ..showSnackBar(SnackBar(content: Text(_copy.prescriptionRemoved)));
   }
 
   void _say(String message) {

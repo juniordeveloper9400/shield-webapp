@@ -172,6 +172,22 @@ class PrescriptionRepository {
     }
   }
 
+  /// Soft-deletes a prescription row. A no-op when [id] no longer exists or
+  /// belongs to someone else — same best-effort contract as every write here;
+  /// the record still comes off the member's own local list either way, so a
+  /// failed call here never leaves a card the member just deleted sitting on
+  /// screen.
+  Future<void> softDelete(String id) async {
+    if (!BackendHttp.isConfigured) {
+      return;
+    }
+    try {
+      await BackendHttp.instance.request('DELETE', '/v1/member/prescriptions/$id');
+    } catch (error) {
+      BackendHttp.log('PrescriptionRepository.softDelete failed', error: error);
+    }
+  }
+
   /// The pharmacist-built intake cards for every prescription on the
   /// account: one list call plus one detail call per prescription (the list
   /// response carries no medicine lines) — a member's own prescriptions are

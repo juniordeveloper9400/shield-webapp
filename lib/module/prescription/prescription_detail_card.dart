@@ -148,24 +148,33 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
                 const SizedBox(height: 13),
                 const Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 11),
-                if (record.isAwaitingOrder)
-                  _InfoStrip(
-                    icon: Icons.local_shipping_outlined,
-                    title: copy.deliveryDetails,
-                    detail: copy.beforeOrderNote,
-                  )
-                else if (record.awaitingPharmacist)
-                  _InfoStrip(
-                    icon: Icons.hourglass_top_rounded,
-                    title: copy.orderPlacedTitle,
-                    detail: copy.orderPlacedDetail,
-                  )
-                else
+                // hasIntakeCard wins over both the other states: the counter
+                // can read a script and build its medicine list the moment
+                // it is uploaded, well before the member places a
+                // fulfilment order for it (insertUpload writes the row
+                // straight away) — so a card sitting here still
+                // "isAwaitingOrder" locally can already have real medicines
+                // on it, and those must show rather than being hidden
+                // behind the "pick a delivery address" note until an order
+                // that may be some time away actually gets placed.
+                if (record.hasIntakeCard)
                   _IntakeSection(
                     record: record,
                     copy: copy,
                     expanded: _expanded,
                     onToggle: () => setState(() => _expanded = !_expanded),
+                  )
+                else if (record.isAwaitingOrder)
+                  _InfoStrip(
+                    icon: Icons.local_shipping_outlined,
+                    title: copy.deliveryDetails,
+                    detail: copy.beforeOrderNote,
+                  )
+                else
+                  _InfoStrip(
+                    icon: Icons.hourglass_top_rounded,
+                    title: copy.orderPlacedTitle,
+                    detail: copy.orderPlacedDetail,
                   ),
               ],
             ),
