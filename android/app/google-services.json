@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1086152719549-5glnmi00uddholj28as6jcv54bg6i66c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.zabnix.shield",
+            "certificate_hash": "c61667c95891aba47c11951cd93804ddc1106085"
+          }
+        },
+        {
           "client_id": "1086152719549-vobt93tannvqrehdo2ibrq2lqcreqtos.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
