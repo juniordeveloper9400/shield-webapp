@@ -1405,61 +1405,6 @@ class OrderPayFooter extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: AppColors.pageTint,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.account_balance_wallet_outlined,
-                      size: 18,
-                      color: AppColors.brandBlue,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Pay using',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                        SizedBox(height: 1),
-                        Text(
-                          'UPI',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w800,
-                            color: AppColors.textDark,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: () => _toast(context, 'Choose a payment method'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: AppColors.brandBlue,
-                      textStyle: const TextStyle(
-                        fontSize: 13.5,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    child: const Text('Change'),
-                  ),
-                ],
-              ),
-            ),
             Container(
               width: double.infinity,
               color: AppColors.goldTint,

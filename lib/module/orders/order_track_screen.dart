@@ -213,13 +213,25 @@ class _StatusHeader extends StatelessWidget {
   }
 }
 
-class _TrackCard extends StatelessWidget {
+/// Collapsed by default — opening this screen leads with just the step
+/// graph, where the order stands at a glance. The delivery window, the
+/// "what's happening now" callout and the item/price line are the detail
+/// view, one tap away rather than always taking over the top of the screen.
+class _TrackCard extends StatefulWidget {
   final OrderTrack track;
 
   const _TrackCard({required this.track});
 
   @override
+  State<_TrackCard> createState() => _TrackCardState();
+}
+
+class _TrackCardState extends State<_TrackCard> {
+  bool _expanded = false;
+
+  @override
   Widget build(BuildContext context) {
+    final track = widget.track;
     final steps = track.steps;
     final currentIndex = steps.indexWhere(
       (s) => s.state == TrackState.current,
@@ -240,7 +252,7 @@ class _TrackCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (track.deliveryWindow != null)
+          if (_expanded && track.deliveryWindow != null)
             Container(
               color: AppColors.offerTint,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -268,61 +280,75 @@ class _TrackCard extends StatelessWidget {
                 ),
               ),
             ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-            child: Column(
-              children: [
-                _StepGraph(steps: steps),
-                const SizedBox(height: 16),
-                _Callout(
-                  icon: _statusIcon(track.order.status),
-                  title: track.headline,
-                  sub: track.subhead,
-                  caretX: caretX,
-                ),
-                const SizedBox(height: 14),
-                const Divider(height: 1, color: AppColors.border),
-                const SizedBox(height: 12),
-                Row(
-                  children: [
-                    const Icon(
-                      Icons.shopping_bag_outlined,
-                      size: 18,
-                      color: AppColors.textMuted,
+          InkWell(
+            onTap: () => setState(() => _expanded = !_expanded),
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
+              child: Column(
+                children: [
+                  _StepGraph(steps: steps),
+                  const SizedBox(height: 4),
+                  Icon(
+                    _expanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    size: 22,
+                    color: AppColors.textMuted,
+                  ),
+                  if (_expanded) ...[
+                    const SizedBox(height: 12),
+                    _Callout(
+                      icon: _statusIcon(track.order.status),
+                      title: track.headline,
+                      sub: track.subhead,
+                      caretX: caretX,
                     ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '${track.order.itemCount} '
-                        'item${track.order.itemCount == 1 ? '' : 's'} ordered',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textBody,
+                    const SizedBox(height: 14),
+                    const Divider(height: 1, color: AppColors.border),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.shopping_bag_outlined,
+                          size: 18,
+                          color: AppColors.textMuted,
                         ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        track.order.mrpTotal > 0 || track.order.paidTotal > 0
-                            ? track.order.paidLabel
-                            : 'Price on confirmation',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${track.order.itemCount} '
+                            'item${track.order.itemCount == 1 ? '' : 's'} ordered',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textBody,
+                            ),
+                          ),
                         ),
-                      ),
+                        const SizedBox(width: 8),
+                        Flexible(
+                          child: Text(
+                            track.order.mrpTotal > 0 ||
+                                    track.order.paidTotal > 0
+                                ? track.order.paidLabel
+                                : 'Price on confirmation',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.right,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
