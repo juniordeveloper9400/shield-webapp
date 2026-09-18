@@ -217,13 +217,20 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
-  /// Confirms, then deletes for good: on the backend (a no-op if the record
-  /// never made it there, or already belongs to someone else) and off the
-  /// local book either way, so a failed backend call never leaves a card the
-  /// member just confirmed deleting still sitting on screen. Replaces the
-  /// old "delete straight away, offer Undo" pattern — an Undo that only ever
-  /// restored the local copy was never real once the backend row was really
-  /// gone, so a confirmation asked up front is the honest version of this.
+  /// Confirms, then deletes for good — on the backend first, and only takes
+  /// the card off the local book once that has actually landed.
+  ///
+  /// Deliberately in that order, not the reverse: removing locally first and
+  /// letting the backend call run unawaited behind it raced the very next
+  /// [_refreshFromBackend] (on pull-to-refresh, or the next time this screen
+  /// opens) — that GET could win the race against a DELETE still in flight,
+  /// see the still-there row, and quietly rebuild the card the member had
+  /// just confirmed deleting. Awaiting here closes that window entirely.
+  ///
+  /// [PrescriptionRecord.remoteId] null means this card never made it to the
+  /// backend in the first place (added this session, the upload's own write
+  /// hasn't landed yet) — nothing to delete there, so it comes off the local
+  /// book with no network call at all.
   Future<void> _delete(PrescriptionRecord record) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -247,13 +254,19 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
       return;
     }
     final remoteId = record.remoteId;
-    _book.remove(record.id);
     if (remoteId != null) {
-      unawaited(PrescriptionRepository.instance.softDelete(remoteId));
+      final deleted = await PrescriptionRepository.instance.softDelete(
+        remoteId,
+      );
+      if (!mounted) {
+        return;
+      }
+      if (!deleted) {
+        _say(_copy.deleteFailedMessage);
+        return;
+      }
     }
-    if (!mounted) {
-      return;
-    }
+    _book.remove(record.id);
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(_copy.prescriptionRemoved)));
@@ -378,6 +391,27 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
               onReorder: () => _reorder(record),
             ),
           ),
+        // Always offered here, not just once every card on screen has
+        // already been ordered (the bottom bar's own "Add new prescription"
+        // state) — a second family member's script is just as likely to
+        // come up while the first is still sitting unordered.
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: _addAnother,
+            icon: const Icon(Icons.add_rounded, size: 20),
+            label: Text(_copy.addPrescription),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandBlue,
+              side: const BorderSide(color: AppColors.brandBlue),
+              padding: const EdgeInsets.symmetric(vertical: 13),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
         // Once something is uploaded the next question is where it goes, so
         // the delivery address sits with the prescriptions rather than being
         // asked for only at the very end.

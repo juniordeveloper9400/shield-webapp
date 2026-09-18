@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/module/patients/patient_book.dart';
+import 'package:shield/module/prescription/prescription_form_sheet.dart';
 import 'package:shield/module/prescription/prescription_record.dart';
 import 'package:shield/module/prescription/upload_prescription_screen.dart';
 
@@ -107,5 +108,46 @@ void main() {
       expect(book.length, 0);
       expect(find.text('Prescription removed'), findsOneWidget);
     });
+
+    testWidgets(
+      'a record already on the backend stays put if the delete call fails',
+      (tester) async {
+        final record = book.add(patient: _patient, fileName: 'script.jpg');
+        // Simulates a card synced down from the backend — BackendHttp is
+        // unconfigured under test, so softDelete reports failure for any
+        // non-null remoteId, exactly like a real network failure would.
+        book.attachRemoteId(record.id, '123');
+        await pump(tester);
+
+        await tester.tap(find.text('Delete'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Delete').last);
+        await tester.pumpAndSettle();
+
+        // Still there — the local copy is never dropped ahead of a
+        // confirmed backend delete, so a failure can never look like a
+        // silent success that later reappears on refresh.
+        expect(book.length, 1);
+        expect(find.text('Could not delete this — check your connection and try again.'), findsOneWidget);
+      },
+    );
+  });
+
+  group('adding another prescription', () {
+    testWidgets(
+      'is offered even while a prescription is still unordered',
+      (tester) async {
+        book.add(patient: _patient, fileName: 'script.jpg');
+        await pump(tester);
+
+        // Still unordered, so the bottom bar itself is "Proceed to
+        // delivery" — the inline button is the one this test is after.
+        expect(find.text('Proceed to delivery'), findsOneWidget);
+        await tester.tap(find.text('Add prescription'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(PrescriptionFormSheet), findsOneWidget);
+      },
+    );
   });
 }

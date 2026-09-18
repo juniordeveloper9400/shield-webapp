@@ -148,6 +148,7 @@ class PrescriptionCopy {
   final String delete;
   final String reorder;
   final String prescriptionRemoved;
+  final String deleteFailedMessage;
   final String undo;
   final String sentToCart;
   final String deleteConfirmTitle;
@@ -231,6 +232,7 @@ class PrescriptionCopy {
     required this.delete,
     required this.reorder,
     required this.prescriptionRemoved,
+    required this.deleteFailedMessage,
     required this.undo,
     required this.sentToCart,
     required this.deleteConfirmTitle,
@@ -363,6 +365,8 @@ class PrescriptionCopy {
     delete: 'Delete',
     reorder: 'Reorder',
     prescriptionRemoved: 'Prescription removed',
+    deleteFailedMessage:
+        "Could not delete this — check your connection and try again.",
     undo: 'Undo',
     sentToCart: 'sent to the cart',
     deleteConfirmTitle: 'Delete this prescription?',
@@ -501,6 +505,7 @@ class PrescriptionCopy {
     delete: 'ഇല്ലാതാക്കുക',
     reorder: 'വീണ്ടും ഓർഡർ ചെയ്യുക',
     prescriptionRemoved: 'കുറിപ്പടി നീക്കി',
+    deleteFailedMessage: 'ഇത് ഇല്ലാതാക്കാനായില്ല — കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.',
     undo: 'തിരികെ',
     sentToCart: 'കാർട്ടിലേക്ക് അയച്ചു',
     deleteConfirmTitle: 'ഈ കുറിപ്പടി ഇല്ലാതാക്കണോ?',

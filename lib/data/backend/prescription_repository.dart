@@ -172,19 +172,22 @@ class PrescriptionRepository {
     }
   }
 
-  /// Soft-deletes a prescription row. A no-op when [id] no longer exists or
-  /// belongs to someone else — same best-effort contract as every write here;
-  /// the record still comes off the member's own local list either way, so a
-  /// failed call here never leaves a card the member just deleted sitting on
-  /// screen.
-  Future<void> softDelete(String id) async {
+  /// Soft-deletes a prescription row. Returns whether it actually happened —
+  /// unlike this class's other writes, the caller needs to know: taking the
+  /// card off the local book *before* this call lands (or without checking
+  /// whether it succeeded) leaves a real race with the next refresh, which
+  /// re-fetches the still-there backend row and quietly rebuilds the very
+  /// card the member just deleted.
+  Future<bool> softDelete(String id) async {
     if (!BackendHttp.isConfigured) {
-      return;
+      return false;
     }
     try {
       await BackendHttp.instance.request('DELETE', '/v1/member/prescriptions/$id');
+      return true;
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.softDelete failed', error: error);
+      return false;
     }
   }
 
