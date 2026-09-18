@@ -235,7 +235,7 @@ class PrescriptionFormController extends ChangeNotifier {
         debugPrint('prescription: could not encode a script image — $error');
       }
       if ((image == null || image.isEmpty) &&
-          rawImage.length <= 4 * 1024 * 1024) {
+          rawImage.length <= kPrescriptionMaxBytes) {
         final mime = _mimeForName(picked.file.name);
         image = 'data:$mime;base64,${base64Encode(rawImage)}';
       }
