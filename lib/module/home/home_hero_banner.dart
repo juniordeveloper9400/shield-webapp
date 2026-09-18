@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -12,6 +14,11 @@ import '../../widgets/app_image.dart';
 /// carousel when there is more than one. Falls back to the bundled default
 /// banner when nothing is configured yet, the database is unreachable, or a
 /// slide's image fails to decode — the strip never comes up blank.
+///
+/// More than one slide auto-advances on [_autoScrollInterval], the same as a
+/// member swiping — [_page] (kept in sync with a manual swipe via
+/// `onPageChanged`) is always where the next tick advances from, so an
+/// admin-driven auto-scroll and a member's own swipe never fight each other.
 class HomeHeroBanner extends StatefulWidget {
   const HomeHeroBanner({super.key});
 
@@ -21,19 +28,47 @@ class HomeHeroBanner extends StatefulWidget {
   State<HomeHeroBanner> createState() => _HomeHeroBannerState();
 }
 
+const Duration _autoScrollInterval = Duration(seconds: 4);
+
 class _HomeHeroBannerState extends State<HomeHeroBanner> {
   late Future<List<HomeBannerModel>> _future;
   final PageController _controller = PageController();
   int _page = 0;
+  Timer? _autoScrollTimer;
 
   @override
   void initState() {
     super.initState();
     _future = HomeBannerRepository.instance.listActive();
+    _future.then((banners) {
+      if (mounted) {
+        _startAutoScroll(banners.length);
+      }
+    });
+  }
+
+  /// (Re)starts the auto-scroll loop for a strip of [slideCount] slides — a
+  /// no-op below two, since there is nowhere else to advance to.
+  void _startAutoScroll(int slideCount) {
+    _autoScrollTimer?.cancel();
+    if (slideCount < 2) {
+      return;
+    }
+    _autoScrollTimer = Timer.periodic(_autoScrollInterval, (_) {
+      if (!_controller.hasClients) {
+        return;
+      }
+      _controller.animateToPage(
+        (_page + 1) % slideCount,
+        duration: const Duration(milliseconds: 450),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   @override
   void dispose() {
+    _autoScrollTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
