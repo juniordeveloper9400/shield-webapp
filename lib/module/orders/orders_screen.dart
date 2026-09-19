@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import 'order_bill_screen.dart';
 import 'order_track_screen.dart';
 import 'purchase_service.dart';
 
@@ -151,63 +152,84 @@ class _OrderCard extends StatelessWidget {
           const SizedBox(height: 12),
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 12),
+          Text(
+            _priced ? order.paidLabel : 'Price on confirmation',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: _priced ? 17 : 14,
+              fontWeight: FontWeight.w800,
+              color: _priced ? AppColors.textDark : AppColors.textMuted,
+            ),
+          ),
+          if (order.status.counts && order.saved > 0)
+            Text(
+              'Saved ${order.savedLabel}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.brandGreenDark,
+              ),
+            ),
+          const SizedBox(height: 12),
           Row(
             children: [
-              // The bill, with what the order earned under it rather than
-              // beside it — the reorder button takes most of the row, and a
-              // second figure on the same line runs it off the card.
+              // Enabled once the store has actually created a bill for this
+              // order — order.billStatus comes straight off the orders
+              // list's own join, so it is known without a separate fetch
+              // (see Purchase.billImage's own doc for why the picture
+              // itself is lazy instead).
               Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _priced ? order.paidLabel : 'Price on confirmation',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: _priced ? 17 : 14,
-                        fontWeight: FontWeight.w800,
-                        color: _priced
-                            ? AppColors.textDark
-                            : AppColors.textMuted,
-                      ),
-                    ),
-                    if (order.status.counts && order.saved > 0)
-                      Text(
-                        'Saved ${order.savedLabel}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.brandGreenDark,
+                child: OutlinedButton.icon(
+                  onPressed: order.billStatus == null
+                      ? null
+                      : () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => OrderBillScreen(order: order),
+                          ),
                         ),
-                      ),
-                  ],
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
+                  label: const Text(
+                    'Bill',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandBlue,
+                    disabledForegroundColor: AppColors.textMuted,
+                    side: BorderSide(
+                      color: order.billStatus == null
+                          ? AppColors.border
+                          : AppColors.brandBlue,
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(width: 12),
-              OutlinedButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => OrderTrackScreen(order: order),
+              const SizedBox(width: 10),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => OrderTrackScreen(order: order),
+                    ),
                   ),
-                ),
-                icon: const Icon(Icons.local_shipping_outlined, size: 18),
-                label: const Text(
-                  'Track order',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                ),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: AppColors.brandBlue,
-                  side: const BorderSide(color: AppColors.brandBlue),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                  icon: const Icon(Icons.local_shipping_outlined, size: 18),
+                  label: const Text(
+                    'Track order',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandBlue,
+                    side: const BorderSide(color: AppColors.brandBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
                 ),
               ),

@@ -18,6 +18,7 @@ import '../cart/cart_screen.dart';
 import '../investor/investor_portal_screen.dart';
 import '../investor/investor_service.dart';
 import '../location/address_form_screen.dart';
+import '../orders/bills_screen.dart';
 import '../patients/manage_patients_screen.dart';
 import '../refer/referral_service.dart';
 import '../registration/registration_flow.dart';
@@ -163,6 +164,13 @@ class AccountScreen extends StatelessWidget {
                 icon: Icons.description_outlined,
                 label: 'My Prescriptions',
                 onTap: () {},
+              ),
+              _MenuItem(
+                icon: Icons.receipt_long_outlined,
+                label: 'Bills',
+                onTap: () => Navigator.of(
+                  context,
+                ).push(MaterialPageRoute(builder: (_) => const BillsScreen())),
               ),
             ],
           ),
