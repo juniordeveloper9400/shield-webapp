@@ -318,6 +318,35 @@ class PrescriptionBook extends ChangeNotifier {
 
   int get length => _records.length;
 
+  /// The upload write still in flight for a record, keyed by [PrescriptionRecord.id]
+  /// — [PrescriptionFormController.addTo] registers one here the moment it
+  /// kicks the background save off, rather than only firing-and-forgetting
+  /// it. Checkout is the reason this exists: `_resolvePrescriptionId` in
+  /// `OrderRepository` matches an order against this same upload's row by
+  /// `uuid` (or failing that, by file name) — on a slow connection (web's
+  /// per-call CORS preflight especially) checkout could otherwise run that
+  /// lookup before the row exists at all, lose the race, and file a fresh,
+  /// image-less prescription row instead of linking the real one.
+  final Map<String, Future<void>> _pendingUploads = {};
+
+  /// Registers [future] as the in-flight upload write for record [id].
+  /// Removes itself once it settles, successful or not, so the map never
+  /// grows past however many uploads are genuinely still in flight.
+  void trackPendingUpload(String id, Future<void> future) {
+    _pendingUploads[id] = future;
+    future.whenComplete(() {
+      if (identical(_pendingUploads[id], future)) {
+        _pendingUploads.remove(id);
+      }
+    });
+  }
+
+  /// Waits for record [id]'s upload write to finish, if one is still in
+  /// flight — a no-op once it has (the common case), or if none was ever
+  /// tracked at all (a record restored from a previous session).
+  Future<void> awaitPendingUpload(String id) =>
+      _pendingUploads[id] ?? Future<void>.value();
+
   /// Builds the record, files it, and hands it back with its id.
   PrescriptionRecord add({
     required Patient patient,

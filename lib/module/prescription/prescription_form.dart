@@ -202,7 +202,10 @@ class PrescriptionFormController extends ChangeNotifier {
       recurring: schedule,
       address: address,
     );
-    unawaited(_persist(book, record));
+    // Fired, not awaited — but tracked, so checkout can wait on this exact
+    // write finishing before it risks racing `_resolvePrescriptionId`
+    // against it (see `PrescriptionBook.trackPendingUpload`'s own doc).
+    book.trackPendingUpload(record.id, _persist(book, record));
     return record;
   }
 

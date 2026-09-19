@@ -137,6 +137,18 @@ class _PrescriptionCheckoutScreenState
       // unconfigured or unreachable backend must not stop the order.
       final user = AuthService.instance.currentUser.value;
       if (user != null) {
+        // Make sure each prescription's own upload write has actually
+        // landed on the backend (so `record.remoteId` is set) before
+        // `_submitToBackend` reads it — otherwise a slow connection (web's
+        // per-call overhead especially) can lose the race: `remoteId` is
+        // still null, `_submitToBackend` silently drops that record
+        // (`prescriptionId == null` → `continue`), and the member's script
+        // never reaches the backend as an order at all. A no-op once the
+        // write has already finished, which is the common case.
+        await Future.wait([
+          for (final record in widget.records)
+            PrescriptionBook.instance.awaitPendingUpload(record.id),
+        ]);
         unawaited(_submitToBackend());
       }
       // The records stay in the book; they just move to the "ordered, waiting
