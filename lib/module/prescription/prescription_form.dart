@@ -312,7 +312,7 @@ class PrescriptionFormController extends ChangeNotifier {
       }
       PatientBook.instance.attachRemoteId(patient.id, patientId);
 
-      final id = await PrescriptionRepository.instance.insertUpload(
+      final result = await PrescriptionRepository.instance.insertUpload(
         patientId: int.parse(patientId),
         fileName: record.fileName,
         images: encodedImages,
@@ -322,11 +322,14 @@ class PrescriptionFormController extends ChangeNotifier {
         recurringFrom: record.recurring?.from,
         recurringUntil: record.recurring?.until,
       );
-      if (id != null) {
-        book.attachRemoteId(record.id, id);
+      if (result != null) {
+        book.attachRemoteId(record.id, result.id);
+        final mismatch = result.imagesDropped
+            ? ' | SERVER STORED ${result.imagesStored} OF ${result.imagesSent} SENT IMAGES'
+            : '';
         book.setImageDebugNote(
           record.id,
-          '${debugSteps.join(' | ')} | insertUpload ok, id=$id',
+          '${debugSteps.join(' | ')} | insertUpload ok, id=${result.id}$mismatch',
         );
       } else {
         book.setImageDebugNote(

@@ -43,6 +43,24 @@ class RemotePrescriptionCard {
   bool get hasIntakeCard => medicines.isNotEmpty;
 }
 
+/// What [PrescriptionRepository.insertUpload] actually landed — the created
+/// row's id, and the server's own account of how many images it stored
+/// against how many this call tried to send, so a silent drop between the
+/// two is a fact the caller can see rather than a guess from the id alone.
+class PrescriptionUploadResult {
+  final String id;
+  final int imagesSent;
+  final int imagesStored;
+
+  const PrescriptionUploadResult({
+    required this.id,
+    required this.imagesSent,
+    required this.imagesStored,
+  });
+
+  bool get imagesDropped => imagesStored < imagesSent;
+}
+
 /// One line on a [RemotePrescriptionCard].
 class RemotePrescriptionMedicine {
   final String name;
@@ -129,10 +147,15 @@ class PrescriptionRepository {
   /// member-submitted line at upload time was already "usually none" in the
   /// old flow (the counter fills them in), so nothing is lost in practice.
   ///
-  /// Returns the created prescription's id (as a string, standing in for
-  /// the old row's uuid — an opaque pass-through identifier to every call
-  /// site either way), or null when nothing was written.
-  Future<String?> insertUpload({
+  /// Returns the created prescription's id, and — crucially — how many
+  /// images the *server's own response* says it actually stored, alongside
+  /// how many this call tried to send. The two have been silently coming
+  /// apart in production (every real upload lands with the row saved and
+  /// zero images, while a direct, identically-shaped request against the
+  /// same endpoint stores its image every time) — comparing the id's mere
+  /// presence to success, the way every earlier version of this method did,
+  /// is exactly what let that go unnoticed. Null when nothing was written.
+  Future<PrescriptionUploadResult?> insertUpload({
     required int patientId,
     required String fileName,
     List<String> images = const [],
@@ -161,11 +184,22 @@ class PrescriptionRepository {
         },
       ) as Map<String, dynamic>;
       final id = created['id']?.toString();
+      final storedCount = (created['images'] as List?)?.length ?? 0;
+      if (id == null) {
+        BackendHttp.log(
+          'PrescriptionRepository.insertUpload: no id in response for $fileName',
+        );
+        return null;
+      }
       BackendHttp.log(
         'PrescriptionRepository.insertUpload: saved $fileName '
-        '(${images.length} image(s), $id)',
+        '(sent ${images.length} image(s), server stored $storedCount, id=$id)',
       );
-      return id;
+      return PrescriptionUploadResult(
+        id: id,
+        imagesSent: images.length,
+        imagesStored: storedCount,
+      );
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.insertUpload failed', error: error);
       return null;
