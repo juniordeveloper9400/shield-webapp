@@ -187,6 +187,16 @@ class _CartScreenState extends State<CartScreen> {
                   'try again.',
                 );
               }
+              if (orderId != null) {
+                // Re-list from the backend so this order's real `code` and
+                // `backendId` replace the optimistic local placeholder —
+                // same reasoning as the prescription checkout's own refresh
+                // (see prescription_checkout_screen.dart's `_submitToBackend`
+                // doc): without this, the order sits in "My Orders" under a
+                // client-made-up id with `backendId: null` until some other,
+                // unrelated screen happens to trigger a refresh.
+                await PurchaseService.instance.refresh();
+              }
             }
             _cart.clear();
           },
