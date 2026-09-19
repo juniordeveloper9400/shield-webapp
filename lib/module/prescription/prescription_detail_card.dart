@@ -79,6 +79,21 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _Header(record: record, ready: ready, copy: copy),
+          // TEMPORARY — see PrescriptionRecord.imageDebugNote's own doc.
+          if (record.imageDebugNote != null)
+            Container(
+              width: double.infinity,
+              color: const Color(0xFFFFF3CD),
+              padding: const EdgeInsets.fromLTRB(14, 8, 14, 8),
+              child: Text(
+                record.imageDebugNote!,
+                style: const TextStyle(
+                  fontSize: 10.5,
+                  height: 1.35,
+                  color: Color(0xFF7A5B00),
+                ),
+              ),
+            ),
           Padding(
             padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
             child: Column(

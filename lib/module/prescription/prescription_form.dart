@@ -232,9 +232,11 @@ class PrescriptionFormController extends ChangeNotifier {
     // when even *that* didn't produce anything, which is the only
     // genuinely inexplicable outcome left.
     final encodedImages = <String>[];
+    final debugSteps = <String>['picked=${images.length}'];
     for (final picked in images) {
       final rawImage = picked.preview;
       if (rawImage == null) {
+        debugSteps.add('${picked.file.name}: no preview bytes at all');
         debugPrint(
           'prescription: ${picked.file.name} has no bytes to encode at all '
           '— the picker never delivered a preview for it',
@@ -243,6 +245,7 @@ class PrescriptionFormController extends ChangeNotifier {
       }
       try {
         String? image;
+        var how = 'encoded';
         try {
           image = await prescriptionImageDataUrl(rawImage);
         } catch (error) {
@@ -256,18 +259,30 @@ class PrescriptionFormController extends ChangeNotifier {
         // re-check here; re-checking it a second time with its own copy of
         // the constant is exactly the kind of two-sources-of-truth gap that
         // silently drops a page if they ever come apart.
-        image ??= 'data:${_mimeForName(picked.file.name)};base64,'
-            '${base64Encode(rawImage)}';
+        if (image == null || image.isEmpty) {
+          how = 'fallback';
+          image = 'data:${_mimeForName(picked.file.name)};base64,'
+              '${base64Encode(rawImage)}';
+        }
         if (image.isNotEmpty) {
           encodedImages.add(image);
+          debugSteps.add(
+            '${picked.file.name}: ${rawImage.length}B raw, $how, '
+            '${image.length}B data-uri',
+          );
+        } else {
+          debugSteps.add('${picked.file.name}: $how produced an empty string');
         }
       } catch (error) {
+        debugSteps.add('${picked.file.name}: threw — $error');
         debugPrint(
           'prescription: ${picked.file.name} could not be attached by any '
           'means — $error',
         );
       }
     }
+    debugSteps.add('sending images=${encodedImages.length}');
+    book.setImageDebugNote(record.id, debugSteps.join(' | '));
     try {
       // The backend requires an existing patient id — resolve/create one
       // first (the old direct-Neon upload did this inline as part of the
@@ -286,6 +301,10 @@ class PrescriptionFormController extends ChangeNotifier {
         abhaId: patient.abhaId,
       );
       if (patientId == null) {
+        book.setImageDebugNote(
+          record.id,
+          '${debugSteps.join(' | ')} | patient upsert returned null, upload skipped',
+        );
         return;
       }
       PatientBook.instance.attachRemoteId(patient.id, patientId);
@@ -302,8 +321,21 @@ class PrescriptionFormController extends ChangeNotifier {
       );
       if (id != null) {
         book.attachRemoteId(record.id, id);
+        book.setImageDebugNote(
+          record.id,
+          '${debugSteps.join(' | ')} | insertUpload ok, id=$id',
+        );
+      } else {
+        book.setImageDebugNote(
+          record.id,
+          '${debugSteps.join(' | ')} | insertUpload returned null',
+        );
       }
     } catch (error, stack) {
+      book.setImageDebugNote(
+        record.id,
+        '${debugSteps.join(' | ')} | threw before/during upload — $error',
+      );
       debugPrint('prescription: could not save upload to database — $error');
       debugPrintStack(stackTrace: stack);
     }

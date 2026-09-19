@@ -218,6 +218,15 @@ class PrescriptionRecord {
   /// the order update the same row instead of inserting another.
   String? remoteId;
 
+  /// TEMPORARY — a live diagnostic for the "photo never reached the
+  /// counter" bug: what actually happened to each picked file during
+  /// upload (bytes captured or not, encode succeeded or fell back, how many
+  /// ended up in the request), so the next occurrence is readable straight
+  /// off the card instead of needing device logs nobody has access to. Set
+  /// by [PrescriptionFormController]'s own upload path; remove once that
+  /// bug is closed.
+  String? imageDebugNote;
+
   PrescriptionRecord({
     required this.id,
     required this.patient,
@@ -232,6 +241,7 @@ class PrescriptionRecord {
     this.status = 'AWAITING_REVIEW',
     this.remoteId,
     this.address,
+    this.imageDebugNote,
   }) : medicines = medicines ?? <PrescriptionMedicine>[];
 
   /// "RX-0004" — the prescription's number, as it is quoted at the counter
@@ -353,6 +363,16 @@ class PrescriptionBook extends ChangeNotifier {
       return;
     }
     _records[index].remoteId = remoteId;
+    notifyListeners();
+  }
+
+  /// TEMPORARY — see [PrescriptionRecord.imageDebugNote]'s own doc.
+  void setImageDebugNote(String id, String note) {
+    final index = indexOf(id);
+    if (index == -1) {
+      return;
+    }
+    _records[index].imageDebugNote = note;
     notifyListeners();
   }
 
