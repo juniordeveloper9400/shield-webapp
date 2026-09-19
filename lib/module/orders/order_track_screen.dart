@@ -89,12 +89,6 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      // The pay bar is pinned rather than scrolled to — it is the one action
-      // the screen exists to prompt, and a member should not have to reach the
-      // end of the bill to find it.
-      bottomNavigationBar: track.awaitingPayment
-          ? OrderPayFooter(order: order)
-          : null,
       body: Column(
         children: [
           // Where the order stands is what a member opens this screen to

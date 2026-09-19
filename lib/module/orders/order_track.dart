@@ -139,7 +139,7 @@ class OrderTrack {
     }
     if (awaitingPayment) {
       return _priced
-          ? 'Pay ${order.mrpLabel} to hold your delivery slot.'
+          ? 'Our store will call to confirm and collect ${order.mrpLabel}.'
           : 'You will see the price before anything is charged.';
     }
     return 'Order ${order.id}';
