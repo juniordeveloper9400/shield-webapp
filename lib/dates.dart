@@ -32,14 +32,27 @@ String formatDayMonth(DateTime date) {
   return '$day ${_months[date.month - 1]}';
 }
 
+/// `16 Aug 2026, 05:24 PM` — date with time in 12-hour AM/PM format.
+String formatDateTime12h(DateTime date) {
+  final day = date.day.toString().padLeft(2, '0');
+  final monthStr = _months[date.month - 1];
+  final year = date.year;
+  final hour12 = date.hour == 0 ? 12 : (date.hour > 12 ? date.hour - 12 : date.hour);
+  final hourStr = hour12.toString().padLeft(2, '0');
+  final minuteStr = date.minute.toString().padLeft(2, '0');
+  final ampm = date.hour >= 12 ? 'PM' : 'AM';
+  return '$day $monthStr $year, $hourStr:$minuteStr $ampm';
+}
+
 /// Reads back a date [formatDate] wrote — `16 Aug 2026` — or null if the text
 /// is not in that shape.
-///
-/// The order book stores the placed-on date as the string the list prints,
-/// and the tracker has to do date arithmetic on it to promise a delivery
-/// window. Rather than change what the book stores, it is parsed back here.
 DateTime? parseDate(String text) {
-  final parts = text.trim().split(RegExp(r'\s+'));
+  final trimmed = text.trim();
+  final iso = DateTime.tryParse(trimmed);
+  if (iso != null) return iso;
+
+  final cleanText = trimmed.split(',').first.trim();
+  final parts = cleanText.split(RegExp(r'\s+'));
   if (parts.length != 3) {
     return null;
   }

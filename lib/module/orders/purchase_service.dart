@@ -196,7 +196,7 @@ class Purchase {
     final billAmount = row['billAmount'] == null ? null : i(row['billAmount']);
     return Purchase(
       id: str(row['code']),
-      placedOn: placedOn == null ? str(row['placedOn']) : dates.formatDate(placedOn),
+      placedOn: placedOn == null ? str(row['placedOn']) : dates.formatDateTime12h(placedOn),
       itemCount: i(row['itemCount']),
       mrpTotal: i(row['mrpTotal']),
       paidTotal: i(row['paidTotal']),

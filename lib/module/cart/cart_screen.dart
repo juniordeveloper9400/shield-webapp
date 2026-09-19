@@ -123,7 +123,7 @@ class _CartScreenState extends State<CartScreen> {
             // sitting in the cart, uncounted, otherwise.
             placed = PurchaseService.instance.record(
               id: id,
-              placedOn: formatDate(DateTime.now()),
+              placedOn: formatDateTime12h(DateTime.now()),
               itemCount: _cart.itemCount,
               mrpTotal: _cart.mrpTotal.round(),
               paidTotal: _cart.subtotal.round(),
