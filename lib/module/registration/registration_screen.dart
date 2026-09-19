@@ -241,12 +241,25 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   // ---- Validators ----
 
+  // Stricter than a bare "has an @ and a dot" check: no leading/trailing or
+  // doubled dots in the local part, no bare or trailing-dot domain labels,
+  // and a TLD of at least two letters — catches the malformed-but-@-shaped
+  // input (`a@b`, `a@b.`, `a..b@c.com`, `a@.com`) the previous pattern let
+  // through.
+  static final RegExp _emailPattern = RegExp(
+    r'^[a-zA-Z0-9](?:[a-zA-Z0-9._+-]*[a-zA-Z0-9])?'
+    r'@'
+    r'[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?'
+    r'(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?)*'
+    r'\.[a-zA-Z]{2,}$',
+  );
+
   String? _validateEmail(String? value) {
     final text = (value ?? '').trim();
     if (text.isEmpty) {
       return 'Email is required';
     }
-    if (!RegExp(r'^[\w.+-]+@[\w-]+\.[\w.-]+$').hasMatch(text)) {
+    if (text.contains('..') || !_emailPattern.hasMatch(text)) {
       return 'Enter a valid email address';
     }
     return null;

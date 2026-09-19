@@ -5,6 +5,7 @@ import '../../module/checkout/fulfillment_type.dart';
 import '../../module/location/address_book.dart';
 import 'address_repository.dart';
 import 'backend_http.dart';
+import 'care_repository.dart';
 
 /// One order's `app.bill` row, as [OrderRepository.fetchBill] reads it back —
 /// just the two fields [PurchaseService.ensureBillLoaded] actually needs on
@@ -42,6 +43,44 @@ class OrderPrescription {
     required this.image,
     required this.doctor,
     required this.status,
+  });
+}
+
+/// One package booked in the lab cart, as [OrderRepository.saveLabBookings]
+/// sends it — the same shape root's direct-Neon `LabBookingInput` carries,
+/// so `lab_cart_screen.dart`'s checkout call needs no changes beyond its
+/// import to move between the two apps.
+class LabBookingInput {
+  final String name;
+  final int testCount;
+  final int profileCount;
+  final String rating;
+  final String booked;
+  final String reportIn;
+  final int unitPrice;
+  final int mrp;
+  final int patients;
+  final String forWhom;
+  final String ageRange;
+  final String preparation;
+  final String sample;
+  final String about;
+
+  const LabBookingInput({
+    required this.name,
+    this.testCount = 0,
+    this.profileCount = 0,
+    this.rating = '',
+    this.booked = '',
+    this.reportIn = '',
+    required this.unitPrice,
+    required this.mrp,
+    required this.patients,
+    this.forWhom = '',
+    this.ageRange = '',
+    this.preparation = '',
+    this.sample = '',
+    this.about = '',
   });
 }
 
@@ -255,6 +294,71 @@ class OrderRepository {
     } catch (error) {
       BackendHttp.log('OrderRepository.checkoutStandardOrder failed', error: error);
       return null;
+    }
+  }
+
+  /// Places every booking in the lab cart — one `POST /v1/member/lab-bookings`
+  /// call per package (see `booking.service.ts`'s `bookLabTest`). [phone] /
+  /// [name] are accepted for parity with root's direct-Neon signature
+  /// (`lab_cart_screen.dart`'s checkout call is shared, unchanged, between
+  /// the two apps) but unused — the backend resolves identity from the
+  /// session.
+  ///
+  /// Root's direct-Neon write upserts `app.lab_package` by slug in the same
+  /// transaction, so it never needs to already know a package's id. The
+  /// REST endpoint expects one instead (`labPackageId`), so this resolves
+  /// each booking's real id by matching [LabBookingInput.name] against a
+  /// fresh `CareRepository.fetchLabPackages()` read rather than changing
+  /// what the (shared, unmodified) cart screen passes in.
+  ///
+  /// The backend's booking schema also wants a named `patients` array (a
+  /// patient id, or a plain name) — the on-screen flow only ever collects a
+  /// headcount per package (`LabCartService`/`patient_count_sheet.dart`,
+  /// identical to root), so this synthesizes placeholder names
+  /// ("Patient 1", "Patient 2", …) for that count instead, matching root's
+  /// own booking UX exactly rather than the stricter shape the backend was
+  /// also built to accept.
+  ///
+  /// Best-effort: a booking that fails to resolve or submit is logged and
+  /// skipped rather than failing the rest of the basket.
+  Future<void> saveLabBookings({
+    String? phone,
+    String? name,
+    required List<LabBookingInput> bookings,
+    Address? address,
+  }) async {
+    if (!BackendHttp.isConfigured || bookings.isEmpty) {
+      return;
+    }
+    final addressId =
+        address == null ? null : await AddressRepository.instance.create(address);
+    final packages = await CareRepository.instance.fetchLabPackages() ?? const [];
+    for (final booking in bookings) {
+      final package = packages.where((p) => p.name == booking.name).firstOrNull;
+      if (package == null) {
+        BackendHttp.log(
+          'OrderRepository.saveLabBookings: no backend package matches "${booking.name}" — skipped',
+        );
+        continue;
+      }
+      try {
+        await BackendHttp.instance.request(
+          'POST',
+          '/v1/member/lab-bookings',
+          body: {
+            'labPackageId': int.parse(package.id),
+            'patients': [
+              for (var i = 1; i <= booking.patients; i++) {'name': 'Patient $i'},
+            ],
+            if (addressId != null) 'addressId': addressId,
+          },
+        );
+      } catch (error) {
+        BackendHttp.log(
+          'OrderRepository.saveLabBookings failed for "${booking.name}"',
+          error: error,
+        );
+      }
     }
   }
 
