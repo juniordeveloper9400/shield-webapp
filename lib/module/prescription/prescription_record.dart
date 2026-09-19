@@ -369,7 +369,7 @@ class PrescriptionBook extends ChangeNotifier {
       medicines: medicines,
       address: address,
     );
-    _records.add(record);
+    _records.insert(0, record);
     notifyListeners();
     return record;
   }

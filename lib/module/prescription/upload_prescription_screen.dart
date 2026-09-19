@@ -84,6 +84,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
+  /// Track remote IDs deleted in this session so refresh never re-adds them.
+  final Set<String> _deletedRemoteIds = {};
+
   /// Reads every prescription the backend has on file for this member and
   /// folds it into the in-memory book — so a card that was "waiting on the
   /// pharmacist" fills in and expands, AND a prescription uploaded in an
@@ -103,6 +106,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
     final knownRemoteIds = _book.records.map((r) => r.remoteId).toSet();
     for (final card in cards) {
+      if (card.uuid != null && _deletedRemoteIds.contains(card.uuid)) {
+        continue;
+      }
       if (knownRemoteIds.contains(card.uuid)) {
         _applyCard(card);
         continue;
@@ -255,6 +261,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
       final remoteId = record.remoteId;
       if (remoteId != null) {
+        _deletedRemoteIds.add(remoteId);
         final error = await PrescriptionRepository.instance.softDelete(
           remoteId,
         );
@@ -266,6 +273,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
           // on the backend server — proceed with removing it from the local book.
           final isNotFound = error.contains('404') || error.contains('Not Found');
           if (!isNotFound) {
+            _deletedRemoteIds.remove(remoteId);
             _say('${_copy.deleteFailedMessage} ($error)');
             return;
           }
