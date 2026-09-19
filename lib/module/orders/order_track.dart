@@ -46,23 +46,17 @@ class OrderTrack {
       case OrderStatus.cancelled:
         return 0;
       case OrderStatus.processing:
-        // A prescription order sits with the store until it is read and
-        // priced; a standard order is already priced at checkout, so
-        // [_priced] is true from the moment it is placed and this stage is
-        // never actually shown for one.
+        if (order.kind == OrderKind.standard) return 1;
+        // Preserve prescription review/pricing behavior. Product checkout
+        // totals must never be interpreted as an admin billing action.
         return _priced ? 2 : 1;
     }
   }
 
-  /// One stage sequence for every order, prescription or standard: placed,
-  /// the store getting in touch (only ever lingered on by a prescription
-  /// order, which is read and priced after the fact), billed, delivered.
-  List<String> get _stageTitles => const [
-    'Order placed',
-    'Store will contact',
-    'Billed',
-    'Completed',
-  ];
+  /// Products use admin statuses; prescriptions keep their billing route.
+  List<String> get _stageTitles => order.kind == OrderKind.standard
+      ? const ['Order placed', 'Processing', 'Out for delivery', 'Delivered']
+      : const ['Order placed', 'Store will contact', 'Billed', 'Completed'];
 
   /// The graph, newest stage last.
   ///
@@ -98,6 +92,7 @@ class OrderTrack {
   }
 
   String? _detailFor(int index) {
+    if (order.kind == OrderKind.standard) return null;
     final last = _stageTitles.length - 1;
     // The last node carries the delivery promise (dropped once it has
     // landed); the one before it carries the dispatch-by date.
@@ -112,6 +107,14 @@ class OrderTrack {
 
   /// The line above the graph: what is happening at the current stage.
   String get headline {
+    if (order.kind == OrderKind.standard) {
+      return switch (order.status) {
+        OrderStatus.processing => 'Your order is being processed by the store.',
+        OrderStatus.outForDelivery => 'Your order is out for delivery.',
+        OrderStatus.delivered => 'Delivered. Thanks for shopping with SHIELD.',
+        OrderStatus.cancelled => 'This order was cancelled.',
+      };
+    }
     if (isCancelled) {
       return 'This order was cancelled. Nothing was charged.';
     }
@@ -158,7 +161,9 @@ class OrderTrack {
   /// What the "Delivery by" strip shows, or null when the order has already
   /// arrived or been called off.
   String? get deliveryWindow =>
-      (isDelivered || isCancelled) ? null : _deliveryBy;
+      (order.kind == OrderKind.standard || isDelivered || isCancelled)
+      ? null
+      : _deliveryBy;
 
   /// The dispatch date shown mid-graph on the strip, `by 27 Aug`.
   String get dispatchBy {

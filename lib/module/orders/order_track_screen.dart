@@ -9,10 +9,8 @@ import 'purchase_service.dart';
 
 /// Where an order has got to, drawn as a graph.
 ///
-/// Opened from the **Track order** button in My Orders. Every order — standard
-/// or prescription — walks the same four stages: placed, the store contacting
-/// the member (to confirm/price a prescription; already true of a
-/// pre-priced standard order), billed, delivered. See `OrderTrack`.
+/// Opened from the **Track order** button in My Orders. Product orders follow
+/// the admin order status; prescriptions retain their review/billing stages.
 class OrderTrackScreen extends StatefulWidget {
   final Purchase order;
 
@@ -22,18 +20,53 @@ class OrderTrackScreen extends StatefulWidget {
   State<OrderTrackScreen> createState() => _OrderTrackScreenState();
 }
 
-class _OrderTrackScreenState extends State<OrderTrackScreen> {
+class _OrderTrackScreenState extends State<OrderTrackScreen>
+    with WidgetsBindingObserver {
   /// Starts as [OrderTrackScreen.order] and is swapped for the freshly
   /// reloaded copy once [_loadBill] lands, so a bill sent (or paid) while
   /// this screen is already open — the admin console runs on its own,
   /// independent of whatever this member happens to be looking at — shows
   /// up here rather than only on the next visit from My Orders.
   late Purchase _order = widget.order;
+  Timer? _refreshTimer;
+  bool _refreshing = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    PurchaseService.instance.addListener(_syncOrder);
+    _syncOrder();
     unawaited(_loadBill());
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_loadBill());
+      }
+    });
+  }
+
+  void _syncOrder() {
+    if (!mounted) return;
+    for (final purchase in PurchaseService.instance.purchases) {
+      if (purchase.id == widget.order.id) {
+        setState(() => _order = purchase);
+        return;
+      }
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_loadBill());
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    PurchaseService.instance.removeListener(_syncOrder);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   /// A full reload, not just [PurchaseService.ensureBillLoaded]'s own bill
@@ -43,21 +76,14 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
   /// verification, none of it triggered from this device), and nothing
   /// else would otherwise prompt an already-open Track Order to catch up.
   Future<void> _loadBill() async {
-    await PurchaseService.instance.refresh();
-    if (!mounted) return;
-    for (final purchase in PurchaseService.instance.purchases) {
-      if (purchase.id == _order.id) {
-        setState(() => _order = purchase);
-        break;
-      }
-    }
-    await PurchaseService.instance.ensureBillLoaded(_order);
-    if (!mounted) return;
-    for (final purchase in PurchaseService.instance.purchases) {
-      if (purchase.id == _order.id) {
-        setState(() => _order = purchase);
-        return;
-      }
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      await PurchaseService.instance.refresh();
+      if (!mounted) return;
+      await PurchaseService.instance.ensureBillLoaded(_order);
+    } finally {
+      _refreshing = false;
     }
   }
 
@@ -193,7 +219,10 @@ class _StatusHeader extends StatelessWidget {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              _statusHeadline(status),
+              order.kind == OrderKind.standard &&
+                      status == OrderStatus.delivered
+                  ? 'Order delivered'
+                  : _statusHeadline(status),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -240,9 +269,7 @@ class _TrackCardState extends State<_TrackCard> {
   Widget build(BuildContext context) {
     final track = widget.track;
     final steps = track.steps;
-    final currentIndex = steps.indexWhere(
-      (s) => s.state == TrackState.current,
-    );
+    final currentIndex = steps.indexWhere((s) => s.state == TrackState.current);
     // The caret hangs under the centre of the current node: nodes divide the
     // width evenly, so node i is centred at (i + 0.5) / n across it.
     final caretX = steps.isEmpty || currentIndex < 0
