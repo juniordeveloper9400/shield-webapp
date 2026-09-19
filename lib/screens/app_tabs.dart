@@ -12,11 +12,6 @@ enum AppTab {
     icon: Icons.home_outlined,
     activeIcon: Icons.home_rounded,
   ),
-  lab(
-    label: 'Lab',
-    icon: Icons.biotech_outlined,
-    activeIcon: Icons.biotech_rounded,
-  ),
   appointments(
     label: 'Appointments',
     icon: Icons.calendar_month_outlined,

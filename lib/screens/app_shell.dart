@@ -4,7 +4,6 @@ import '../module/account/account_screen.dart';
 import '../module/appointment/clinics_screen.dart';
 import '../data/backend/patient_repository.dart';
 import '../module/auth/auth_service.dart';
-import '../module/health/health_section.dart';
 import '../module/menu/menu_drawer.dart';
 import '../module/orders/orders_screen.dart';
 import '../module/patients/patient_book.dart';
@@ -27,7 +26,6 @@ class AppShell extends StatefulWidget {
 class _AppShellState extends State<AppShell> {
   // Opens on Home, which now leads the bar.
   int _index = AppTab.home.index;
-  HealthSubTab _healthSubTab = HealthSubTab.labsTests;
 
   @override
   void initState() {
@@ -68,16 +66,9 @@ class _AppShellState extends State<AppShell> {
     }
   }
 
-  bool get _inHealthSection => _index == AppTab.lab.index;
-
-  /// Switches destination, and — when the caller names a sub-tab — lands on a
-  /// specific page inside the health section rather than its default one.
-  void _selectTab(int index, {HealthSubTab? subTab}) {
+  void _selectTab(int index) {
     setState(() {
       _index = index;
-      if (subTab != null) {
-        _healthSubTab = subTab;
-      }
     });
   }
 
@@ -93,39 +84,23 @@ class _AppShellState extends State<AppShell> {
         index: _index,
         children: [
           const HomeScreen(),
-          HealthSection(
-            active: _healthSubTab,
-            onSelectSubTab: (tab) => setState(() => _healthSubTab = tab),
-          ),
           const ClinicsScreen(),
           const OrdersScreen(),
           const AccountScreen(),
         ],
       ),
-      // The health section takes over the bottom bar with its own
-      // sub-navigation.
-      bottomNavigationBar: _inHealthSection
-          ? HealthBottomBar(
-              active: _healthSubTab,
-              onSelectSubTab: (tab) => setState(() => _healthSubTab = tab),
-              onExitToHome: () => setState(() {
-                _index = AppTab.home.index;
-                // Reset so re-entering the section starts at its landing page.
-                _healthSubTab = HealthSubTab.labsTests;
-              }),
-            )
-          : Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Owns its own visibility through RegistrationService, so
-                // dismissing it here and anywhere else is the one decision.
-                const RegisterBar(),
-                ShieldBottomNav(
-                  currentIndex: _index,
-                  onTap: (index) => setState(() => _index = index),
-                ),
-              ],
-            ),
+      bottomNavigationBar: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Owns its own visibility through RegistrationService, so
+          // dismissing it here and anywhere else is the one decision.
+          const RegisterBar(),
+          ShieldBottomNav(
+            currentIndex: _index,
+            onTap: (index) => setState(() => _index = index),
+          ),
+        ],
+      ),
     );
   }
 }

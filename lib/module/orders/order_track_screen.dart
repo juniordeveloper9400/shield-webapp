@@ -136,8 +136,6 @@ class _OrderTrackScreenState extends State<OrderTrackScreen> {
                 ],
                 const SizedBox(height: 14),
                 const NeedHelpCard(),
-                const SizedBox(height: 14),
-                const LabPackagePromoCard(),
                 if (order.hasBill) ...[
                   const SizedBox(height: 14),
                   StoreInvoiceCard(order: order),

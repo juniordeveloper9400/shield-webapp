@@ -10,10 +10,7 @@ import '../auth/auth_service.dart';
 import '../cart/cart_screen.dart';
 import '../cart/cart_service.dart';
 import '../categories/categories_screen.dart';
-import '../health/health_section.dart';
 import '../investment/investment_plan_screen.dart';
-import '../labtest/lab_cart_screen.dart';
-import '../labtest/lab_cart_service.dart';
 import '../orders/purchase_service.dart';
 import '../rewards/rewards_service.dart';
 import '../refer/refer_earn_screen.dart';
@@ -27,9 +24,8 @@ import '../wallet/wallet_service.dart';
 /// tinted account strip, an at-a-glance dashboard, the browse links, and a
 /// shaded account group pinned to the end of the list.
 class MenuDrawer extends StatelessWidget {
-  /// Switches the shell to one of the bottom-navigation destinations, and —
-  /// for the health destination — to a named page inside it.
-  final void Function(int index, {HealthSubTab? subTab}) onSelectTab;
+  /// Switches the shell to one of the bottom-navigation destinations.
+  final ValueChanged<int> onSelectTab;
 
   const MenuDrawer({super.key, required this.onSelectTab});
 
@@ -48,9 +44,9 @@ class MenuDrawer extends StatelessWidget {
     'Health Library',
   ];
 
-  void _go(BuildContext context, int tab, {HealthSubTab? subTab}) {
+  void _go(BuildContext context, int tab) {
     Navigator.of(context).pop();
-    onSelectTab(tab, subTab: subTab);
+    onSelectTab(tab);
   }
 
   void _push(BuildContext context, Widget screen) {
@@ -86,8 +82,6 @@ class MenuDrawer extends StatelessWidget {
                   _DashboardPanel(
                     onOpenWallet: () => _push(context, const WalletScreen()),
                     onOpenCart: () => _push(context, const CartScreen()),
-                    onOpenLabCart: () =>
-                        _push(context, const LabCartScreen()),
                     onOpenOrders: () => _go(context, AppTab.orders.index),
                     onOpenRewards: () => _push(context, const RewardsScreen()),
                     // A converted agent's own portal has its earnings; reward
@@ -123,27 +117,6 @@ class MenuDrawer extends StatelessWidget {
                           label: 'Appointments',
                           transparent: true,
                           onTap: () => _go(context, AppTab.appointments.index),
-                        ),
-                        // Lab tests and the dietitian share the Lab tab,
-                        // so the drawer names the inner page rather than
-                        // leaving it behind a tab labelled something else.
-                        _MenuRow(
-                          label: 'Lab tests',
-                          transparent: true,
-                          onTap: () => _go(
-                            context,
-                            AppTab.lab.index,
-                            subTab: HealthSubTab.labsTests,
-                          ),
-                        ),
-                        _MenuRow(
-                          label: 'Dietitian',
-                          transparent: true,
-                          onTap: () => _go(
-                            context,
-                            AppTab.lab.index,
-                            subTab: HealthSubTab.dietitian,
-                          ),
                         ),
                         // Only for a signed-in agent — sits with Refer & earn
                         // because it is that card's counterpart.
@@ -435,7 +408,6 @@ class _InvestmentPlanRow extends StatelessWidget {
 class _DashboardPanel extends StatelessWidget {
   final VoidCallback onOpenWallet;
   final VoidCallback onOpenCart;
-  final VoidCallback onOpenLabCart;
   final VoidCallback onOpenOrders;
   final VoidCallback onOpenRewards;
 
@@ -445,7 +417,6 @@ class _DashboardPanel extends StatelessWidget {
   const _DashboardPanel({
     required this.onOpenWallet,
     required this.onOpenCart,
-    required this.onOpenLabCart,
     required this.onOpenOrders,
     required this.onOpenRewards,
     required this.showRewards,
@@ -509,16 +480,6 @@ class _DashboardPanel extends StatelessWidget {
                       value: '${CartService.instance.itemCount}',
                       accent: AppColors.brandBlue,
                       onTap: onOpenCart,
-                    ),
-                  ),
-                  SizedBox(
-                    width: tileWidth,
-                    child: _StatTile(
-                      icon: Icons.biotech_outlined,
-                      label: 'Lab cart',
-                      value: '${LabCartService.instance.bookingCount}',
-                      accent: AppColors.brandGreenDeep,
-                      onTap: onOpenLabCart,
                     ),
                   ),
                   if (showRewards)
