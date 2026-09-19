@@ -253,30 +253,32 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     if (confirmed != true || !mounted) {
       return;
     }
-    final remoteId = record.remoteId;
-    if (remoteId != null) {
-      final error = await PrescriptionRepository.instance.softDelete(
-        remoteId,
-      );
-      if (!mounted) {
-        return;
+      final remoteId = record.remoteId;
+      if (remoteId != null) {
+        final error = await PrescriptionRepository.instance.softDelete(
+          remoteId,
+        );
+        if (!mounted) {
+          return;
+        }
+        if (error != null) {
+          // If 404 (Not Found), the prescription is already deleted or no longer exists
+          // on the backend server — proceed with removing it from the local book.
+          final isNotFound = error.contains('404') || error.contains('Not Found');
+          if (!isNotFound) {
+            _say('${_copy.deleteFailedMessage} ($error)');
+            return;
+          }
+        }
       }
-      if (error != null) {
-        // The detail is temporarily in the message itself (not just the
-        // dev log) while this exact failure is being tracked down live —
-        // see softDelete's own doc.
-        _say('${_copy.deleteFailedMessage} ($error)');
-        return;
-      }
+      _book.remove(record.id);
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(_copy.prescriptionRemoved)));
     }
-    _book.remove(record.id);
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(SnackBar(content: Text(_copy.prescriptionRemoved)));
-  }
 
-  void _say(String message) {
-    ScaffoldMessenger.of(context)
+    void _say(String message) {
+      ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
   }
