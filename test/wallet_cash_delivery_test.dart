@@ -113,7 +113,7 @@ void main() {
     });
   });
 
-  group('OrderBill.canPayNow / paymentMode', () {
+  group('OrderBill.paymentMode', () {
     Purchase prescriptionOrder({
       required int billAmount,
       required OrderPaymentStatus billStatus,
@@ -130,16 +130,6 @@ void main() {
       billAmount: billAmount,
       billStatus: billStatus,
     );
-
-    test('a priced, unpaid bill can be paid now', () {
-      final order = prescriptionOrder(billAmount: 450, billStatus: OrderPaymentStatus.pending);
-      expect(OrderBill(order).canPayNow, isTrue);
-    });
-
-    test('an already-paid bill cannot be paid again', () {
-      final order = prescriptionOrder(billAmount: 450, billStatus: OrderPaymentStatus.paid);
-      expect(OrderBill(order).canPayNow, isFalse);
-    });
 
     test('paymentMode reads "Paid" once settled, otherwise the fulfillment-driven note', () {
       final paid = prescriptionOrder(

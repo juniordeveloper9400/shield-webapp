@@ -160,11 +160,13 @@ class Purchase {
   /// getter on its own (direct-Neon) `Purchase` does.
   bool get hasBill => billImage != null;
 
-  /// A prescription order still waiting on money: priced or not, nothing has
-  /// been paid and it has not been delivered or called off.
+  /// An order still waiting on money: priced or not, standard or
+  /// prescription, the backend has not marked it paid, and it has not been
+  /// delivered or called off. Every order settles the same way now — a call
+  /// from the store and an OTP read back on delivery, never an in-app "Pay
+  /// now" — so the tracker's callout reads the same for both kinds.
   bool get awaitingPayment =>
-      kind == OrderKind.prescription &&
-      paidTotal == 0 &&
+      paymentStatus != OrderPaymentStatus.paid &&
       status != OrderStatus.delivered &&
       status != OrderStatus.cancelled;
 
