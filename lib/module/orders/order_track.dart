@@ -36,27 +36,20 @@ class OrderTrack {
 
   /// The stage the order sits on, as an index into [_stageTitles].
   int get _reachedIndex {
-    final titles = _stageTitles;
     switch (order.status) {
       case OrderStatus.delivered:
-        return titles.length - 1;
+        return 3;
       case OrderStatus.outForDelivery:
-        // Billed and on its way — second from the end.
-        return titles.length - 2;
+        return 2;
+      case OrderStatus.processing:
+        return 1;
       case OrderStatus.cancelled:
         return 0;
-      case OrderStatus.processing:
-        if (order.kind == OrderKind.standard) return 1;
-        // Preserve prescription review/pricing behavior. Product checkout
-        // totals must never be interpreted as an admin billing action.
-        return _priced ? 2 : 1;
     }
   }
 
-  /// Products use admin statuses; prescriptions keep their billing route.
-  List<String> get _stageTitles => order.kind == OrderKind.standard
-      ? const ['Order placed', 'Processing', 'Out for delivery', 'Delivered']
-      : const ['Order placed', 'Store will contact', 'Billed', 'Completed'];
+  List<String> get _stageTitles =>
+      const ['Order placed', 'Processing', 'Out for delivery', 'Delivered'];
 
   /// The graph, newest stage last.
   ///
@@ -92,14 +85,10 @@ class OrderTrack {
   }
 
   String? _detailFor(int index) {
-    if (order.kind == OrderKind.standard) return null;
-    final last = _stageTitles.length - 1;
-    // The last node carries the delivery promise (dropped once it has
-    // landed); the one before it carries the dispatch-by date.
-    if (index == last) {
+    if (index == 3) {
       return isDelivered ? null : _deliveryBy;
     }
-    if (index == last - 1) {
+    if (index == 2) {
       return dispatchBy;
     }
     return null;
@@ -107,28 +96,17 @@ class OrderTrack {
 
   /// The line above the graph: what is happening at the current stage.
   String get headline {
-    if (order.kind == OrderKind.standard) {
-      return switch (order.status) {
-        OrderStatus.processing => 'Your order is being processed by the store.',
-        OrderStatus.outForDelivery => 'Your order is out for delivery.',
-        OrderStatus.delivered => 'Delivered. Thanks for shopping with SHIELD.',
-        OrderStatus.cancelled => 'This order was cancelled.',
-      };
-    }
     if (isCancelled) {
-      return 'This order was cancelled. Nothing was charged.';
+      return 'This order was cancelled.';
     }
     if (isDelivered) {
-      return 'Completed. Thanks for shopping with SHIELD.';
+      return 'Delivered. Thanks for shopping with SHIELD.';
     }
     switch (order.status) {
       case OrderStatus.outForDelivery:
-        return 'Out for delivery — it reaches you today.';
+        return 'Your order is out for delivery.';
       case OrderStatus.processing:
-        if (!_priced) {
-          return 'Your store will contact you to confirm and price this order.';
-        }
-        return 'Billed and confirmed. Your order is being packed.';
+        return 'Your order is being processed by the store.';
       case OrderStatus.delivered:
       case OrderStatus.cancelled:
         return '';

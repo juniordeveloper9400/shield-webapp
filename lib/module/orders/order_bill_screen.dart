@@ -5,6 +5,7 @@ import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../../widgets/full_screen_image_view.dart';
+import 'order_detail_sections.dart';
 import 'purchase_service.dart';
 
 /// The bill for one order, on its own screen — reachable from the "Bill"
@@ -187,6 +188,8 @@ class _OrderBillScreenState extends State<OrderBillScreen> {
                   ],
                 ),
               ),
+              const SizedBox(height: 14),
+              BillDetailsCard(order: order),
             ],
           );
         },

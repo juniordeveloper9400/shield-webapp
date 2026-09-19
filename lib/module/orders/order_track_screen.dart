@@ -161,7 +161,7 @@ class _OrderTrackScreenState extends State<OrderTrackScreen>
                   StoreInvoiceCard(order: order),
                 ],
                 const SizedBox(height: 14),
-                BillDetailsCard(order: order),
+                // BillDetailsCard removed per requirement
                 const SizedBox(height: 14),
                 const SocialMediaCard(),
               ],
@@ -176,7 +176,7 @@ class _OrderTrackScreenState extends State<OrderTrackScreen>
 String _statusHeadline(OrderStatus status) {
   switch (status) {
     case OrderStatus.delivered:
-      return 'Order completed';
+      return 'Order delivered';
     case OrderStatus.outForDelivery:
       return 'Out for delivery';
     case OrderStatus.processing:
