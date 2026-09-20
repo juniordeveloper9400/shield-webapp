@@ -17,9 +17,9 @@ enum _Step { details, otp }
 /// Sign in (returning member — number only) or create account (new member —
 /// name + number). Both finish with the same one-time code step.
 enum _Mode {
-  signIn('Sign in', 'Sign in to SHIELD',
+  signIn('Sign in', 'Sign in to Sahakar 360',
       'Enter your registered mobile number and we will send a one-time code.'),
-  signUp('Create account', 'Create your SHIELD account',
+  signUp('Create account', 'Create your Sahakar 360 account',
       'Tell us your name and mobile number — we verify the number with a '
           'one-time code.');
 
@@ -698,7 +698,7 @@ class _ModeSwitch extends StatelessWidget {
   }
 }
 
-/// The "New to SHIELD? Create an account" / "Already have an account? Sign in"
+/// The "New to Sahakar 360? Create an account" / "Already have an account? Sign in"
 /// line under the button.
 class _ModeSwitchLink extends StatelessWidget {
   final _Mode mode;
@@ -714,7 +714,7 @@ class _ModeSwitchLink extends StatelessWidget {
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
         Text(
-          toSignUp ? 'New to SHIELD?' : 'Already have an account?',
+          toSignUp ? 'New to Sahakar 360?' : 'Already have an account?',
           style: const TextStyle(fontSize: 13.5, color: AppColors.textBody),
         ),
         TextButton(

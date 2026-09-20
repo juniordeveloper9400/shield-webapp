@@ -144,7 +144,7 @@ class _Header extends StatelessWidget {
                 child: Padding(
                   padding: const EdgeInsets.only(top: 4),
                   child: Text(
-                    'SHIELD ${package.name} Package',
+                    'Sahakar 360 ${package.name} Package',
                     style: const TextStyle(
                       fontSize: 21,
                       height: 1.25,

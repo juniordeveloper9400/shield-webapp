@@ -1,6 +1,6 @@
 # backend
 
-Backend concerns for the SHIELD app — the Neon Postgres database and the tools
+Backend concerns for the Sahakar 360 app — the Neon Postgres database and the tools
 that talk to it. (A separate admin website will live in its own folder later.)
 
 ## Database

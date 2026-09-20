@@ -2,11 +2,13 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/backend/backend_http.dart';
 import '../../data/backend/prescription_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
+import '../orders/purchase_service.dart';
 import '../patients/patient_book.dart';
 import '../registration/registration_gate.dart';
 import 'prescription_checkout_screen.dart';
@@ -83,15 +85,44 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
   List<PrescriptionRecord> get _unordered =>
       _book.records.where((record) => record.isAwaitingOrder).toList();
 
+  /// Re-reads the order book while the screen is open, so each card's order
+  /// status (Placed → Store contact → Billed → Complete) moves without a
+  /// pull-to-refresh — the same 15-second rhythm as Track order. One call for
+  /// the whole book, not one per prescription; the link from a prescription to
+  /// its order is only looked up on open, on pull-to-refresh and after an
+  /// order is placed, plus a retry while an ordered prescription still has no
+  /// link. Never started without a backend, so tests see no timer.
+  Timer? _orderTimer;
+
   @override
   void initState() {
     super.initState();
     _book.addListener(_onBookChanged);
     _refreshFromBackend();
+    // The cards read their order's stage from the loaded order book.
+    PurchaseService.instance.ensureLoaded();
+    if (BackendHttp.isConfigured) {
+      _orderTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed &&
+            ModalRoute.of(context)?.isCurrent == true) {
+          unawaited(PurchaseService.instance.refresh());
+          // An order is submitted in the background during checkout, so a
+          // prescription just ordered may not have its link yet — look for
+          // it until it does.
+          if (_book.records.any(
+            (r) => r.ordered && r.order == null && r.remoteId != null,
+          )) {
+            unawaited(_refreshFromBackend());
+          }
+        }
+      });
+    }
   }
 
   @override
   void dispose() {
+    _orderTimer?.cancel();
     _book.removeListener(_onBookChanged);
     _form.dispose();
     super.dispose();
@@ -157,6 +188,13 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     }
   }
 
+  /// Pull-to-refresh: the prescriptions (and the order each is linked to) and
+  /// the order book that says where those orders have got to.
+  Future<void> _pullToRefresh() => Future.wait([
+    _refreshFromBackend(),
+    PurchaseService.instance.refresh(),
+  ]);
+
   /// Folds one backend card's medicines/status/ordered-ness into the local
   /// record it matches — by [recordId] when just created, otherwise by
   /// looking its own [RemotePrescriptionCard.uuid] back up in the book.
@@ -166,6 +204,8 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     _book.applyIntakeCard(
       id,
       doctor: card.doctor,
+      // The order this script was placed into, for the card's order status.
+      order: card.order,
       // READ only means the pharmacist has sent the intake card back — the
       // member has not placed the fulfilment order yet, so it must not be
       // conflated with ORDERED here (that used to make a merely-read
@@ -222,6 +262,9 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
     if (mounted) {
       setState(() {});
+      // The order just placed is on the backend now — read its link so each
+      // card starts showing its order status straight away.
+      unawaited(_refreshFromBackend());
     }
   }
 
@@ -239,6 +282,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     );
     if (mounted) {
       setState(() {});
+      unawaited(_refreshFromBackend());
     }
   }
 
@@ -384,7 +428,7 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
     final records = _book.records;
 
     return RefreshIndicator(
-      onRefresh: _refreshFromBackend,
+      onRefresh: _pullToRefresh,
       child: ListView(
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
       children: [

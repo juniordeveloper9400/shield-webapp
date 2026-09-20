@@ -74,7 +74,7 @@ class CategoryCatalogue {
   /// [CategoryCatalog] has loaded them, otherwise [_seed].
   static List<CategoryGroup> get groups => CategoryCatalog.instance.groups;
 
-  /// The bundled fallback: the categories SHIELD shipped with. Shown until
+  /// The bundled fallback: the categories Sahakar 360 shipped with. Shown until
   /// (and if) the backend copy loads, and the only list `flutter test` ever
   /// sees (`BackendHttp.isConfigured` is false under test).
   static const List<CategoryGroup> _seed = [

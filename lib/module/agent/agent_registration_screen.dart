@@ -653,7 +653,7 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     // form (see backend/api's MemberAgentController.submitRequest, which
     // reads name/phone off the caller's own session, and AgentService
     // .approveRequest, which re-checks the same thing on the way out).
-    // Both refuse a request from a member whose own SHIELD registration
+    // Both refuse a request from a member whose own Sahakar 360 registration
     // isn't complete, so there is no point opening this multi-step KYC +
     // OTP flow at all until that's true — better to say so up front than
     // let someone fill the whole thing in for a submit that can only fail.

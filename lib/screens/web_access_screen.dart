@@ -56,8 +56,8 @@ class WebAccessScreen extends StatelessWidget {
                   const SizedBox(height: 20),
                   Text(
                     name.isEmpty
-                        ? "You're now a SHIELD $roleWord"
-                        : "$name, you're now a SHIELD $roleWord",
+                        ? "You're now a Sahakar 360 $roleWord"
+                        : "$name, you're now a Sahakar 360 $roleWord",
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontSize: 20,
@@ -67,7 +67,7 @@ class WebAccessScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    'The $roleWord portal runs in the SHIELD web console. '
+                    'The $roleWord portal runs in the Sahakar 360 web console. '
                     'Open it in a browser to manage everything — this app is '
                     'for customers.',
                     textAlign: TextAlign.center,

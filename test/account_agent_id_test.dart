@@ -46,7 +46,7 @@ void main() {
 
       expect(find.textContaining('Member ID:'), findsOneWidget);
       expect(find.textContaining('Agent ID:'), findsNothing);
-      expect(find.text('Become a SHIELD Agent'), findsOneWidget);
+      expect(find.text('Become a Sahakar 360 Agent'), findsOneWidget);
     });
 
     testWidgets('shows the Agent ID instead of the Member ID for an agent', (
@@ -72,7 +72,7 @@ void main() {
       expect(find.textContaining('Member ID'), findsNothing);
       // The Agent Portal row flips in the same rebuild, so the two agree.
       expect(find.text('Agent Portal'), findsOneWidget);
-      expect(find.text('Become a SHIELD Agent'), findsNothing);
+      expect(find.text('Become a Sahakar 360 Agent'), findsNothing);
     });
 
     testWidgets('a recruit still pending approval keeps the Member ID', (

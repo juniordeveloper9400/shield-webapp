@@ -121,7 +121,7 @@ class _PrescriptionCheckoutScreenState
       final id = 'SHD-${100500 + PurchaseService.instance.purchases.length}';
       final purchase = PurchaseService.instance.record(
         id: id,
-        placedOn: formatDate(DateTime.now()),
+        placedOn: formatDateTime12h(DateTime.now()),
         // One line per prescription — the medicines are not known yet, the
         // pharmacist builds that list after the call.
         itemCount: widget.records.length,

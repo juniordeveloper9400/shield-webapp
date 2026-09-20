@@ -166,7 +166,7 @@ class PrivilegeCardFace extends StatelessWidget {
                 children: [
                   Text('HOLDER', style: _caption()),
                   Text(
-                    holder.isEmpty ? 'SHIELD MEMBER' : holder.toUpperCase(),
+                    holder.isEmpty ? 'SAHAKAR 360 MEMBER' : holder.toUpperCase(),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: onCard(11, FontWeight.w600),
@@ -239,7 +239,7 @@ class PrivilegeCardFace extends StatelessWidget {
           style: onCard(12.5, FontWeight.w800),
         ),
         Text(
-          'SHIELD',
+          'SAHAKAR 360',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: onCard(7.5, FontWeight.w700).copyWith(letterSpacing: 0.7),

@@ -53,6 +53,32 @@ enum OrderStage {
   final Color foreground;
 
   const OrderStage(this.label, this.background, this.foreground);
+
+  /// The furthest stage an order has reached, from the three things the
+  /// store's actions leave behind: its status, whether a bill row exists, and
+  /// whether staff have contacted the member.
+  ///
+  /// The one rule, shared by [Purchase.stage] on the Track order screen and by
+  /// [LinkedOrder.stage] on a prescription's card, so the two can never say
+  /// different things about the same order. Cancelled and delivered come
+  /// straight from the status. Below that, a bill means [billed], and a
+  /// contact stamp — or an order already out for delivery, which the store
+  /// obviously handled — means [storeContact]. Reading the *furthest* signal
+  /// means an order billed without anyone pressing Call still shows as billed,
+  /// never stuck.
+  static OrderStage derive({
+    required OrderStatus status,
+    required bool billed,
+    required bool contacted,
+  }) {
+    if (status == OrderStatus.cancelled) return OrderStage.cancelled;
+    if (status == OrderStatus.delivered) return OrderStage.complete;
+    if (billed) return OrderStage.billed;
+    if (contacted || status == OrderStatus.outForDelivery) {
+      return OrderStage.storeContact;
+    }
+    return OrderStage.placed;
+  }
 }
 
 /// Where an order came from — which decides the stages it moves through.
@@ -174,15 +200,11 @@ class Purchase {
   /// already out for delivery, which the store obviously handled — means
   /// [OrderStage.storeContact]. Reading the *furthest* signal means an order
   /// billed without anyone pressing Call still shows as billed, never stuck.
-  OrderStage get stage {
-    if (status == OrderStatus.cancelled) return OrderStage.cancelled;
-    if (status == OrderStatus.delivered) return OrderStage.complete;
-    if (billStatus != null) return OrderStage.billed;
-    if (storeContactedAt != null || status == OrderStatus.outForDelivery) {
-      return OrderStage.storeContact;
-    }
-    return OrderStage.placed;
-  }
+  OrderStage get stage => OrderStage.derive(
+    status: status,
+    billed: billStatus != null,
+    contacted: storeContactedAt != null,
+  );
 
   /// `₹450` — what the store billed, or null before a bill has a price.
   String? get billLabel =>
@@ -221,7 +243,7 @@ class Purchase {
   );
 
   /// Whether the store has actually sent an invoice picture for this order —
-  /// gates [StoreInvoiceCard], the same way the root SHIELD app's identical
+  /// gates [StoreInvoiceCard], the same way the root Sahakar 360 app's identical
   /// getter on its own (direct-Neon) `Purchase` does.
   bool get hasBill => billImage != null;
 
@@ -257,11 +279,21 @@ class Purchase {
     int i(Object? v) => v is int ? v : (double.tryParse(str(v))?.round() ?? 0);
     int? iOrNull(Object? v) => v == null ? null : i(v);
 
-    final placedOn = DateTime.tryParse(str(row['placedOn']));
+    // When the order was placed: `placedAt`, the real timestamp, shown in this
+    // device's own time zone. Not `placedOn` — that is the date-only column,
+    // which parses to midnight and printed every order as "12:00 AM". A backend
+    // that predates `placedAt` falls back to the date, printed as a date alone
+    // rather than with a time that was never known.
+    final placedAt = DateTime.tryParse(str(row['placedAt']))?.toLocal();
+    final placedOnDate = DateTime.tryParse(str(row['placedOn']));
     final billAmount = row['billAmount'] == null ? null : i(row['billAmount']);
     return Purchase(
       id: str(row['code']),
-      placedOn: placedOn == null ? str(row['placedOn']) : dates.formatDateTime12h(placedOn),
+      placedOn: placedAt != null
+          ? dates.formatDateTime12h(placedAt)
+          : placedOnDate != null
+              ? dates.formatDate(placedOnDate)
+              : str(row['placedOn']),
       itemCount: i(row['itemCount']),
       mrpTotal: i(row['mrpTotal']),
       paidTotal: i(row['paidTotal']),
@@ -304,6 +336,73 @@ OrderStatus _statusFromDb(String token) {
 OrderKind _kindFromDb(String token) =>
     token.toUpperCase() == 'PRESCRIPTION' ? OrderKind.prescription : OrderKind.standard;
 
+/// The order a prescription was placed into, as `GET /v1/member/prescriptions`
+/// reports it (`prescription.service.ts latestOrders`): just enough to work
+/// out where that order has got to — its status, when staff first contacted
+/// the member, and whether a bill exists.
+///
+/// What a prescription's card shows as its order-tracking status. The app's
+/// own order list ([PurchaseService.purchaseFor]) is preferred when it has the
+/// order, since it is refreshed more often; this is what the card falls back
+/// on before that list has loaded.
+@immutable
+class LinkedOrder {
+  final int id;
+
+  /// The order's own code (`RX-MU8BWHGBD56A`) — not the prescription's
+  /// `RX-0003`.
+  final String code;
+  final OrderStatus status;
+  final DateTime? storeContactedAt;
+  final bool billed;
+
+  const LinkedOrder({
+    required this.id,
+    required this.code,
+    required this.status,
+    this.storeContactedAt,
+    this.billed = false,
+  });
+
+  /// Reads the `order` block of a prescription row; null when it is absent or
+  /// null (a prescription that was never ordered) or has no id/code.
+  static LinkedOrder? fromJson(Object? raw) {
+    if (raw is! Map<String, dynamic>) return null;
+    final id = raw['id'] is int
+        ? raw['id'] as int
+        : int.tryParse((raw['id'] ?? '').toString());
+    final code = (raw['code'] ?? '').toString().trim();
+    if (id == null || code.isEmpty) return null;
+    return LinkedOrder(
+      id: id,
+      code: code,
+      status: _statusFromDb((raw['status'] ?? '').toString()),
+      storeContactedAt: DateTime.tryParse(
+        (raw['storeContactedAt'] ?? '').toString(),
+      ),
+      billed: raw['billed'] == true,
+    );
+  }
+
+  OrderStage get stage => OrderStage.derive(
+    status: status,
+    billed: billed,
+    contacted: storeContactedAt != null,
+  );
+
+  @override
+  bool operator ==(Object other) =>
+      other is LinkedOrder &&
+      other.id == id &&
+      other.code == code &&
+      other.status == status &&
+      other.storeContactedAt == storeContactedAt &&
+      other.billed == billed;
+
+  @override
+  int get hashCode => Object.hash(id, code, status, storeContactedAt, billed);
+}
+
 /// The order book, and the earnings that come out of it.
 ///
 /// One place, because the orders list and the earnings card were otherwise
@@ -324,6 +423,18 @@ class PurchaseService extends ChangeNotifier {
   final List<Purchase> _purchases = [];
 
   List<Purchase> get purchases => List.unmodifiable(_purchases);
+
+  /// The loaded order [link] points at, matched by backend id or order code,
+  /// or null when the order book has not loaded it (yet).
+  Purchase? purchaseFor(LinkedOrder? link) {
+    if (link == null) return null;
+    for (final purchase in _purchases) {
+      if (purchase.backendId == link.id || purchase.id == link.code) {
+        return purchase;
+      }
+    }
+    return null;
+  }
 
   bool get isEmpty => _purchases.isEmpty;
 
@@ -472,7 +583,7 @@ class PurchaseService extends ChangeNotifier {
   int get paidTotal =>
       _counted.fold(0, (sum, purchase) => sum + purchase.paidTotal);
 
-  /// The whole of what buying through SHIELD has earned.
+  /// The whole of what buying through Sahakar 360 has earned.
   ///
   /// Added up from the orders rather than stored, so it cannot fall behind
   /// the list it is a sum of.

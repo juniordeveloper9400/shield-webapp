@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 
 /// The languages the prescription flow is written in.
 ///
-/// Scoped to this screen rather than the app. SHIELD's counters are in Kerala
+/// Scoped to this screen rather than the app. Sahakar 360's counters are in Kerala
 /// and this is the screen a member reads instructions on — the rest of the app
 /// is names, prices and buttons, which need no translating to be usable.
 enum AppLanguage {
@@ -160,6 +160,21 @@ class PrescriptionCopy {
   final String beforeOrderNote;
   final String orderPlacedTitle;
   final String orderPlacedDetail;
+
+  // ---- Order status (the order this prescription was placed into) ----
+  final String orderStatusTitle;
+  final String trackOrder;
+  final String stagePlaced;
+  final String stageStoreContact;
+  final String stageBilled;
+  final String stageComplete;
+  final String stageCancelled;
+  final String stagePlacedDetail;
+  final String stageStoreContactDetail;
+  final String stageBilledDetail;
+  final String stageCompleteDetail;
+  final String stageCancelledDetail;
+
   final String intakeCardReady;
   final String viewMedicines;
   final String hideMedicines;
@@ -242,6 +257,18 @@ class PrescriptionCopy {
     required this.beforeOrderNote,
     required this.orderPlacedTitle,
     required this.orderPlacedDetail,
+    required this.orderStatusTitle,
+    required this.trackOrder,
+    required this.stagePlaced,
+    required this.stageStoreContact,
+    required this.stageBilled,
+    required this.stageComplete,
+    required this.stageCancelled,
+    required this.stagePlacedDetail,
+    required this.stageStoreContactDetail,
+    required this.stageBilledDetail,
+    required this.stageCompleteDetail,
+    required this.stageCancelledDetail,
     required this.intakeCardReady,
     required this.viewMedicines,
     required this.hideMedicines,
@@ -305,7 +332,7 @@ class PrescriptionCopy {
       ),
       OrderStep(
         'Delivered, or collect it',
-        'We deliver to your address, or hold it at your SHIELD store.',
+        'We deliver to your address, or hold it at your Sahakar 360 store.',
       ),
     ],
     pharmacistTitle: 'Pharmacist call',
@@ -382,6 +409,18 @@ class PrescriptionCopy {
     orderPlacedDetail:
         'The pharmacist will call you to confirm the medicines and the '
         'price. This card fills in once they send the details.',
+    orderStatusTitle: 'Order status',
+    trackOrder: 'Track order',
+    stagePlaced: 'Placed',
+    stageStoreContact: 'Store contact',
+    stageBilled: 'Billed',
+    stageComplete: 'Complete',
+    stageCancelled: 'Cancelled',
+    stagePlacedDetail: 'We have your order. The pharmacist will call you soon.',
+    stageStoreContactDetail: 'The pharmacist has contacted you.',
+    stageBilledDetail: 'Your bill is ready — open Track order to see it.',
+    stageCompleteDetail: 'Your order is complete.',
+    stageCancelledDetail: 'This order was cancelled.',
     intakeCardReady: 'Intake card ready',
     viewMedicines: 'View medicines',
     hideMedicines: 'Hide',
@@ -444,7 +483,7 @@ class PrescriptionCopy {
       ),
       OrderStep(
         'വീട്ടിലെത്തിക്കും, അല്ലെങ്കിൽ വാങ്ങാം',
-        'നിങ്ങളുടെ വിലാസത്തിൽ എത്തിക്കും, അല്ലെങ്കിൽ SHIELD സ്റ്റോറിൽ '
+        'നിങ്ങളുടെ വിലാസത്തിൽ എത്തിക്കും, അല്ലെങ്കിൽ Sahakar 360 സ്റ്റോറിൽ '
             'സൂക്ഷിച്ചുവയ്ക്കും.',
       ),
     ],
@@ -521,6 +560,18 @@ class PrescriptionCopy {
     orderPlacedDetail:
         'മരുന്നുകളും വിലയും സ്ഥിരീകരിക്കാൻ ഫാർമസിസ്റ്റ് നിങ്ങളെ വിളിക്കും. '
         'അവർ വിവരങ്ങൾ അയയ്ക്കുമ്പോൾ ഈ കാർഡ് പൂർത്തിയാകും.',
+    orderStatusTitle: 'ഓർഡർ നില',
+    trackOrder: 'ഓർഡർ ട്രാക്ക് ചെയ്യുക',
+    stagePlaced: 'ഓർഡർ നൽകി',
+    stageStoreContact: 'സ്റ്റോർ ബന്ധപ്പെട്ടു',
+    stageBilled: 'ബിൽ ചെയ്തു',
+    stageComplete: 'പൂർത്തിയായി',
+    stageCancelled: 'റദ്ദാക്കി',
+    stagePlacedDetail: 'നിങ്ങളുടെ ഓർഡർ ഞങ്ങൾക്ക് ലഭിച്ചു. ഫാർമസിസ്റ്റ് ഉടൻ വിളിക്കും.',
+    stageStoreContactDetail: 'ഫാർമസിസ്റ്റ് നിങ്ങളെ ബന്ധപ്പെട്ടു.',
+    stageBilledDetail: 'നിങ്ങളുടെ ബിൽ തയ്യാറായി — കാണാൻ ഓർഡർ ട്രാക്ക് ചെയ്യുക.',
+    stageCompleteDetail: 'നിങ്ങളുടെ ഓർഡർ പൂർത്തിയായി.',
+    stageCancelledDetail: 'ഈ ഓർഡർ റദ്ദാക്കി.',
     intakeCardReady: 'അളവ് കാർഡ് തയ്യാറായി',
     viewMedicines: 'മരുന്നുകൾ കാണുക',
     hideMedicines: 'മറയ്ക്കുക',

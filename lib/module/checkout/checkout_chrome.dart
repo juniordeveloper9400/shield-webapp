@@ -243,7 +243,7 @@ class ComingSoonPill extends StatelessWidget {
 /// The member's fixed branch, shown read-only.
 ///
 /// Registration and privilege-plan activation are the two places a member
-/// chooses their SHIELD store. Every product and pharmacy order after that is
+/// chooses their Sahakar 360 store. Every product and pharmacy order after that is
 /// served by it, so those checkouts show it here locked rather than as a
 /// picker — only the privilege activation offers the choice.
 class LockedStoreCard extends StatelessWidget {

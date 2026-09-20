@@ -15,7 +15,7 @@ import 'privilege_card_face.dart';
 import 'privilege_tier.dart';
 
 /// The privilege programme: switch to a card, pick one of its loads, and
-/// SHIELD adds 10%.
+/// Sahakar 360 adds 10%.
 ///
 /// Three cards and nothing else above the terms. The card is the thing being
 /// bought, so the screen is the card, with that card's loads written under it
@@ -889,7 +889,7 @@ class _TermsBox extends StatelessWidget {
             'benefit, subject to programme terms.',
           ),
           _TermLine(
-            'The promotional purchase benefit is added to your SHIELD '
+            'The promotional purchase benefit is added to your Sahakar 360 '
             'wallet at once.',
           ),
           _TermLine('Wallet value is spent on orders and lab bookings.'),

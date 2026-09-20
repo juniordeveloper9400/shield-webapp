@@ -353,7 +353,7 @@ class _WalletCardFront extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const _PanelHeading('SHIELD wallet'),
+            const _PanelHeading('Sahakar 360 wallet'),
             const SizedBox(height: 12),
             const _CardCaption('TOTAL BALANCE'),
             const SizedBox(height: 2),
@@ -1162,10 +1162,10 @@ class _CardCaption extends StatelessWidget {
   }
 }
 
-/// The line that names a face, with the SHIELD mark against it.
+/// The line that names a face, with the Sahakar 360 mark against it.
 ///
 /// The mark is the brand's, not a card issuer's badge: it is here so the
-/// panel is recognisably SHIELD's, and it is the only ornament on either
+/// panel is recognisably Sahakar 360's, and it is the only ornament on either
 /// face.
 class _PanelHeading extends StatelessWidget {
   final String text;

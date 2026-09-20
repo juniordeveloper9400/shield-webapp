@@ -1,12 +1,12 @@
 -- ============================================================================
---  SHIELD customer app — database schema
+--  Sahakar 360 customer app — database schema
 -- ============================================================================
 --  Everything the Flutter app in lib/module/* needs to persist, as one
 --  self-contained Postgres schema named "app".
 --
 --  Why a dedicated schema and not public:
 --    * The existing 78 tables in public are Prisma-managed and shared with a
---      separate SHIELD backend/admin system. Nothing here touches them.
+--      separate Sahakar 360 backend/admin system. Nothing here touches them.
 --    * "Drop the app's tables" is then a single safe statement:
 --        DROP SCHEMA IF EXISTS app CASCADE;
 --      run by apply_app_schema.dart before it recreates everything below.
@@ -73,7 +73,7 @@ CREATE TYPE app.push_platform      AS ENUM ('ANDROID', 'IOS', 'WEB');
 --  1 · Reference & content  (seeded by seed_app.dart; edited by admins)
 -- ===========================================================================
 
--- SHIELD outlets — every member is assigned one; orders dispatch from it.
+-- Sahakar 360 outlets — every member is assigned one; orders dispatch from it.
 CREATE TABLE app.shield_store (
     id           bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     uuid         uuid NOT NULL DEFAULT gen_random_uuid(),
@@ -656,7 +656,7 @@ CREATE TABLE app.approval_item (
 --  5 · Wallet · privilege · rewards · referrals
 -- ===========================================================================
 
--- One SHIELD wallet per member; opened by activating a privilege card.
+-- One Sahakar 360 wallet per member; opened by activating a privilege card.
 CREATE TABLE app.wallet (
     id                   bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     member_id            bigint NOT NULL UNIQUE REFERENCES app.users(id) ON DELETE CASCADE,
@@ -904,7 +904,7 @@ CREATE TABLE app.agent_withdrawal (
 );
 CREATE INDEX agent_withdrawal_agent_idx ON app.agent_withdrawal(agent_id, created_at DESC);
 
--- Commission an agent moved from the payout pot into their SHIELD wallet.
+-- Commission an agent moved from the payout pot into their Sahakar 360 wallet.
 CREATE TABLE app.agent_wallet_transfer (
     id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     agent_id        bigint NOT NULL REFERENCES app.agent(id) ON DELETE CASCADE,

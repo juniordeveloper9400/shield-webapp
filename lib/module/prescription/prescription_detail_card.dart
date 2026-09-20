@@ -4,6 +4,7 @@ import '../../theme/app_colors.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
 import 'prescription_copy.dart';
+import 'prescription_order_status.dart';
 import 'prescription_record.dart';
 
 /// One uploaded prescription on the account, through its life:
@@ -163,6 +164,14 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
                 const SizedBox(height: 13),
                 const Divider(height: 1, color: AppColors.border),
                 const SizedBox(height: 11),
+                // Where the order this script was placed into has got to —
+                // Placed → Store contact → Billed → Complete — so a member
+                // need not leave this list to see whether the pharmacist has
+                // called or a bill is ready. Nothing until it is ordered.
+                if (record.ordered || record.order != null) ...[
+                  PrescriptionOrderStatus(record: record, copy: copy),
+                  const SizedBox(height: 10),
+                ],
                 // hasIntakeCard wins over both the other states: the counter
                 // can read a script and build its medicine list the moment
                 // it is uploaded, well before the member places a

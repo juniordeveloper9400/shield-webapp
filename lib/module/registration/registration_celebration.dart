@@ -22,7 +22,7 @@ Future<void> showRegistrationCelebration(
   return RewardCelebration.show(
     context,
     points: RegistrationService.rewardPoints,
-    caption: 'reward points added — welcome to SHIELD',
+    caption: 'reward points added — welcome to Sahakar 360',
   );
 }
 

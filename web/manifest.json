@@ -1,11 +1,11 @@
 {
-  "name": "SHIELD",
-  "short_name": "SHIELD",
+  "name": "Sahakar 360",
+  "short_name": "Sahakar 360",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#FFFFFF",
   "theme_color": "#2C57A6",
-  "description": "SHIELD customer app",
+  "description": "Sahakar 360 customer app",
   "orientation": "portrait-primary",
   "prefer_related_applications": false,
   "icons": [

@@ -50,7 +50,7 @@ class StoreLocationResult {
   }
 }
 
-/// Asks the device for the member's location and ranks the SHIELD branches by
+/// Asks the device for the member's location and ranks the Sahakar 360 branches by
 /// distance from it. Used by the registration form and the privilege-plan
 /// activation checkout — both let the member share their location to get the
 /// nearest branch pre-selected, and both keep working (pincode ranking) if

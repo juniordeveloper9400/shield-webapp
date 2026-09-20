@@ -23,7 +23,7 @@ enum InvestorPlanType {
           : InvestorPlanType.yearly;
 }
 
-/// A stakeholder in SHIELD itself, rather than a member buying a plan or an
+/// A stakeholder in Sahakar 360 itself, rather than a member buying a plan or an
 /// agent recruiting a team — holds units, not a privilege card, and reads
 /// the business back as a store and a return, not a wallet.
 @immutable
@@ -101,7 +101,7 @@ class Investor {
   /// each other down to the twelfth.
   int get yearlyReturnPace => monthlyReturnPace * 12;
 
-  /// The purchase credit SHIELD offers against this stake — 10% of what was
+  /// The purchase credit Sahakar 360 offers against this stake — 10% of what was
   /// invested, plus a flat ₹250 — spendable on products and pharmacy
   /// purchases through the wallet.
   int get purchaseCredit => (totalInvested * 0.10).round() + 250;

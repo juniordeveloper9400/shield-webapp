@@ -1,5 +1,5 @@
 name: shield
-description: SHIELD customer app.
+description: Sahakar 360 customer app.
 publish_to: 'none'
 version: 1.0.0+2
 
@@ -41,7 +41,7 @@ dependencies:
   # behaviour in debug and release, reliable from a phone. See
   # data/neon/neon_http.dart.
   http: ^1.6.0
-  # Device location for "nearest SHIELD branch" during registration and
+  # Device location for "nearest Sahakar 360 branch" during registration and
   # privilege-plan activation. Works on Android/iOS and, on the web build,
   # through the browser's geolocation API. See registration/store_locator.dart.
   geolocator: ^13.0.4

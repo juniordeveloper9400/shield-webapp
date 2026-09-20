@@ -49,7 +49,7 @@ class PaymentReceipt {
   /// sets this — keeps its existing meaning.
   final FulfillmentType fulfillmentType;
 
-  /// Whether [method] settled this order instantly off the SHIELD wallet,
+  /// Whether [method] settled this order instantly off the Sahakar 360 wallet,
   /// rather than being a claim someone still has to collect on or settle
   /// manually. False for every existing caller — a bank-transfer receipt is
   /// never paid by wallet.

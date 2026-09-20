@@ -345,8 +345,8 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
         children: [
           const Text(
             'This permanently removes your profile, saved addresses and '
-            'patients from SHIELD. It cannot be undone, and you will need '
-            'to sign up again — with a fresh account — to use SHIELD on '
+            'patients from Sahakar 360. It cannot be undone, and you will need '
+            'to sign up again — with a fresh account — to use Sahakar 360 on '
             'this number.',
           ),
           const SizedBox(height: 14),
@@ -395,7 +395,7 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   }
 }
 
-/// The Agent Portal / "Become a SHIELD Agent" row.
+/// The Agent Portal / "Become a Sahakar 360 Agent" row.
 ///
 /// An approved agent gets straight through to their portal; a plain member —
 /// the common case — gets the way to apply. Neither shows for a recruit whose
@@ -432,7 +432,7 @@ class _AgentMenuGroup extends StatelessWidget {
                   )
                 : _MenuItem(
                     icon: Icons.how_to_reg_outlined,
-                    label: 'Become a SHIELD Agent',
+                    label: 'Become a Sahakar 360 Agent',
                     onTap: () => BecomeAgentScreen.open(context),
                   ),
           ],

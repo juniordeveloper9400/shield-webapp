@@ -264,7 +264,7 @@ class ProductDetail {
     if (discount > 0) 'Flat $discount% off the printed MRP',
     '100% genuine, sourced from $manufacturer or an authorised distributor',
     'Sealed pack, stored and shipped in temperature-controlled conditions',
-    'Delivered across India by SHIELD Pharmacy',
+    'Delivered across India by Sahakar 360 Pharmacy',
   ];
 
   static String _description(
@@ -301,7 +301,7 @@ class ProductDetail {
     };
 
     return '$lead$middle '
-        'Every order on SHIELD is genuine and within its shelf life.';
+        'Every order on Sahakar 360 is genuine and within its shelf life.';
   }
 
   static String _articleFor(String pack) {
@@ -485,7 +485,7 @@ class ProductDetail {
       ProductFaq('How should I $verb $short?', _directions(form).first),
       ProductFaq('Are there any precautions?', _safety(form).first),
       ProductFaq(
-        'Is $short genuine on SHIELD?',
+        'Is $short genuine on Sahakar 360?',
         'Yes. Every order is sourced from $manufacturer or an authorised '
             'distributor, sealed, and shipped in temperature-controlled '
             'conditions.',

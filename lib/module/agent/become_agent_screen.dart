@@ -12,7 +12,7 @@ import '../registration/registration_service.dart';
 import 'agent_model.dart';
 import 'agent_service.dart';
 
-/// A plain member's own request to become a SHIELD agent — distinct from
+/// A plain member's own request to become a Sahakar 360 agent — distinct from
 /// [AgentRegistrationScreen], which is a signed-in *agent* recruiting someone
 /// else under them and needs a parent to place that person against. There is
 /// no recruiter here: the request is filed under the signed-in member's own
@@ -253,7 +253,7 @@ class _BecomeAgentScreenState extends State<BecomeAgentScreen> {
       builder: (context, _) => RegistrationService.instance.isRegistered
           ? _buildBody(context)
           : RegistrationRequiredScreen(
-              title: 'Become a SHIELD Agent',
+              title: 'Become a Sahakar 360 Agent',
               onComplete: () => RegistrationFlow.show(context),
             ),
     );
@@ -267,7 +267,7 @@ class _BecomeAgentScreenState extends State<BecomeAgentScreen> {
         surfaceTintColor: AppColors.white,
         elevation: 0,
         title: const Text(
-          'Become a SHIELD Agent',
+          'Become a Sahakar 360 Agent',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,

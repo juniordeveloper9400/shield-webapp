@@ -17,7 +17,7 @@ class AuthBrandMark extends StatelessWidget {
         ),
         const SizedBox(height: 8),
         const Text(
-          'SHIELD',
+          'Sahakar 360',
           style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.w800,

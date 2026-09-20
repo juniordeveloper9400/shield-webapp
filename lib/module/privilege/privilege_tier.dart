@@ -106,7 +106,7 @@ class PrivilegeLoad {
 
   Color get tint => tier.tint;
 
-  /// What SHIELD adds on top.
+  /// What Sahakar 360 adds on top.
   int get bonus => PrivilegeProgramme.bonusOn(amount);
 
   /// What lands in the wallet in total.
@@ -205,7 +205,7 @@ class PrivilegeLoad {
 class PrivilegeProgramme {
   const PrivilegeProgramme._();
 
-  /// SHIELD adds this share of whatever is loaded.
+  /// Sahakar 360 adds this share of whatever is loaded.
   static const double bonusRate = 0.10;
 
   /// Loads are in whole multiples of this, starting at one of them.

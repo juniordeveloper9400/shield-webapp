@@ -213,13 +213,13 @@ void main() {
     });
 
     testWidgets(
-      'offers "Become a SHIELD Agent" to a member who is not one, not "Agent Portal"',
+      'offers "Become a Sahakar 360 Agent" to a member who is not one, not "Agent Portal"',
       (tester) async {
         AuthService.instance.signInAs(phone: '9000000099');
 
         await pump(tester, const AccountScreen());
 
-        expect(find.text('Become a SHIELD Agent'), findsOneWidget);
+        expect(find.text('Become a Sahakar 360 Agent'), findsOneWidget);
         expect(find.text('Agent Portal'), findsNothing);
       },
     );

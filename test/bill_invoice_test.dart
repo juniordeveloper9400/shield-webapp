@@ -38,7 +38,7 @@ Map<String, dynamic> _response({
         'deliveryFee': '0.00',
         'customer': {'name': 'Asaruuuu', 'phone': '8137922524'},
         'store': {
-          'name': 'SHIELD Melattur',
+          'name': 'Sahakar 360 Melattur',
           'area': 'Melattur',
           'city': 'Malappuram',
           'state': 'Kerala',
@@ -91,7 +91,7 @@ void main() {
       expect(invoice.number, 'RX-MU8BWHGBD56A');
       expect(invoice.customerName, 'Asaruuuu');
       expect(invoice.customerPhone, '8137922524');
-      expect(invoice.storeName, 'SHIELD Melattur');
+      expect(invoice.storeName, 'Sahakar 360 Melattur');
       expect(invoice.storeAddress, 'Melattur, Malappuram, Kerala, 679325');
       expect(invoice.storePhone, '9000000001');
       expect(invoice.fulfillment, 'Home delivery');
@@ -131,7 +131,7 @@ void main() {
       expect(invoice.paid, isTrue);
       expect(invoice.orderStatus, 'Completed');
       expect(invoice.fulfillment, 'Store pickup');
-      expect(invoice.storeName, 'SHIELD Pharmacy');
+      expect(invoice.storeName, 'Sahakar 360 Pharmacy');
       expect(invoice.hasItems, isFalse);
       expect(invoice.totalPaise, 18100);
     });
@@ -202,7 +202,7 @@ void main() {
       expect(find.text('Cetirizine 10mg'), findsOneWidget);
       expect(find.text('Subtotal'), findsOneWidget);
       expect(find.text('TOTAL'), findsOneWidget);
-      expect(find.text('SHIELD Melattur'), findsOneWidget);
+      expect(find.text('Sahakar 360 Melattur'), findsOneWidget);
       expect(find.text('PAYMENT PENDING'), findsOneWidget);
     });
 

@@ -1305,7 +1305,7 @@ class _StorePanel extends StatelessWidget {
           const SizedBox(height: 10),
           if (selectable) ...[
             const Text(
-              'Choose the SHIELD branch to activate your plan against. Every '
+              'Choose the Sahakar 360 branch to activate your plan against. Every '
               'product and pharmacy order on your account is served by this '
               'branch afterwards.',
               style: TextStyle(

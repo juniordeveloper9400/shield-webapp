@@ -1,4 +1,7 @@
+import 'package:flutter/foundation.dart' show visibleForTesting;
+
 import '../../module/checkout/fulfillment_type.dart';
+import '../../module/orders/purchase_service.dart' show LinkedOrder;
 import '../../module/prescription/medicine_duration.dart';
 import '../neon/neon_http.dart';
 import 'backend_http.dart';
@@ -26,6 +29,10 @@ class RemotePrescriptionCard {
   final DateTime? recurringFrom;
   final DateTime? recurringUntil;
 
+  /// The order this prescription was most recently placed into — null for one
+  /// that was only uploaded. What the card's order-tracking status reads.
+  final LinkedOrder? order;
+
   RemotePrescriptionCard({
     required this.code,
     required this.uuid,
@@ -38,6 +45,7 @@ class RemotePrescriptionCard {
     this.customDays,
     this.recurringFrom,
     this.recurringUntil,
+    this.order,
   });
 
   /// The pharmacist has entered the lines — the app card can expand.
@@ -354,6 +362,11 @@ class PrescriptionRepository {
     }
   }
 
+  /// Test hook: reads one `GET /v1/member/prescriptions/:id` response.
+  @visibleForTesting
+  static RemotePrescriptionCard cardFromRow(Map<String, dynamic> row) =>
+      _toCard(row);
+
   static RemotePrescriptionCard _toCard(Map<String, dynamic> row) {
     final medicines = (row['medicines'] as List<dynamic>? ?? const [])
         .cast<Map<String, dynamic>>()
@@ -381,6 +394,7 @@ class PrescriptionRepository {
       customDays: row['customDays'] == null ? null : _toInt(row['customDays']),
       recurringFrom: DateTime.tryParse((row['recurringFrom'] ?? '').toString()),
       recurringUntil: DateTime.tryParse((row['recurringUntil'] ?? '').toString()),
+      order: LinkedOrder.fromJson(row['order']),
     );
   }
 

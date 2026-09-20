@@ -15,7 +15,7 @@ import 'wallet_service.dart';
 /// Filter options for transaction ledger.
 enum TransactionFilter { all, inTxn, outTxn }
 
-/// SHIELD wallet: balance, privilege card head, points redemption,
+/// Sahakar 360 wallet: balance, privilege card head, points redemption,
 /// quick top-ups, and filtered transaction history (All / In / Out).
 ///
 /// Closed until a privilege card is activated. Money enters this wallet by
@@ -449,7 +449,7 @@ class _LockedWalletCard extends StatelessWidget {
 
 /// The one thing an open wallet offers: put more on the plan.
 ///
-/// Shield points used to have a strip here and a redeem button under it.
+/// Sahakar 360 points used to have a strip here and a redeem button under it.
 /// Neither earned the room — points are credited elsewhere and were never
 /// spent from this screen — and taking them out leaves the programme as the
 /// only control, which is also the only way money reaches the balance.

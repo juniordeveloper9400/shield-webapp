@@ -104,7 +104,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
       _AmountSheet(
         title: 'Add cash to wallet',
         subtitle:
-            'Available ₹${formatRupees(withdrawable)} · moves into your SHIELD '
+            'Available ₹${formatRupees(withdrawable)} · moves into your Sahakar 360 '
             'wallet straight away',
         actionLabel: 'Add to wallet',
         emptyError: 'Enter an amount to add',
@@ -116,7 +116,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            '₹${formatRupees(added)} added to your SHIELD wallet',
+            '₹${formatRupees(added)} added to your Sahakar 360 wallet',
           ),
         ),
       );

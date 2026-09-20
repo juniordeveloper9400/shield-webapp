@@ -94,7 +94,7 @@ class AgentRepository {
       });
 
   /// The caller's own submitted agent requests, newest first
-  /// (`GET /v1/agent/requests`) — what "Become a SHIELD Agent" reads to show
+  /// (`GET /v1/agent/requests`) — what "Become a Sahakar 360 Agent" reads to show
   /// "your application is under review" instead of the form again once one
   /// is already in, and what tells it a rejected one can be resubmitted.
   /// Null when unavailable.

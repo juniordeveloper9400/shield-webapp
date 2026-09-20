@@ -115,7 +115,7 @@ class OrderTrack {
       case OrderStage.billed:
         return 'Your bill is ready.';
       case OrderStage.complete:
-        return 'Order complete. Thanks for shopping with SHIELD.';
+        return 'Order complete. Thanks for shopping with Sahakar 360.';
     }
   }
 

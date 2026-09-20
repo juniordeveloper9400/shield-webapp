@@ -69,7 +69,7 @@ class AgentService extends ChangeNotifier {
   /// Requests raised in this session, keyed by agent id, oldest first.
   final Map<String, List<WithdrawalRequest>> _requests = {};
 
-  /// Earnings each agent has moved into their SHIELD wallet, keyed by agent
+  /// Earnings each agent has moved into their Sahakar 360 wallet, keyed by agent
   /// id. Counts against [withdrawableFor] the same way a paid-out request
   /// would — the money has left the commission pot either way.
   final Map<String, int> _movedToWallet = {};
@@ -661,7 +661,7 @@ class AgentService extends ChangeNotifier {
   int redeemedFor(Agent agent) =>
       agent.isApproved ? agent.redeemed + movedToWalletFor(agent) : 0;
 
-  /// Commission [agent] has moved into their SHIELD wallet this session.
+  /// Commission [agent] has moved into their Sahakar 360 wallet this session.
   int movedToWalletFor(Agent agent) => _movedToWallet[agent.id] ?? 0;
 
   /// What [agent] could ask to withdraw right now: earned, less what has been
@@ -688,7 +688,7 @@ class AgentService extends ChangeNotifier {
     return null;
   }
 
-  /// Moves [amount] of [agent]'s withdrawable commission into the SHIELD
+  /// Moves [amount] of [agent]'s withdrawable commission into the Sahakar 360
   /// wallet, where it can be spent in the app straight away. Returns null on
   /// success, or the reason it was refused.
   String? moveEarningsToWallet(Agent agent, int amount) {

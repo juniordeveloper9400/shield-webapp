@@ -1,4 +1,4 @@
-// Applies backend/db/app_schema.sql — the SHIELD customer-app schema.
+// Applies backend/db/app_schema.sql — the Sahakar 360 customer-app schema.
 //
 //   dart run backend/db/apply_app_schema.dart          # dry run: what it will do
 //   dart run backend/db/apply_app_schema.dart --yes    # drop & recreate schema "app"

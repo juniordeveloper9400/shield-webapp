@@ -508,7 +508,7 @@ class DeliverToCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final address = AddressBook.instance.deliverTo;
     final user = AuthService.instance.currentUser.value;
-    final receiver = address?.receiver ?? user?.name ?? 'SHIELD Member';
+    final receiver = address?.receiver ?? user?.name ?? 'Sahakar 360 Member';
     final pincode = AddressBook.instance.pincode;
     final label = address?.label.label ?? 'Home';
     final summary = address?.summary ?? AddressBook.describePincode(pincode);
@@ -625,7 +625,7 @@ class CancelOrderCard extends StatelessWidget {
 /// this member's account (`RegistrationService`'s own `store`), resolved
 /// for real from `backend/api` via [StoreRepository] (`ShieldStore.phone`,
 /// the client-side fixture field, is always blank — see its own doc).
-/// Falls back to `PrescriptionCard.orderPhone`, SHIELD's own general order
+/// Falls back to `PrescriptionCard.orderPhone`, Sahakar 360's own general order
 /// line, whenever that branch has no number on file yet — the button never
 /// goes nowhere.
 class NeedHelpCard extends StatefulWidget {
@@ -755,7 +755,7 @@ class _SocialIcon extends StatelessWidget {
 // ---------------------------------------------------------------------------
 
 /// The invoice the store has attached to this order, once one has been sent
-/// from the admin console — ported verbatim from the root SHIELD app's own
+/// from the admin console — ported verbatim from the root Sahakar 360 app's own
 /// `order_detail_sections.dart`, backed here by [PurchaseService.
 /// ensureBillLoaded]'s lazy fetch instead of that app's direct-Neon join.
 ///

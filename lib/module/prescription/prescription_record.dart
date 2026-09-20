@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../dates.dart';
 import '../location/address_book.dart';
+import '../orders/purchase_service.dart' show LinkedOrder;
 import '../patients/patient_book.dart';
 import 'medicine_duration.dart';
 
@@ -217,6 +218,14 @@ class PrescriptionRecord {
   /// the database was unreachable. Carried so the pharmacy read and, later,
   /// the order update the same row instead of inserting another.
   String? remoteId;
+
+  /// The order this prescription was most recently placed into, once the
+  /// backend has one on file — read back with each refresh of the account's
+  /// prescriptions. What the card's "Order status" section follows through
+  /// Placed → Store contact → Billed → Complete. Null for a prescription that
+  /// was only uploaded, or one ordered a moment ago on this device before the
+  /// next refresh has seen the link.
+  LinkedOrder? order;
 
   /// TEMPORARY — a live diagnostic for the "photo never reached the
   /// counter" bug: what actually happened to each picked file during
@@ -466,6 +475,7 @@ class PrescriptionBook extends ChangeNotifier {
     String doctor = '',
     bool ordered = false,
     String? status,
+    LinkedOrder? order,
   }) {
     final index = indexOf(id);
     if (index == -1) {
@@ -473,6 +483,10 @@ class PrescriptionBook extends ChangeNotifier {
     }
     final record = _records[index];
     var changed = false;
+    if (order != null && record.order != order) {
+      record.order = order;
+      changed = true;
+    }
     if (!_sameMedicines(record.medicines, medicines)) {
       record.medicines = List.unmodifiable(medicines);
       changed = true;

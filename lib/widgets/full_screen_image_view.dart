@@ -8,7 +8,7 @@ import 'app_image.dart';
 ///
 /// Where the small print on a receipt or an invoice actually becomes
 /// readable; the card that opens this only ever shows a thumbnail. Ported
-/// from the root SHIELD app's own `lib/widgets/full_screen_image_view.dart`
+/// from the root Sahakar 360 app's own `lib/widgets/full_screen_image_view.dart`
 /// verbatim, for [StoreInvoiceCard] to reuse here the same way.
 class FullScreenImageView extends StatelessWidget {
   final String image;

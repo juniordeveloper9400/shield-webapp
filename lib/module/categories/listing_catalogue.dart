@@ -69,12 +69,12 @@ class ListingCatalogue {
     return ranked.take(5).toList();
   }
 
-  /// The brand a product filters under: its own [Product.brand], or the SHIELD
+  /// The brand a product filters under: its own [Product.brand], or the Sahakar 360
   /// house brand when the admin left it blank — so every product filters under
   /// exactly one brand.
   static String brandOf(Product product) {
     final brand = product.brand?.trim() ?? '';
-    return brand.isEmpty ? 'SHIELD' : brand;
+    return brand.isEmpty ? 'Sahakar 360' : brand;
   }
 
   /// Distinct brands across [group], alphabetically — the "Brands" facet's

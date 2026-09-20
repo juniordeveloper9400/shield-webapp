@@ -266,7 +266,7 @@ class ReferralLadder {
   /// The one line that says what the rung pays for, in the rung's own numbers.
   static String howItWorks(ReferralLevel level) =>
       'Get ${_people(level.referralsRequired)} to make a transaction on '
-      'SHIELD using your invite link, and earn ${level.pointsLabel}.';
+      'Sahakar 360 using your invite link, and earn ${level.pointsLabel}.';
 
   /// The three things that have to happen before a referral counts.
   ///
@@ -282,7 +282,7 @@ class ReferralLadder {
       first
           ? 'Share your invite link with ${_people(fresh)}'
           : 'Share your invite link with ${_people(fresh, more: true)}',
-      'They install SHIELD and complete registration with your code',
+      'They install Sahakar 360 and complete registration with your code',
       first
           ? 'Each one makes their first transaction'
           : 'Each one makes a transaction — ${level.referralsRequired} in all',

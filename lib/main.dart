@@ -116,7 +116,7 @@ class ShieldApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'SHIELD',
+      title: 'Sahakar 360',
       debugShowCheckedModeBanner: false,
       scaffoldMessengerKey: rootMessengerKey,
       theme: ThemeData(

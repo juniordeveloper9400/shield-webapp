@@ -92,7 +92,7 @@ class _OrderBillScreenState extends State<OrderBillScreen> {
     try {
       await SharePlus.instance.share(
         ShareParams(
-          subject: 'SHIELD invoice ${invoice.number}',
+          subject: 'Sahakar 360 invoice ${invoice.number}',
           text: invoice.toShareText(),
         ),
       );

@@ -91,7 +91,7 @@ class _CartScreenState extends State<CartScreen> {
         itemCount: items,
         lines: [
           CheckoutLine('Printed price', mrp.toDouble()),
-          CheckoutLine('SHIELD price', paid.toDouble()),
+          CheckoutLine('Sahakar 360 price', paid.toDouble()),
           CheckoutLine(
             'You earned',
             (mrp - paid).toDouble(),

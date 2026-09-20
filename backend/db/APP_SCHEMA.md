@@ -1,4 +1,4 @@
-# SHIELD customer-app schema — `app`
+# Sahakar 360 customer-app schema — `app`
 
 Everything the Flutter app (`lib/module/*`) needs to persist, as one self-contained
 Postgres schema named **`app`**, separate from the Prisma-managed `public` schema.
@@ -9,7 +9,7 @@ Postgres schema named **`app`**, separate from the Prisma-managed `public` schem
 
 ## Why a dedicated schema
 
-The 78 tables in `public` are Prisma-managed and shared with a separate SHIELD
+The 78 tables in `public` are Prisma-managed and shared with a separate Sahakar 360
 backend/admin system. Nothing here references them, and "drop the app's tables"
 is a single safe statement (`DROP SCHEMA app CASCADE`) that cannot reach
 `public`, its RBAC tables, or `_prisma_migrations`.

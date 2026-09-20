@@ -7,7 +7,7 @@ import '../earnings/member_earnings.dart';
 import '../orders/purchase_service.dart';
 import '../wallet/wallet_service.dart';
 
-/// "Your savings": what buying through SHIELD has been worth.
+/// "Your savings": what buying through Sahakar 360 has been worth.
 ///
 /// Presents the member's total savings on a rich, polished card with a soft
 /// mint-emerald gradient, decorative watermark glyph, and a clear call-to-action
@@ -228,7 +228,7 @@ class EarningsSection extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             earned == 0
-                                ? 'Buy at SHIELD prices and the difference is yours.'
+                                ? 'Buy at Sahakar 360 prices and the difference is yours.'
                                 : 'Kept out of ₹${formatRupees(MemberEarnings.totalPrice)} of total price.',
                             style: const TextStyle(
                               fontSize: 13,

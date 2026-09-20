@@ -118,16 +118,16 @@ Future<void> main(List<String> args) async {
 // --- shield_store -----------------------------------------------------------
 Future<void> _seedStores(TxSession tx) async {
   const rows = [
-    ['SHD-MEL', 'SHIELD Pharmacy Melattur', 'Melattur', 'Malappuram', '679326'],
-    ['SHD-MKP', 'SHIELD Pharmacy Makkaraparamba', 'Makkaraparamba', 'Malappuram', '676507'],
-    ['SHD-TIR', 'SHIELD Pharmacy Tirur', 'Tirur', 'Malappuram', '676101'],
-    ['SHD-KKT', 'SHIELD Pharmacy Karinkallathani', 'Karinkallathani', 'Malappuram', '679321'],
-    ['SHD-MJR', 'SHIELD Pharmacy Manjery', 'Manjery', 'Malappuram', '676121'],
-    ['SHD-ALN', 'SHIELD Pharmacy Alanallur', 'Alanallur', 'Palakkad', '678601'],
-    ['SHD-TRD', 'SHIELD Pharmacy Tirurangadi', 'Tirurangadi', 'Malappuram', '676306'],
-    ['SHD-KNP', 'SHIELD Pharmacy Kunnumpuram', 'Kunnumpuram', 'Malappuram', '676505'],
-    ['SHD-KND', 'SHIELD Pharmacy Kondotty', 'Kondotty', 'Malappuram', '673638'],
-    ['SHD-ARK', 'SHIELD Pharmacy Areekode', 'Areekode', 'Malappuram', '673639'],
+    ['SHD-MEL', 'Sahakar 360 Pharmacy Melattur', 'Melattur', 'Malappuram', '679326'],
+    ['SHD-MKP', 'Sahakar 360 Pharmacy Makkaraparamba', 'Makkaraparamba', 'Malappuram', '676507'],
+    ['SHD-TIR', 'Sahakar 360 Pharmacy Tirur', 'Tirur', 'Malappuram', '676101'],
+    ['SHD-KKT', 'Sahakar 360 Pharmacy Karinkallathani', 'Karinkallathani', 'Malappuram', '679321'],
+    ['SHD-MJR', 'Sahakar 360 Pharmacy Manjery', 'Manjery', 'Malappuram', '676121'],
+    ['SHD-ALN', 'Sahakar 360 Pharmacy Alanallur', 'Alanallur', 'Palakkad', '678601'],
+    ['SHD-TRD', 'Sahakar 360 Pharmacy Tirurangadi', 'Tirurangadi', 'Malappuram', '676306'],
+    ['SHD-KNP', 'Sahakar 360 Pharmacy Kunnumpuram', 'Kunnumpuram', 'Malappuram', '676505'],
+    ['SHD-KND', 'Sahakar 360 Pharmacy Kondotty', 'Kondotty', 'Malappuram', '673638'],
+    ['SHD-ARK', 'Sahakar 360 Pharmacy Areekode', 'Areekode', 'Malappuram', '673639'],
   ];
   for (var i = 0; i < rows.length; i++) {
     final r = rows[i];
@@ -307,9 +307,9 @@ Future<void> _seedLabPackages(TxSession tx) async {
 // --- clinic (sample) ----------------------------------------------
 Future<void> _seedClinics(TxSession tx) async {
   const rows = [
-    ['SHIELD Dental Care, Melattur', 'Dental', 'Melattur, Malappuram', '+91 90000 11111', true],
-    ['SHIELD Family Clinic, Manjery', 'Multi-speciality', 'Manjery, Malappuram', '+91 90000 22222', true],
-    ['SHIELD Tele-Consult', 'Tele-consultation', 'Online', '', false],
+    ['Sahakar 360 Dental Care, Melattur', 'Dental', 'Melattur, Malappuram', '+91 90000 11111', true],
+    ['Sahakar 360 Family Clinic, Manjery', 'Multi-speciality', 'Manjery, Malappuram', '+91 90000 22222', true],
+    ['Sahakar 360 Tele-Consult', 'Tele-consultation', 'Online', '', false],
   ];
   for (var i = 0; i < rows.length; i++) {
     final r = rows[i];
@@ -352,8 +352,8 @@ Future<void> _seedDietitians(TxSession tx) async {
 Future<void> _seedArticles(TxSession tx) async {
   const rows = [
     ['managing-blood-sugar', 'Managing Blood Sugar Day to Day', 'Dr. Anjana Pillai'],
-    ['reading-a-lab-report', 'How to Read Your Lab Report', 'SHIELD Health Desk'],
-    ['generic-vs-branded', 'Generic vs Branded Medicine', 'SHIELD Pharmacy Team'],
+    ['reading-a-lab-report', 'How to Read Your Lab Report', 'Sahakar 360 Health Desk'],
+    ['generic-vs-branded', 'Generic vs Branded Medicine', 'Sahakar 360 Pharmacy Team'],
   ];
   final topics = _pgArray(['Wellness']);
   final paragraphs = _pgArray(['Body copy goes here.']);

@@ -7,7 +7,7 @@ import '../../theme/app_colors.dart';
 import 'shield_store.dart';
 import 'store_locator.dart';
 
-/// The "Your SHIELD store" picker as a map.
+/// The "Your Sahakar 360 store" picker as a map.
 ///
 /// Location is **required**: until the member grants it the map is replaced by
 /// an enable-location gate, and [onLocationReady] fires `false` so the caller
@@ -121,17 +121,17 @@ class _StoreMapPickerState extends State<StoreMapPicker>
     final (title, body) = switch (_outcome) {
       LocationOutcome.serviceOff => (
           'Location is switched off',
-          'Turn on location on your device so we can show the SHIELD branches '
+          'Turn on location on your device so we can show the Sahakar 360 branches '
               'near you and pick the closest one.'
         ),
       LocationOutcome.deniedForever => (
           'Location permission is off',
-          'Open settings and allow location for SHIELD. Choosing your branch '
+          'Open settings and allow location for Sahakar 360. Choosing your branch '
               'on the map needs it.'
         ),
       _ => (
           'We need your location',
-          'Your SHIELD branch is picked from the map by how close it is to you. '
+          'Your Sahakar 360 branch is picked from the map by how close it is to you. '
               'Allow location to continue.'
         ),
     };

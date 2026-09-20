@@ -3,7 +3,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../theme/app_colors.dart';
 
-/// The networks SHIELD publishes on, each with the page it opens.
+/// The networks Sahakar 360 publishes on, each with the page it opens.
 enum SocialNetwork {
   facebook('Facebook', 'https://www.facebook.com/share/1C8qHEAqDZ/'),
   youtube('YouTube', 'https://youtube.com/@sahakarmedicalsofficial'),

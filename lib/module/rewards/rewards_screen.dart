@@ -185,7 +185,7 @@ class _Hero extends StatelessWidget {
               ),
               const SizedBox(height: 6),
               Text(
-                '${formatRupees(points)} reward points earned on SHIELD',
+                '${formatRupees(points)} reward points earned on Sahakar 360',
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

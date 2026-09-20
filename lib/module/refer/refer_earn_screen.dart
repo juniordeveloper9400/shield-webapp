@@ -656,9 +656,9 @@ class _InviteButton extends StatelessWidget {
         try {
           await SharePlus.instance.share(
             ShareParams(
-              subject: 'Join me on SHIELD',
+              subject: 'Join me on Sahakar 360',
               text:
-                  'Join me on SHIELD! Save up to 51% on medicines and unlock Health Pass membership. '
+                  'Join me on Sahakar 360! Save up to 51% on medicines and unlock Health Pass membership. '
                   'Use my invite code $code when you sign up.',
             ),
           );

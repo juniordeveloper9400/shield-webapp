@@ -167,7 +167,7 @@ class EarningsDetailScreen extends StatelessWidget {
                             ),
                             child: Text(
                               earned == 0
-                                  ? 'Buy at SHIELD prices and the difference is yours.'
+                                  ? 'Buy at Sahakar 360 prices and the difference is yours.'
                                   : 'You saved ${MemberEarnings.savedPercentLabel} overall, keeping ₹${formatRupees(earned)} out of ₹${formatRupees(MemberEarnings.totalPrice)} total price.',
                               style: const TextStyle(
                                 fontSize: 13,
@@ -356,8 +356,8 @@ class EarningsDetailScreen extends StatelessWidget {
                   ),
                 ),
 
-              // The other way SHIELD gives money back: not a discount on an
-              // order, but the 10% SHIELD adds the moment a privilege plan is
+              // The other way Sahakar 360 gives money back: not a discount on an
+              // order, but the 10% Sahakar 360 adds the moment a privilege plan is
               // activated. Its own section rather than folded into the order
               // list above — a plan is not an order, and "activated" is not
               // the same fact as "delivered".
@@ -373,7 +373,7 @@ class EarningsDetailScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'The 10% SHIELD added when you activated each plan.',
+                  'The 10% Sahakar 360 added when you activated each plan.',
                   style: TextStyle(fontSize: 13, color: AppColors.textMuted),
                 ),
                 const SizedBox(height: 12),
@@ -485,7 +485,7 @@ class EarningsDetailScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Earnings add up the direct savings on every SHIELD order — printed MRP less the discounted member price you paid — and the 10% bonus SHIELD credits when you activate a Health Pass plan.',
+                        'Earnings add up the direct savings on every Sahakar 360 order — printed MRP less the discounted member price you paid — and the 10% bonus Sahakar 360 credits when you activate a Health Pass plan.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.4,

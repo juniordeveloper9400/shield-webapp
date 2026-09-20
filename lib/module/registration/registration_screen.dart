@@ -510,7 +510,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         const SizedBox(height: 14),
         LabelledField(
           label: 'Referral ID',
-          hint: "From an agent, or a friend's SHIELD Member ID (optional)",
+          hint: "From an agent, or a friend's Sahakar 360 Member ID (optional)",
           controller: _referralCode,
           icon: Icons.card_giftcard_outlined,
           textCapitalization: TextCapitalization.characters,
@@ -521,7 +521,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
   Widget _buildStorePicker() {
     return _Section(
-      title: 'Your SHIELD store',
+      title: 'Your Sahakar 360 store',
       subtitle: 'Allow location and pick your branch on the map. The nearest '
           'one is chosen for you — tap another pin or row to change it.',
       children: [
@@ -539,7 +539,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           }),
         ),
         if (_submitted && !_locationReady)
-          const _FieldError('Enable location to choose your SHIELD branch'),
+          const _FieldError('Enable location to choose your Sahakar 360 branch'),
         if (_submitted && _locationReady && _storeId == null)
           const _FieldError('Choose the branch you want to be served by'),
       ],

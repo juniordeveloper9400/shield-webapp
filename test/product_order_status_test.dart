@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shield/dates.dart' show formatDate, formatDateTime12h;
 import 'package:shield/module/orders/order_track.dart';
 import 'package:shield/module/orders/purchase_service.dart';
 
@@ -180,6 +181,48 @@ void main() {
       expect(Purchase.fromRow(row()).stage, OrderStage.placed);
       final missing = row()..remove('storeContactedAt');
       expect(Purchase.fromRow(missing).stage, OrderStage.placed);
+    });
+
+    test('shows the exact time the order was placed, in the device time zone', () {
+      // `placedOn` is the date-only column; `placedAt` is the real moment.
+      final placed = DateTime.utc(2026, 9, 20, 13, 30, 45);
+      final purchase = Purchase.fromRow({
+        ...row(),
+        'placedOn': '2026-09-20',
+        'placedAt': placed.toIso8601String(),
+      });
+
+      expect(purchase.placedOn, formatDateTime12h(placed.toLocal()));
+      // Never the midnight a date-only value used to turn into.
+      expect(purchase.placedOn, isNot(endsWith('12:00 AM')));
+      expect(purchase.placedOn, matches(r'^\d{2} [A-Z][a-z]{2} \d{4}, \d{2}:\d{2} (AM|PM)$'));
+    });
+
+    test('placedAt decides the date too, not the date-only column beside it', () {
+      // An evening order in India is already tomorrow in UTC-based columns.
+      final placed = DateTime.utc(2026, 9, 20, 19, 0);
+      final purchase = Purchase.fromRow({
+        ...row(),
+        'placedOn': '2026-09-20',
+        'placedAt': placed.toIso8601String(),
+      });
+
+      expect(purchase.placedOn, startsWith(formatDate(placed.toLocal())));
+    });
+
+    test('a backend with only the date shows a date — no invented time', () {
+      final purchase = Purchase.fromRow({
+        ...row(),
+        'placedOn': '2026-09-20',
+        'placedAt': null,
+      });
+
+      expect(purchase.placedOn, '20 Sep 2026');
+    });
+
+    test('an unreadable value is shown as it came, not hidden', () {
+      final purchase = Purchase.fromRow({...row(), 'placedOn': 'n/a', 'placedAt': null});
+      expect(purchase.placedOn, 'n/a');
     });
 
     test('merging in the bill image keeps the contact stamp', () {

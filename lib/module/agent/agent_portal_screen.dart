@@ -293,10 +293,10 @@ class _AgentInviteButton extends StatelessWidget {
         try {
           await SharePlus.instance.share(
             ShareParams(
-              subject: 'My SHIELD agent code',
+              subject: 'My Sahakar 360 agent code',
               text:
-                  "I'm a SHIELD agent — ${agent.name}. Enter my agent code "
-                  '${agent.agentCode} when you check out on the SHIELD app '
+                  "I'm a Sahakar 360 agent — ${agent.name}. Enter my agent code "
+                  '${agent.agentCode} when you check out on the Sahakar 360 app '
                   'so your order is placed through me.',
             ),
           );

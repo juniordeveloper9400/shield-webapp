@@ -102,7 +102,7 @@ class BillInvoice {
     this.placedAt,
     this.customerName = '',
     this.customerPhone = '',
-    this.storeName = 'SHIELD Pharmacy',
+    this.storeName = 'Sahakar 360 Pharmacy',
     this.storeAddress = '',
     this.storePhone = '',
     this.fulfillment = 'Home delivery',
@@ -158,7 +158,7 @@ class BillInvoice {
       placedAt: placedAt,
       customerName: customerName,
       customerPhone: customerPhone,
-      storeName: storeName.trim().isEmpty ? 'SHIELD Pharmacy' : storeName,
+      storeName: storeName.trim().isEmpty ? 'Sahakar 360 Pharmacy' : storeName,
       storeAddress: storeAddress,
       storePhone: storePhone,
       fulfillment: homeDelivery ? 'Home delivery' : 'Store pickup',
@@ -208,7 +208,7 @@ class BillInvoice {
   /// The invoice as plain text, for sharing.
   String toShareText() {
     final out = StringBuffer()
-      ..writeln('SHIELD Pharmacy — Invoice $number')
+      ..writeln('Sahakar 360 Pharmacy — Invoice $number')
       ..writeln(storeName);
     if (storeAddress.isNotEmpty) out.writeln(storeAddress);
     if (date != null) out.writeln('Date: ${formatDateTime12h(date!)}');

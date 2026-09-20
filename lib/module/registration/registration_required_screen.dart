@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 
 /// What a screen shows in place of its real content while the signed-in
-/// member's own SHIELD registration isn't complete yet — anywhere a flow's
+/// member's own Sahakar 360 registration isn't complete yet — anywhere a flow's
 /// eventual submit is refused server-side until that's true (agent requests,
 /// so far), there is no point showing the real form at all: better to say so
 /// up front than let someone fill a whole flow in for a submit that can only
@@ -62,7 +62,7 @@ class RegistrationRequiredScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               const Text(
-                "SHIELD needs your registration finished — name and store — "
+                "Sahakar 360 needs your registration finished — name and store — "
                 'before this can be submitted. Complete it, then come back '
                 'to this screen.',
                 textAlign: TextAlign.center,

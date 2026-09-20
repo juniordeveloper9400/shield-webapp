@@ -526,7 +526,7 @@ class _ReviewedStrip extends StatelessWidget {
                 ),
                 SizedBox(height: 2),
                 Text(
-                  "Checked by SHIELD's registered pharmacy team",
+                  "Checked by Sahakar 360's registered pharmacy team",
                   style: TextStyle(fontSize: 12, color: AppColors.textMuted),
                 ),
               ],
