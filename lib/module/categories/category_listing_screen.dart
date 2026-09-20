@@ -39,6 +39,11 @@ class _CategoryListingScreenState extends State<CategoryListingScreen> {
   void initState() {
     super.initState();
     _selected = widget.initial;
+    // widget.group is a snapshot handed in by whoever pushed this screen —
+    // warm the catalogue anyway so the *next* time a category is opened (from
+    // Categories or the home strip, both of which read the live list) it
+    // already has the admin's banner rather than racing the first load.
+    CategoryCatalog.instance.ensureLoaded();
     CatalogueService.instance.ensureLoaded();
   }
 

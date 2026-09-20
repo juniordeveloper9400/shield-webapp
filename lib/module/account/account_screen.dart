@@ -20,6 +20,8 @@ import '../investor/investor_service.dart';
 import '../location/address_form_screen.dart';
 import '../orders/bills_screen.dart';
 import '../patients/manage_patients_screen.dart';
+import '../refer/refer_earn_access.dart';
+import '../refer/refer_earn_screen.dart';
 import '../refer/referral_service.dart';
 import '../registration/registration_flow.dart';
 import '../registration/registration_service.dart';
@@ -149,29 +151,41 @@ class AccountScreen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
-          _MenuGroup(
-            items: [
-              _MenuItem(
-                icon: Icons.headset_mic_outlined,
-                label: 'Help & Support',
-                onTap: () {},
-              ),
-              _MenuItem(
-                icon: Icons.privacy_tip_outlined,
-                label: 'Privacy Policy',
-                onTap: () => _openPrivacyPolicy(context),
-              ),
-              _MenuItem(
-                icon: Icons.description_outlined,
-                label: 'Terms & Conditions',
-                onTap: () => _openTerms(context),
-              ),
-              _MenuItem(
-                icon: Icons.settings_outlined,
-                label: 'Settings',
-                onTap: () {},
-              ),
-            ],
+          // Listens so the Refer & Earn row follows the persona: a plain
+          // member has it, an agent or investor never does, and a member the
+          // admin converts while this tab is open loses it in place.
+          ListenableBuilder(
+            listenable: ReferEarnAccess.changes,
+            builder: (context, _) => _MenuGroup(
+              items: [
+                if (ReferEarnAccess.isOffered)
+                  _MenuItem(
+                    icon: Icons.card_giftcard_rounded,
+                    label: 'Refer & Earn',
+                    onTap: () => ReferEarnScreen.open(context),
+                  ),
+                _MenuItem(
+                  icon: Icons.headset_mic_outlined,
+                  label: 'Help & Support',
+                  onTap: () {},
+                ),
+                _MenuItem(
+                  icon: Icons.privacy_tip_outlined,
+                  label: 'Privacy Policy',
+                  onTap: () => _openPrivacyPolicy(context),
+                ),
+                _MenuItem(
+                  icon: Icons.description_outlined,
+                  label: 'Terms & Conditions',
+                  onTap: () => _openTerms(context),
+                ),
+                _MenuItem(
+                  icon: Icons.settings_outlined,
+                  label: 'Settings',
+                  onTap: () {},
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 14),
           _MenuGroup(

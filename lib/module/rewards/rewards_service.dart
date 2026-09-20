@@ -31,6 +31,21 @@ class RewardsService extends ChangeNotifier {
   /// Credited once, on the first completed registration.
   static const int registrationBonus = 500;
 
+  /// What a point is worth: 100 points to the rupee. The one exchange rate in
+  /// the programme — the Rewards screen, the wallet redemption and the
+  /// backend's own (`POINTS_PER_RUPEE` in `rewards.service.ts`) all read
+  /// this, so they cannot quote different ones. Change them together.
+  static const int pointsPerRupee = 100;
+
+  /// [points] as whole rupees, rounded down — the most they can buy.
+  static int rupeesForPoints(int points) =>
+      points <= 0 ? 0 : points ~/ pointsPerRupee;
+
+  /// The most of [points] that turn into a whole number of rupees: 250 points
+  /// are 200 that can be spent and 50 that wait for another 50 to make ₹1.
+  static int wholeRupeePoints(int points) =>
+      rupeesForPoints(points) * pointsPerRupee;
+
   /// Earn rate on a paid order: ₹100 → 10 points (ten rupees to the point).
   static const int rupeesPerPoint = 10;
 

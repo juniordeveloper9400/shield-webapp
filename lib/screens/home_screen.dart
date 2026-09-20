@@ -24,6 +24,7 @@ import '../module/home/refer_earn_card.dart';
 import '../module/investor/investor_access_card.dart';
 import '../module/investor/investor_service.dart';
 import '../module/privilege/privilege_card.dart';
+import '../module/refer/refer_earn_access.dart';
 import '../module/search/search_screen.dart';
 import '../module/wallet/wallet_service.dart';
 
@@ -98,8 +99,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     // & Earn, which is where the other half comes from and the
                     // obvious next tap once the total has been read.
                     const EarningsSection(),
-                    // Refer & Earn for a member; the Agent Portal in its place
-                    // once a known agent number is signed in. A skeleton in
+                    // Refer & Earn for a plain member; the Agent Portal in its
+                    // place once a known agent number is signed in, and for an
+                    // investor nothing here at all — their Investor Access
+                    // card follows below instead. A skeleton in
                     // this same slot until PersonaService has actually
                     // resolved which one that is — otherwise Refer & Earn
                     // flashes up first for every member, agent or not, and
@@ -121,18 +124,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                               final agent = AgentService.instance
                                   .agentForPhone(user?.phone);
                               return agent == null
-                                  ? const ReferEarnCard()
+                                  ? const ReferEarnGate(child: ReferEarnCard())
                                   : AgentPortalCard(agent: agent);
                             },
                           );
                         },
                       ),
                     ),
-                    // Alongside whichever of those just showed, never in its
-                    // place — an investor number is its own thing, not a
-                    // stand-in for being a member or an agent. Not a general
-                    // invitation to everyone else either: this section is
-                    // only ever for the one recognised investor number.
+                    // An investor's own section, in the slot Refer & Earn
+                    // would otherwise have held. Not a general invitation to
+                    // everyone else: this is only ever for the one recognised
+                    // investor number.
                     ValueListenableBuilder<AuthUser?>(
                       valueListenable: AuthService.instance.currentUser,
                       builder: (context, user, _) => ListenableBuilder(

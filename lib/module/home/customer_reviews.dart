@@ -5,54 +5,43 @@ import '../../widgets/app_image.dart';
 import 'customer_reviews_service.dart';
 import 'review_video_player_screen.dart';
 
-/// The video id out of a YouTube URL — `watch?v=`, `youtu.be/`, `/embed/`,
-/// `/shorts/` and `/live/` links, with or without extra query params — or
-/// null when [url] is not a YouTube link at all.
-String? _youtubeVideoId(String url) {
+/// Whether [url] is a video file the in-app player can stream: an `http(s)`
+/// link — what the admin console's upload produces, a public Supabase Storage
+/// URL. Anything else is a row from before uploads existed (a YouTube link, a
+/// bundled asset path that no longer ships) and has nowhere to play.
+bool isPlayableReviewVideo(String url) {
   final uri = Uri.tryParse(url.trim());
-  if (uri == null) return null;
+  if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
+    return false;
+  }
+  if (uri.host.isEmpty) return false;
   final host = uri.host.toLowerCase();
-
-  if (host == 'youtu.be' || host.endsWith('.youtu.be')) {
-    return uri.pathSegments.isNotEmpty ? uri.pathSegments.first : null;
-  }
-  if (!host.contains('youtube.com')) {
-    return null;
-  }
-
-  final fromQuery = uri.queryParameters['v'];
-  if (fromQuery != null && fromQuery.isNotEmpty) {
-    return fromQuery;
-  }
-  final segments = uri.pathSegments;
-  for (final marker in ['embed', 'shorts', 'live']) {
-    final index = segments.indexOf(marker);
-    if (index != -1 && index + 1 < segments.length) {
-      return segments[index + 1];
-    }
-  }
-  return null;
+  final isYoutube =
+      host.contains('youtube.com') ||
+      host == 'youtu.be' ||
+      host.endsWith('.youtu.be');
+  return !isYoutube;
 }
 
-/// One clip in the reel — always a YouTube link, added from the admin
-/// console's Customer Videos page.
+/// One clip in the reel — a video file the admin uploaded from the console's
+/// Customer Videos page, stored in Supabase Storage.
 ///
 /// [name] is what the card and the player header are labelled with. [subtitle]
-/// is the line shown under the title on the player page, and is null where
-/// there is nothing to add.
+/// is the line shown over the video in the player, and is null where there is
+/// nothing to add.
 class CustomerReviewItem {
   final String id;
   final String name;
 
-  /// A YouTube URL (watch/youtu.be/embed/shorts/live link). Anything that
-  /// does not parse as one has nowhere to play — see [youtubeId].
+  /// The public URL of the uploaded video file.
   final String video;
 
-  /// Optional line shown under the title on the player page.
+  /// Optional line shown over the video in the player.
   final String? subtitle;
 
-  /// An admin-supplied poster image for the thumbnail card, or null to use
-  /// YouTube's own poster for the clip.
+  /// The poster on the card — a frame the console grabbed from the video when
+  /// it was uploaded (or an image the admin chose): a `data:` URI or an
+  /// `http(s)` URL. Null when there is none, and the card shows a plain tile.
   final String? thumbnail;
 
   const CustomerReviewItem({
@@ -63,31 +52,19 @@ class CustomerReviewItem {
     this.thumbnail,
   });
 
-  /// The YouTube video id [video] points to, or null when it does not parse
-  /// as a YouTube link at all (nothing plays for a card like this).
-  String? get youtubeId => _youtubeVideoId(video);
-
-  /// What the thumbnail card shows: the admin-supplied [thumbnail] where
-  /// there is one, otherwise YouTube's own poster — YouTube serves that at a
-  /// fixed URL for every video, so there is never a reason to ask the admin
-  /// to upload one by hand. Null only when [video] is not a YouTube link.
-  String? get displayThumbnail {
-    final custom = thumbnail;
-    if (custom != null && custom.isNotEmpty) {
-      return custom;
-    }
-    final id = youtubeId;
-    return id == null ? null : 'https://img.youtube.com/vi/$id/hqdefault.jpg';
-  }
+  /// Whether the player can stream [video] — see [isPlayableReviewVideo].
+  bool get isPlayable => isPlayableReviewVideo(video);
 }
 
 /// "What our customers have to say" — the customer video reel under the offer
 /// banner.
 ///
-/// Backed by [CustomerReviewsService]: shows whatever YouTube clips the
-/// pharmacy admin has added and switched on. Renders nothing at all while
-/// there are none — there is no bundled fallback reel, so an empty console
-/// list means an empty (not placeholder) section.
+/// Backed by [CustomerReviewsService]: shows whatever clips the pharmacy
+/// admin has uploaded and switched on. Tapping a card opens the clip in the
+/// in-app player ([showReviewVideo]), which plays it straight from storage and
+/// lets the viewer swipe on to the next. Renders nothing at all while there
+/// are none — there is no bundled fallback reel, so an empty console list
+/// means an empty (not placeholder) section.
 class CustomerReviews extends StatefulWidget {
   const CustomerReviews({super.key});
 
@@ -113,23 +90,6 @@ class _CustomerReviewsState extends State<CustomerReviews> {
     if (mounted) {
       setState(() {});
     }
-  }
-
-  /// Opens the tapped clip as an overlay on this same page, in YouTube's own
-  /// embedded player — see [showReviewVideo]. A card with no
-  /// [CustomerReviewItem.youtubeId] (a malformed or pre-YouTube leftover row)
-  /// has nowhere to go, so the tap is simply a no-op rather than a crash.
-  void _openReview(BuildContext context, CustomerReviewItem review) {
-    final youtubeId = review.youtubeId;
-    if (youtubeId == null) {
-      return;
-    }
-    showReviewVideo(
-      context,
-      videoId: youtubeId,
-      title: review.name,
-      description: review.subtitle,
-    );
   }
 
   @override
@@ -167,7 +127,11 @@ class _CustomerReviewsState extends State<CustomerReviews> {
                 final review = reviews[index];
                 return _ReviewThumbnailCard(
                   review: review,
-                  onTap: () => _openReview(context, review),
+                  onTap: () => showReviewVideo(
+                    context,
+                    reviews: reviews,
+                    initialIndex: index,
+                  ),
                 );
               },
             ),
@@ -178,9 +142,9 @@ class _CustomerReviewsState extends State<CustomerReviews> {
   }
 }
 
-/// One card in the reel: the clip's YouTube poster, with a play badge over
-/// it — a still, standard "tap to watch" affordance, since a tap always
-/// opens YouTube's own player rather than an in-app swipe reel.
+/// One card in the reel: the clip's poster, with a play badge over it — a
+/// still, standard "tap to watch" affordance. The poster is a stored image, so
+/// drawing the reel never downloads a video.
 class _ReviewThumbnailCard extends StatelessWidget {
   final CustomerReviewItem review;
   final VoidCallback onTap;
@@ -189,7 +153,7 @@ class _ReviewThumbnailCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final poster = review.displayThumbnail;
+    final poster = review.thumbnail;
     return GestureDetector(
       onTap: onTap,
       child: Container(

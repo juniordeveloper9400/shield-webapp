@@ -5,6 +5,7 @@ import '../../theme/app_colors.dart';
 import '../categories/categories_screen.dart';
 import '../home/points_badge.dart' show RewardCoin;
 import '../home/refer_earn_card.dart';
+import '../refer/refer_earn_access.dart';
 import 'rewards_service.dart';
 
 /// The reward-points home, opened from the coin in the header.
@@ -23,13 +24,14 @@ import 'rewards_service.dart';
 class RewardsScreen extends StatefulWidget {
   const RewardsScreen({super.key});
 
-  /// Points to a rupee. The one exchange rate in the programme, held here so
-  /// the hero figure and the coin-worth card can never quote different ones:
-  /// 100 coins take ₹10 off an order, so ten coins to the rupee.
-  static const int pointsPerRupee = 10;
+  /// Points to a rupee. The one exchange rate in the programme, held on
+  /// [RewardsService] so the hero figure, the coin-worth card, the wallet
+  /// redemption and the backend can never quote different ones: 100 coins
+  /// are worth ₹1.
+  static const int pointsPerRupee = RewardsService.pointsPerRupee;
 
   /// The rate stated in the round numbers a member reads it in.
-  static const String rateLabel = '100 = ₹10';
+  static const String rateLabel = '100 = ₹1';
 
   /// What the "three orders this month" offer coupon is worth.
   static const int milestoneReward = 350;
@@ -39,7 +41,8 @@ class RewardsScreen extends StatefulWidget {
       (points / pointsPerRupee).toStringAsFixed(2);
 
   /// Whole rupees only — the discount rounds down to the nearest ₹1.
-  static int wholeRupeesFor(int points) => points ~/ pointsPerRupee;
+  static int wholeRupeesFor(int points) =>
+      RewardsService.rupeesForPoints(points);
 
   @override
   State<RewardsScreen> createState() => _RewardsScreenState();
@@ -96,11 +99,19 @@ class _RewardsScreenState extends State<RewardsScreen> {
               const _ExclusiveOffers(),
               const SizedBox(height: 30),
 
-              const _SectionLabel('GET INSTANT COINS'),
-              const SizedBox(height: 14),
-              // Carries its own horizontal padding and bottom margin, unlike
-              // the flat card it replaced.
-              const ReferEarnCard(),
+              // Refer & Earn is the whole of this section, so an agent or
+              // investor — who is not offered it — loses the heading too.
+              const ReferEarnGate(
+                child: Column(
+                  children: [
+                    _SectionLabel('GET INSTANT COINS'),
+                    SizedBox(height: 14),
+                    // Carries its own horizontal padding and bottom margin,
+                    // unlike the flat card it replaced.
+                    ReferEarnCard(),
+                  ],
+                ),
+              ),
               const SizedBox(height: 4),
 
               const Padding(

@@ -26,8 +26,10 @@ enum CustomerReviewsStatus {
 ///
 /// Loads every active row from `app.customer_review_video` once per session
 /// (see [CustomerReviewRepository]) and keeps it in memory. [items] is
-/// exactly that list — there is no bundled fallback, so the reel is simply
-/// absent until the admin adds a real (YouTube) clip.
+/// that list minus any row the in-app player cannot stream (a leftover
+/// YouTube link, a bundled asset path that no longer ships) — there is no
+/// bundled fallback, so the reel is simply absent until the admin uploads a
+/// real video.
 class CustomerReviewsService extends ChangeNotifier {
   CustomerReviewsService._();
 
@@ -43,7 +45,8 @@ class CustomerReviewsService extends ChangeNotifier {
 
   bool get isLoading => _status == CustomerReviewsStatus.loading;
 
-  /// The clips the reel shows — whatever the admin has switched on.
+  /// The clips the reel shows — whatever the admin has switched on and
+  /// uploaded a playable video for.
   List<CustomerReviewItem> get items => _admin;
 
   Future<void>? _inFlight;
@@ -84,11 +87,12 @@ class CustomerReviewsService extends ChangeNotifier {
       if (clips == null) {
         _set(CustomerReviewsStatus.error, const []);
       } else {
+        final playable = _playable(clips);
         _set(
-          clips.isEmpty
+          playable.isEmpty
               ? CustomerReviewsStatus.empty
               : CustomerReviewsStatus.ready,
-          clips,
+          playable,
         );
       }
     } catch (error) {
@@ -98,6 +102,11 @@ class CustomerReviewsService extends ChangeNotifier {
       _inFlight = null;
     }
   }
+
+  /// Only clips the in-app player can stream — an old row that still points
+  /// at YouTube or a bundled file would be a card that does nothing when tapped.
+  static List<CustomerReviewItem> _playable(List<CustomerReviewItem> clips) =>
+      clips.where((clip) => clip.isPlayable).toList(growable: false);
 
   void _set(CustomerReviewsStatus status, List<CustomerReviewItem> clips) {
     _status = status;
@@ -111,11 +120,12 @@ class CustomerReviewsService extends ChangeNotifier {
   @visibleForTesting
   void debugSeed(List<CustomerReviewItem> clips) {
     _inFlight = null;
+    final playable = _playable(clips);
     _set(
-      clips.isEmpty
+      playable.isEmpty
           ? CustomerReviewsStatus.empty
           : CustomerReviewsStatus.ready,
-      List<CustomerReviewItem>.unmodifiable(clips),
+      List<CustomerReviewItem>.unmodifiable(playable),
     );
   }
 

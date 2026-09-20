@@ -12,6 +12,7 @@ import '../rewards/rewards_service.dart';
 /// One line in the wallet ledger.
 @immutable
 class WalletEntry {
+  final String kind;
   final String label;
   final String date;
 
@@ -26,6 +27,7 @@ class WalletEntry {
   final DateTime occurredOn;
 
   WalletEntry({
+    this.kind = '',
     required this.label,
     required this.date,
     required this.amount,
@@ -323,7 +325,7 @@ class WalletService extends ChangeNotifier {
   /// that could still be topped up through some other path would not be
   /// locked at all. A card that is only submitted, not approved, does not
   /// count: it has credited nothing.
-  bool get isActivated => _cards.isNotEmpty;
+  bool get isActivated => _cards.isNotEmpty || _balance > 0;
 
   /// Cards submitted and not yet on the wallet — awaiting approval or rejected.
   /// Newest first, the order the wallet screen lists them.
@@ -512,6 +514,7 @@ class WalletService extends ChangeNotifier {
         ..addAll([
           for (final entry in remoteEntries)
             WalletEntry(
+              kind: entry.kind,
               label: entry.label,
               date: formatDate(entry.occurredOn),
               amount: entry.amount,
@@ -591,14 +594,38 @@ class WalletService extends ChangeNotifier {
   int get redeemedThisMonth {
     final now = DateTime.now();
     var total = 0;
-    for (final entry in _entries) {
+    var earnings = 0;
+    for (final entry in _entries.reversed) {
+      if (_isEarnings(entry) && entry.amount > 0) {
+        earnings += entry.amount;
+      }
+      final earningsSpent = entry.amount < 0
+          ? math.min(earnings, -entry.amount)
+          : 0;
+      earnings -= earningsSpent;
       if (entry.amount < 0 &&
           entry.occurredOn.year == now.year &&
           entry.occurredOn.month == now.month) {
-        total += -entry.amount;
+        total += -entry.amount - earningsSpent;
       }
     }
     return total;
+  }
+
+  static bool _isEarnings(WalletEntry entry) =>
+      entry.kind == 'REFERRAL_EARNINGS' || entry.kind == 'AGENT_EARNINGS';
+
+  /// Earned commission is available immediately, independently of any plan.
+  int get earningsBalance {
+    var earned = 0;
+    for (final entry in _entries.reversed) {
+      if (_isEarnings(entry) && entry.amount > 0) {
+        earned += entry.amount;
+      } else if (entry.amount < 0) {
+        earned = math.max(0, earned + entry.amount);
+      }
+    }
+    return math.min(earned, _balance);
   }
 
   /// What is left of this month's allowance.
@@ -619,7 +646,7 @@ class WalletService extends ChangeNotifier {
     if (!isActivated || orderAmount <= 0) {
       return 0;
     }
-    final cap = math.min(monthlyBalance, _balance);
+    final cap = math.min(monthlyBalance + earningsBalance, _balance);
     return math.min(orderAmount, cap);
   }
 
@@ -669,7 +696,7 @@ class WalletService extends ChangeNotifier {
     String date = 'Today',
     DateTime? on,
   }) {
-    if (!isActivated || amount <= 0) {
+    if (_cards.isEmpty || amount <= 0) {
       return false;
     }
     _cards[_cards.length - 1] = _cards.last.rechargedWith(
@@ -701,7 +728,7 @@ class WalletService extends ChangeNotifier {
       return false;
     }
     _balance += amount;
-    _entries.insert(0, WalletEntry(label: label, date: date, amount: amount));
+    _entries.insert(0, WalletEntry(kind: 'AGENT_EARNINGS', label: label, date: date, amount: amount));
     notifyListeners();
     return true;
   }
@@ -803,16 +830,22 @@ class WalletService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Spends reward points and moves their value into the wallet balance.
+  /// Spends reward points and moves their value into the wallet balance, at
+  /// 100 points to the rupee ([RewardsService.pointsPerRupee]).
   ///
   /// The points side is a negative `REDEMPTION` row on the reward-points
-  /// ledger ([RewardsService.redeem]); the wallet side is a credit line here.
-  /// Points become wallet balance, so they cannot be redeemed into a wallet
-  /// that is not open yet.
+  /// ledger ([RewardsService.redeem]); the wallet side is a credit line here,
+  /// in rupees — 500 points are ₹5, not ₹500. Points become wallet balance,
+  /// so they cannot be redeemed into a wallet that is not open yet, and only
+  /// whole rupees move: with no amount named, everything that makes whole
+  /// rupees (250 points redeems 200 and leaves 50), and a named amount must
+  /// be a multiple of the rate — the same rule the backend enforces.
   Future<bool> redeemPoints({int? points, String date = 'Today'}) async {
-    final toRedeem = points ?? RewardsService.instance.balance;
+    final toRedeem =
+        points ?? RewardsService.wholeRupeePoints(RewardsService.instance.balance);
     if (!isActivated ||
-        toRedeem <= 0 ||
+        toRedeem < RewardsService.pointsPerRupee ||
+        toRedeem % RewardsService.pointsPerRupee != 0 ||
         toRedeem > RewardsService.instance.balance) {
       return false;
     }
@@ -822,15 +855,16 @@ class WalletService extends ChangeNotifier {
       return false;
     }
 
+    final rupees = RewardsService.rupeesForPoints(toRedeem);
     _entries.insert(
       0,
       WalletEntry(
         label: 'Shield points redeemed · $toRedeem pts',
         date: date,
-        amount: toRedeem,
+        amount: rupees,
       ),
     );
-    _balance += toRedeem;
+    _balance += rupees;
     notifyListeners();
     return true;
   }

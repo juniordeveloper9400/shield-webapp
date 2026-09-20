@@ -16,11 +16,13 @@ class RemoteWallet {
 /// `GET /v1/member/wallet/entries`. Credits positive, debits negative, same
 /// convention as [WalletEntry].
 class RemoteWalletEntry {
+  final String kind;
   final String label;
   final int amount;
   final DateTime occurredOn;
 
   const RemoteWalletEntry({
+    this.kind = '',
     required this.label,
     required this.amount,
     required this.occurredOn,
@@ -232,6 +234,7 @@ class WalletRepository {
       return [
         for (final row in rows.cast<Map<String, dynamic>>())
           RemoteWalletEntry(
+            kind: (row['kind'] ?? '').toString(),
             label: (row['label'] ?? '').toString(),
             amount: _int(row['amount']),
             occurredOn: _date(row['occurredOn']) ?? DateTime.now(),

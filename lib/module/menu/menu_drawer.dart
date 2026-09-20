@@ -16,6 +16,7 @@ import '../labtest/lab_cart_screen.dart';
 import '../labtest/lab_cart_service.dart';
 import '../orders/purchase_service.dart';
 import '../rewards/rewards_service.dart';
+import '../refer/refer_earn_access.dart';
 import '../refer/refer_earn_screen.dart';
 import '../rewards/rewards_screen.dart';
 import '../wallet/wallet_screen.dart';
@@ -156,13 +157,17 @@ class MenuDrawer extends StatelessWidget {
                               AgentPortalScreen(agent: agent),
                             ),
                           ),
-                        _MenuRow(
-                          label: 'Refer & earn',
-                          transparent: true,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            ReferEarnScreen.open(context);
-                          },
+                        // Plain members only — an agent or investor sees their
+                        // own portal here instead.
+                        ReferEarnGate(
+                          child: _MenuRow(
+                            label: 'Refer & earn',
+                            transparent: true,
+                            onTap: () {
+                              Navigator.of(context).pop();
+                              ReferEarnScreen.open(context);
+                            },
+                          ),
                         ),
                         // Orders is a destination now, so the row switches to
                         // it rather than stacking a second copy on top of the

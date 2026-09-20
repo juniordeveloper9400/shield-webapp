@@ -9,6 +9,7 @@ import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/agent/agent_geo.dart';
 import 'module/catalogue/catalogue_service.dart';
+import 'module/categories/category_catalogue.dart';
 import 'module/home/customer_reviews_service.dart';
 import 'module/orders/purchase_service.dart';
 import 'module/persona/persona_service.dart';
@@ -70,6 +71,11 @@ Future<void> main() async {
   // category and search screens each call ensureLoaded() again and share this
   // one request.
   unawaited(CatalogueService.instance.ensureLoaded());
+
+  // Warm the category catalogue the same way, so "Shop by categories" draws the
+  // admin's own chip and tile images on first paint rather than the bundled
+  // seed flashing up first.
+  unawaited(CategoryCatalog.instance.ensureLoaded());
 
   // Warm "What our customers have to say" the same way, so the reel shows
   // the admin's own clips on first paint rather than the bundled fallback

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/backend/category_repository.dart';
 import '../../theme/app_colors.dart';
 
 /// One browsable sub-category — the unit both the home strip and the
@@ -69,7 +70,14 @@ class CategoryGroup {
 class CategoryCatalogue {
   const CategoryCatalogue._();
 
-  static const List<CategoryGroup> groups = [
+  /// The live catalogue — the admin console's own categories once
+  /// [CategoryCatalog] has loaded them, otherwise [_seed].
+  static List<CategoryGroup> get groups => CategoryCatalog.instance.groups;
+
+  /// The bundled fallback: the categories SHIELD shipped with. Shown until
+  /// (and if) the backend copy loads, and the only list `flutter test` ever
+  /// sees (`BackendHttp.isConfigured` is false under test).
+  static const List<CategoryGroup> _seed = [
     CategoryGroup(
       title: 'Personal Care',
       tabLabel: 'Personal\nCare',
@@ -298,8 +306,100 @@ class CategoryCatalogue {
     'Surgicals',
   ];
 
+  /// [groups] used to be a fixed const list, so every [_stripOrder] title was
+  /// guaranteed to exist. Now that an admin can rename or retire a category,
+  /// a title the strip expects can go missing — skip it rather than crash the
+  /// home screen; the strip just shows one fewer chip until the admin picks a
+  /// replacement.
   static List<CategoryGroup> get shoppable => [
     for (final title in _stripOrder)
-      groups.firstWhere((group) => group.title == title),
+      if (groups.any((group) => group.title == title))
+        groups.firstWhere((group) => group.title == title),
   ];
+}
+
+/// Holds the category list in force and swaps in the backend copy once it has
+/// loaded. A [ChangeNotifier] so the Categories tab, the home "Shop by
+/// categories" strip and a category's listing screen rebuild when the admin's
+/// own categories (their chip and tile images, and banners) arrive.
+///
+/// The same shape as the member app's `CategoryCatalog`, fed from `backend/api`
+/// instead of Neon: warm it once at launch (`main.dart`), let every screen call
+/// [ensureLoaded] again in `initState` (they share one request), and fall back
+/// to the bundled seed whenever the backend is missing, unreachable, or the
+/// tables are empty.
+class CategoryCatalog extends ChangeNotifier {
+  CategoryCatalog._();
+
+  static final CategoryCatalog instance = CategoryCatalog._();
+
+  List<CategoryGroup> _live = CategoryCatalogue._seed;
+
+  /// The categories in force — the backend copy once [ensureLoaded] has pulled
+  /// them, otherwise the bundled seed.
+  List<CategoryGroup> get groups => _live;
+
+  bool _loaded = false;
+  bool _fromBackend = false;
+  bool _attempted = false;
+  Future<void>? _inFlight;
+
+  /// Whether [groups] is the backend copy rather than the bundled seed.
+  bool get isFromBackend => _fromBackend;
+
+  /// True once a load has finished at least once — success, empty tables, or
+  /// failure. Lets a screen tell "still loading" from "loaded, nothing there".
+  bool get hasAttempted => _attempted;
+
+  /// Loads the category list from the backend once (best-effort). Safe to call
+  /// from every screen's `initState`; only the first call does work unless
+  /// [force].
+  Future<void> ensureLoaded({bool force = false}) {
+    if (force) {
+      _loaded = false;
+      _inFlight = null;
+    }
+    if (_loaded) return Future<void>.value();
+    return _inFlight ??= _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      final groups = await CategoryRepository.instance.fetchAll();
+      if (groups != null && groups.isNotEmpty) {
+        _live = groups;
+        _fromBackend = true;
+        _loaded = true;
+      }
+      // Otherwise nothing came back — backend not configured, or the tables
+      // were empty. Leave [_loaded] false so the next ensureLoaded() retries.
+    } catch (error) {
+      debugPrint('CategoryCatalog: catalogue load failed — $error');
+    } finally {
+      _attempted = true;
+      _inFlight = null;
+      notifyListeners();
+    }
+  }
+
+  /// Test hook — stand in [groups] for what a backend load would return.
+  @visibleForTesting
+  void useGroups(List<CategoryGroup> groups) {
+    _live = List<CategoryGroup>.unmodifiable(groups);
+    _loaded = true;
+    _fromBackend = true;
+    _attempted = true;
+    _inFlight = null;
+    notifyListeners();
+  }
+
+  /// Test hook — drop back to the bundled seed and forget any load.
+  @visibleForTesting
+  void reset() {
+    _live = CategoryCatalogue._seed;
+    _loaded = false;
+    _fromBackend = false;
+    _attempted = false;
+    _inFlight = null;
+  }
 }

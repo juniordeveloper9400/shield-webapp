@@ -40,8 +40,43 @@ class _CategorySectionState extends State<CategorySection> {
   List<CategoryGroup> get _groups => CategoryCatalogue.shoppable;
 
   @override
+  void initState() {
+    super.initState();
+    // The backend copy can still be loading (main.dart's ensureLoaded) the
+    // moment this strip first paints — ask again and refresh once it lands.
+    CategoryCatalog.instance.addListener(_onCatalogChanged);
+    CategoryCatalog.instance.ensureLoaded();
+  }
+
+  @override
+  void dispose() {
+    CategoryCatalog.instance.removeListener(_onCatalogChanged);
+    super.dispose();
+  }
+
+  /// The live groups can arrive with a different shape than whatever
+  /// [_selected] was resolved against (the seed) — re-find the opening group
+  /// by name, or fall back to the first one rather than an index that no
+  /// longer lines up.
+  void _onCatalogChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      final match = _groups.indexWhere((group) => group.title == _initialGroup);
+      _selected = match >= 0 ? match : 0;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final active = _groups[_selected];
+    final groups = _groups;
+    // Only reachable if an admin retitles every strip category away from
+    // _stripOrder at once — nothing left to show rather than a crash.
+    if (groups.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    final active = groups[_selected.clamp(0, groups.length - 1)];
 
     return Container(
       color: AppColors.white,
