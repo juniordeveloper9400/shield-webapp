@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../registration/registration_gate.dart';
 import 'auth_service.dart';
 import 'login_screen.dart';
 
@@ -41,5 +42,26 @@ class AuthFlow {
     if (signedIn && context.mounted) {
       await action();
     }
+  }
+
+  /// Like [guard], and then also requires a completed registration — for the
+  /// actions only registered members may take (checkout, booking, uploading a
+  /// prescription, buying a plan). An unregistered member is told why and
+  /// offered the form; [action] only runs if they finish it. [reason] finishes
+  /// the sentence "Only registered members can …".
+  static Future<void> guardRegistered(
+    BuildContext context,
+    String reason,
+    FutureOr<void> Function() action,
+  ) {
+    return guard(context, () async {
+      if (!context.mounted) {
+        return;
+      }
+      if (await RegistrationGate.ensure(context, action: reason) &&
+          context.mounted) {
+        await action();
+      }
+    });
   }
 }

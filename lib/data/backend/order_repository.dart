@@ -3,21 +3,30 @@ import 'dart:math';
 import '../../module/cart/cart_service.dart';
 import '../../module/checkout/fulfillment_type.dart';
 import '../../module/location/address_book.dart';
+import '../../module/orders/bill_invoice.dart';
 import 'address_repository.dart';
 import 'backend_http.dart';
 import 'care_repository.dart';
 
 /// One order's `app.bill` row, as [OrderRepository.fetchBill] reads it back —
-/// just the two fields [PurchaseService.ensureBillLoaded] actually needs on
-/// top of what the orders list already carries ([Purchase.billAmount] /
-/// [Purchase.billStatus]).
+/// what [PurchaseService.ensureBillLoaded] needs on top of what the orders
+/// list already carries ([Purchase.billAmount] / [Purchase.billStatus]): the
+/// bill's picture and the itemised invoice.
 class OrderBillDetail {
   /// The store's invoice picture, or null when this bill was priced but
   /// never had one attached.
   final String? image;
   final DateTime? sentAt;
 
-  const OrderBillDetail({required this.image, required this.sentAt});
+  /// The itemised invoice — items, prices, store, customer, totals — or null
+  /// when the backend predates it and sent only the bill row.
+  final BillInvoice? invoice;
+
+  const OrderBillDetail({
+    required this.image,
+    required this.sentAt,
+    this.invoice,
+  });
 }
 
 /// One prescription linked to an order, as [OrderRepository.fetchPrescriptions]
@@ -381,9 +390,11 @@ class OrderRepository {
           await BackendHttp.instance.request('GET', '/v1/member/orders/$orderId/bill')
               as Map<String, dynamic>;
       final image = (body['image'] as String?)?.trim();
+      final sentAt = DateTime.tryParse((body['sentAt'] ?? '').toString());
       return OrderBillDetail(
         image: image == null || image.isEmpty ? null : image,
-        sentAt: DateTime.tryParse((body['sentAt'] ?? '').toString()),
+        sentAt: sentAt,
+        invoice: invoiceFromBill(body, sentAt: sentAt),
       );
     } on BackendHttpException catch (error) {
       // 404 — "no bill sent for this order yet" — the ordinary case for
@@ -395,6 +406,77 @@ class OrderRepository {
       BackendHttp.log('OrderRepository.fetchBill failed', error: error);
       return null;
     }
+  }
+
+  /// Reads the `invoice` block `GET /v1/member/orders/:id/bill` returns beside
+  /// the bill's own columns (`order.service.ts`'s `buildInvoice`) into a
+  /// [BillInvoice]; null when the block is absent (an older backend).
+  ///
+  /// Money arrives as the `numeric` text the database uses ("70.00") and is
+  /// read into exact paise. Public only so a test can feed it a response.
+  static BillInvoice? invoiceFromBill(
+    Map<String, dynamic> body, {
+    DateTime? sentAt,
+  }) {
+    final raw = body['invoice'];
+    if (raw is! Map<String, dynamic>) {
+      return null;
+    }
+    String text(Map<String, dynamic>? map, String key) =>
+        (map?[key] ?? '').toString().trim();
+    String joined(Map<String, dynamic>? map, List<String> keys) =>
+        keys.map((key) => text(map, key)).where((p) => p.isNotEmpty).join(', ');
+    Map<String, dynamic>? asMap(Object? value) =>
+        value is Map<String, dynamic> ? value : null;
+
+    final customer = asMap(raw['customer']);
+    final store = asMap(raw['store']);
+    final address = asMap(raw['deliveryAddress']);
+    final status = text(raw, 'status');
+
+    return BillInvoice.compose(
+      number: text(raw, 'number'),
+      billedAt: sentAt,
+      placedAt: DateTime.tryParse(text(raw, 'placedAt')),
+      customerName: text(customer, 'name'),
+      customerPhone: text(customer, 'phone'),
+      storeName: text(store, 'name'),
+      storeAddress: joined(store, ['area', 'city', 'state', 'pincode']),
+      storePhone: text(store, 'phone'),
+      homeDelivery: text(raw, 'fulfillmentType') != 'STORE_PICKUP',
+      deliveryAddress: joined(address, [
+        'house',
+        'area',
+        'landmark',
+        'city',
+        'state',
+        'pincode',
+      ]),
+      orderStatus: status == 'DELIVERED'
+          ? 'Completed'
+          : status == 'CANCELLED'
+          ? 'Cancelled'
+          : 'In progress',
+      paid:
+          text(raw, 'paymentStatus') == 'PAID' ||
+          text(body, 'status') == 'PAID',
+      paidAt:
+          DateTime.tryParse(text(body, 'paidAt')) ??
+          DateTime.tryParse(text(raw, 'paidAt')),
+      lines: [
+        for (final line in (raw['lines'] as List<dynamic>? ?? const []))
+          if (line is Map<String, dynamic>)
+            InvoiceLine(
+              name: text(line, 'name'),
+              pack: text(line, 'pack'),
+              qty: int.tryParse(text(line, 'qty')) ?? 1,
+              unitPaise: paiseFrom(line['unitPrice']),
+            ),
+      ],
+      billPaise: paiseFrom(body['amount']),
+      paidTotalPaise: paiseFrom(raw['paidTotal']),
+      deliveryFeePaise: paiseFrom(raw['deliveryFee']),
+    );
   }
 
   /// The prescription(s) submitted into this order — `GET /v1/member/

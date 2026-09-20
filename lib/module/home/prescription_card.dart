@@ -19,9 +19,7 @@ class PrescriptionCard extends StatelessWidget {
       'order on ';
 
   void _openUpload(BuildContext context) {
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const UploadPrescriptionScreen()));
+    UploadPrescriptionScreen.open(context);
   }
 
   @override

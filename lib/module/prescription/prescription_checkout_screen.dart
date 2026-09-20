@@ -117,7 +117,7 @@ class _PrescriptionCheckoutScreenState
     }
     setState(() => _placing = true);
 
-    await AuthFlow.guard(context, () async {
+    await AuthFlow.guardRegistered(context, 'order medicines', () async {
       final id = 'SHD-${100500 + PurchaseService.instance.purchases.length}';
       final purchase = PurchaseService.instance.record(
         id: id,

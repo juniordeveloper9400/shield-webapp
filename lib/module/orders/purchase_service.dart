@@ -9,6 +9,7 @@ import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
 import '../checkout/fulfillment_type.dart';
+import 'bill_invoice.dart';
 
 enum PurchaseStatus { idle, loading, ready, error }
 
@@ -129,6 +130,13 @@ class Purchase {
   /// that fetch has landed, same as on a fresh order with no bill sent yet.
   final String? billImage;
 
+  /// The itemised invoice for this order's bill — items, prices, store,
+  /// customer, totals — from the same lazy `GET /v1/member/orders/:id/bill`
+  /// as [billImage]. Null until that fetch has landed, and the marker that it
+  /// has: a bill priced line by line has no [billImage] at all, so the
+  /// picture cannot be what says "loaded".
+  final BillInvoice? billInvoice;
+
   /// When the store sent [billImage] — `GET /v1/member/orders/:id/bill`'s
   /// `sentAt`. Null until fetched, same as [billImage].
   final DateTime? billedAt;
@@ -153,6 +161,7 @@ class Purchase {
     this.billAmount,
     this.billStatus,
     this.billImage,
+    this.billInvoice,
     this.billedAt,
     this.storeContactedAt,
   });
@@ -190,6 +199,7 @@ class Purchase {
     OrderPaymentStatus? paymentStatus,
     OrderPaymentStatus? billStatus,
     String? billImage,
+    BillInvoice? billInvoice,
     DateTime? billedAt,
   }) => Purchase(
     id: id,
@@ -205,6 +215,7 @@ class Purchase {
     billAmount: billAmount,
     billStatus: billStatus ?? this.billStatus,
     billImage: billImage ?? this.billImage,
+    billInvoice: billInvoice ?? this.billInvoice,
     billedAt: billedAt ?? this.billedAt,
     storeContactedAt: storeContactedAt,
   );
@@ -374,8 +385,15 @@ class PurchaseService extends ChangeNotifier {
   /// nothing to fetch ([order.billStatus] null — the list join found no
   /// `app.bill` row at all for this order) or [Purchase.billImage] is
   /// already set from an earlier call.
-  Future<void> ensureBillLoaded(Purchase order) async {
-    if (order.billStatus == null || order.billImage != null) {
+  ///
+  /// [refresh] fetches again even when the bill is already in memory — the
+  /// bill screen passes it so a bill the counter has just edited shows its
+  /// latest items rather than the copy from an earlier visit.
+  Future<void> ensureBillLoaded(Purchase order, {bool refresh = false}) async {
+    if (order.billStatus == null) {
+      return;
+    }
+    if (!refresh && (order.billImage != null || order.billInvoice != null)) {
       return;
     }
     final backendId = order.backendId;
@@ -392,6 +410,7 @@ class PurchaseService extends ChangeNotifier {
     }
     _purchases[index] = _purchases[index].copyWith(
       billImage: bill.image,
+      billInvoice: bill.invoice,
       billedAt: bill.sentAt,
     );
     notifyListeners();

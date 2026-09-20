@@ -4,6 +4,7 @@ import '../../theme/app_colors.dart';
 import 'lab_cart_badge.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
+import '../registration/registration_gate.dart';
 import 'patient_count_sheet.dart';
 
 /// Package detail — what "Book" opens.
@@ -19,6 +20,13 @@ class LabPackageScreen extends StatelessWidget {
   static const int visibleOrgans = 6;
 
   Future<void> _add(BuildContext context) async {
+    // Booking a lab test is an action — registered members only.
+    if (!await RegistrationGate.ensure(context, action: 'book lab tests')) {
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
     final cart = LabCartService.instance;
     final chosen = await PatientCountSheet.show(
       context,

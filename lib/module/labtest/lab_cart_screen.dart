@@ -331,7 +331,7 @@ class _CheckoutBar extends StatelessWidget {
   /// same guarded tap that moves on to slot selection. Best-effort: a missing
   /// or unreachable database leaves the flow exactly as it was.
   void _selectSlot(BuildContext context) {
-    AuthFlow.guard(context, () {
+    AuthFlow.guardRegistered(context, 'book lab tests', () {
       final cart = LabCartService.instance;
       final user = AuthService.instance.currentUser.value;
       if (user != null && !cart.isEmpty) {

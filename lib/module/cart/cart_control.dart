@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show FilteringTextInputFormatter, LengthLimitingTextInputFormatter;
 
 import '../../theme/app_colors.dart';
+import '../registration/registration_gate.dart';
 import 'cart_service.dart';
 
 /// The add-to-cart control used on every product tile.
@@ -54,16 +55,24 @@ class CartControl extends StatelessWidget {
             width: double.infinity,
             height: 40,
             child: OutlinedButton(
-              // Open to everyone: the cart is built up freely and the
-              // account is only required at checkout.
-              onPressed: () => cart.add(
-                name: name,
-                pack: pack,
-                price: _price,
-                mrp: _mrp,
-                productId: productId,
-                image: image,
-              ),
+              // Browsing is open to everyone, but putting something in the cart
+              // is an action — registered members only (see RegistrationGate).
+              onPressed: () async {
+                if (!await RegistrationGate.ensure(
+                  context,
+                  action: 'add items to your cart',
+                )) {
+                  return;
+                }
+                cart.add(
+                  name: name,
+                  pack: pack,
+                  price: _price,
+                  mrp: _mrp,
+                  productId: productId,
+                  image: image,
+                );
+              },
               style: OutlinedButton.styleFrom(
                 foregroundColor: AppColors.brandBlue,
                 // Pale blue fill, not a hollow outline, so the call to action

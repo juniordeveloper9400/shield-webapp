@@ -8,6 +8,7 @@ import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
 import '../patients/patient_book.dart';
+import '../registration/registration_gate.dart';
 import 'prescription_checkout_screen.dart';
 import 'prescription_copy.dart';
 import 'prescription_detail_card.dart';
@@ -38,6 +39,24 @@ class UploadPrescriptionScreen extends StatefulWidget {
 
   /// Cap from the on-screen guidance.
   static const int maxBytes = kPrescriptionMaxBytes;
+
+  /// Opens the screen — for a registered member only. Uploading a prescription
+  /// creates something on their behalf, so an unregistered member is told why
+  /// and offered the registration form first; the screen opens if they finish it.
+  static Future<void> open(BuildContext context) async {
+    if (!await RegistrationGate.ensure(
+      context,
+      action: 'upload a prescription',
+    )) {
+      return;
+    }
+    if (!context.mounted) {
+      return;
+    }
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const UploadPrescriptionScreen()));
+  }
 
   @override
   State<UploadPrescriptionScreen> createState() =>

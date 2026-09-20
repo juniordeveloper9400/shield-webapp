@@ -15,7 +15,6 @@ import '../location/address_book.dart';
 import '../orders/order_placed_screen.dart';
 import '../orders/purchase_service.dart';
 import '../prescription/upload_prescription_screen.dart';
-import '../registration/registration_flow.dart';
 import '../wallet/wallet_service.dart';
 import 'cart_control.dart';
 import 'cart_service.dart';
@@ -42,13 +41,12 @@ class _CartScreenState extends State<CartScreen> {
 
   double get _payable => _cart.payable;
 
-  /// Payment is where the profile earns its keep — an order needs somewhere to
-  /// go and a branch to pack it — so registration is offered here. An account
-  /// is required; registration is not, and skipping still reaches checkout.
+  /// Placing an order needs a signed-in, registered member — it has to go
+  /// somewhere, be packed at a branch, and be billed to someone. An
+  /// unregistered member is told why and offered the form first; checkout
+  /// opens once they have finished it.
   void _checkout() {
-    AuthFlow.guard(context, () {
-      RegistrationFlow.offerThen(context, _openCheckout);
-    });
+    AuthFlow.guardRegistered(context, 'place orders', _openCheckout);
   }
 
   /// Opens the manual transfer flow, then files the cart as an order when the
@@ -231,9 +229,7 @@ class _CartScreenState extends State<CartScreen> {
   }
 
   void _openUploadPrescription() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const UploadPrescriptionScreen()),
-    );
+    UploadPrescriptionScreen.open(context);
   }
 
   void _applyCoupon() {

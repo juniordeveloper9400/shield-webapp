@@ -238,6 +238,9 @@ class AuthService {
       );
       if (signedIn) {
         unawaited(PersonaService.instance.reload(user.phone));
+        unawaited(
+          RegistrationService.instance.loadForSignedInMember(user.phone),
+        );
         unawaited(WalletService.instance.refreshFromDatabase(user.phone));
         unawaited(AddressBook.instance.refreshFromDatabase());
       }
@@ -314,6 +317,7 @@ class AuthService {
       // exchanged one), so it needs the exact same re-check for the exact
       // same reason — see _bridgeToBackend's own doc.
       unawaited(PersonaService.instance.reload(user.phone));
+      unawaited(RegistrationService.instance.loadForSignedInMember(user.phone));
       unawaited(WalletService.instance.refreshFromDatabase(user.phone));
       unawaited(AddressBook.instance.refreshFromDatabase());
     }

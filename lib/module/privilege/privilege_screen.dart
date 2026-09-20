@@ -8,7 +8,6 @@ import '../auth/auth_flow.dart';
 import '../auth/auth_service.dart';
 import '../checkout/checkout_order.dart';
 import '../checkout/checkout_screen.dart';
-import '../registration/registration_flow.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
 import '../wallet/wallet_service.dart';
@@ -122,26 +121,10 @@ class _PrivilegeScreenState extends State<PrivilegeScreen> {
       return;
     }
 
-    // Loading a card moves real money, so the member must be signed in and registered.
-    await AuthFlow.guard(context, () async {
-      if (!RegistrationService.instance.isRegistered) {
-        final registered = await RegistrationFlow.show(context);
-        if (!registered && !RegistrationService.instance.isRegistered) {
-          if (mounted) {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    'Please complete registration to purchase Sahakar HealthPass',
-                  ),
-                ),
-              );
-          }
-          return;
-        }
-      }
-
+    // Loading a card moves real money, so the member must be signed in and
+    // registered — RegistrationGate waits for the registration to be looked up
+    // rather than guessing, and offers the form if it really is missing.
+    await AuthFlow.guardRegistered(context, 'buy a Sahakar HealthPass', () async {
       if (!mounted) return;
 
       final done = await Navigator.of(context).push<bool>(

@@ -377,9 +377,7 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
   }
 
   void _openUploadPrescription() {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const UploadPrescriptionScreen()),
-    );
+    UploadPrescriptionScreen.open(context);
   }
 
   void _chooseAccount(StoreBankAccount? account) {

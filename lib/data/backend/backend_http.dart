@@ -56,6 +56,11 @@ class BackendHttp {
 
   bool get _effectivelyConfigured => _forceConfigured ?? isConfigured;
 
+  /// Whether this instance can reach a backend at all — the build-time
+  /// [isConfigured] for the app's own [instance], or forced on for a
+  /// [BackendHttp.test] one.
+  bool get isEnabled => _effectivelyConfigured;
+
   static const _refreshTokenPrefsKey = 'backend_refresh_token';
 
   final http.Client _client;

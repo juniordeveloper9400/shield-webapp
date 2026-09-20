@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
+import '../../data/backend/registration_repository.dart'
+    show RegistrationSaveException;
 import '../../data/backend/referral_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/age_badge.dart';
@@ -62,6 +64,15 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   bool _locationReady = false;
 
   bool _submitted = false;
+
+  /// True while the registration is being written to the database. The form
+  /// only closes, and the member only counts as registered, once that has
+  /// actually succeeded.
+  bool _saving = false;
+
+  /// Why the last save was refused, shown above the button; null when there is
+  /// nothing to say.
+  String? _saveError;
 
   RegistrationService get _service => RegistrationService.instance;
 
@@ -192,20 +203,53 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
 
-    _service.save(
-      Registration(
-        name: _name.text.trim(),
-        phone: _phone.text.trim(),
-        email: _email.text.trim(),
-        gender: _gender!,
-        dob: _dob!,
-        address: _address.text.trim(),
-        place: _place.text.trim(),
-        pincode: _pincode.text.trim(),
-        state: _state!,
-        storeId: _storeId!,
-      ),
-    );
+    if (_saving) {
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _saveError = null;
+    });
+    try {
+      // Written to the database before anything else happens: the member is
+      // only registered — and only celebrated — once it has actually saved.
+      await _service.submit(
+        Registration(
+          name: _name.text.trim(),
+          phone: _phone.text.trim(),
+          email: _email.text.trim(),
+          gender: _gender!,
+          dob: _dob!,
+          address: _address.text.trim(),
+          place: _place.text.trim(),
+          pincode: _pincode.text.trim(),
+          state: _state!,
+          storeId: _storeId!,
+        ),
+      );
+    } on RegistrationSaveException catch (error) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError = error.message;
+        });
+      }
+      return;
+    } catch (_) {
+      if (mounted) {
+        setState(() {
+          _saving = false;
+          _saveError =
+              'We couldn’t save your registration. Check your connection and '
+              'try again.';
+        });
+      }
+      return;
+    }
+    if (!mounted) {
+      return;
+    }
+    setState(() => _saving = false);
 
     // Best-effort and fire-and-forget: a bad or already-used code must not
     // hold up the celebration screen below. Offered on an edit too, not
@@ -512,51 +556,80 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         top: false,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-          child: Row(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              if (!widget.isEditing) ...[
-                TextButton(
-                  onPressed: _close,
-                  style: TextButton.styleFrom(
-                    foregroundColor: AppColors.textMuted,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 14,
-                    ),
-                  ),
-                  child: const Text(
-                    'Skip for now',
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-              ],
-              Expanded(
-                child: FilledButton(
-                  onPressed: _submit,
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.brandBlue,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
+              if (_saveError != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 10),
                   child: Text(
-                    widget.isEditing
-                        ? 'Save changes'
-                        : 'Register & earn '
-                              '${RegistrationService.rewardPoints} points',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    _saveError!,
+                    key: const ValueKey('registration-save-error'),
                     style: const TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 13.5,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFFB4322F),
                     ),
                   ),
                 ),
+              Row(
+                children: [
+                  if (!widget.isEditing) ...[
+                    TextButton(
+                      onPressed: _saving ? null : _close,
+                      style: TextButton.styleFrom(
+                        foregroundColor: AppColors.textMuted,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 14,
+                        ),
+                      ),
+                      child: const Text(
+                        'Skip for now',
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Expanded(
+                    child: FilledButton(
+                      onPressed: _saving ? null : _submit,
+                      style: FilledButton.styleFrom(
+                        backgroundColor: AppColors.brandBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: _saving
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2.5,
+                                color: AppColors.white,
+                              ),
+                            )
+                          : Text(
+                              widget.isEditing
+                                  ? 'Save changes'
+                                  : 'Register & earn '
+                                        '${RegistrationService.rewardPoints} points',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
