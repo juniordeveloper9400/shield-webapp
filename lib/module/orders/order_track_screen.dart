@@ -9,8 +9,8 @@ import 'purchase_service.dart';
 
 /// Where an order has got to, drawn as a graph.
 ///
-/// Opened from the **Track order** button in My Orders. Product orders follow
-/// the admin order status; prescriptions retain their review/billing stages.
+/// Opened from the **Track order** button in My Orders. Every order shows the
+/// same four stages: Placed, Store contact, Billed, Complete.
 class OrderTrackScreen extends StatefulWidget {
   final Purchase order;
 
@@ -173,28 +173,17 @@ class _OrderTrackScreenState extends State<OrderTrackScreen>
   }
 }
 
-String _statusHeadline(OrderStatus status) {
-  switch (status) {
-    case OrderStatus.delivered:
-      return 'Order delivered';
-    case OrderStatus.outForDelivery:
-      return 'Out for delivery';
-    case OrderStatus.processing:
-      return 'Order processing';
-    case OrderStatus.cancelled:
-      return 'Order cancelled';
-  }
-}
-
-IconData _statusIcon(OrderStatus status) {
-  switch (status) {
-    case OrderStatus.delivered:
-      return Icons.check_circle_rounded;
-    case OrderStatus.outForDelivery:
-      return Icons.local_shipping_rounded;
-    case OrderStatus.processing:
+IconData _stageIcon(OrderStage stage) {
+  switch (stage) {
+    case OrderStage.placed:
       return Icons.inventory_2_rounded;
-    case OrderStatus.cancelled:
+    case OrderStage.storeContact:
+      return Icons.support_agent_rounded;
+    case OrderStage.billed:
+      return Icons.receipt_long_rounded;
+    case OrderStage.complete:
+      return Icons.check_circle_rounded;
+    case OrderStage.cancelled:
       return Icons.cancel_rounded;
   }
 }
@@ -206,23 +195,20 @@ class _StatusHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final status = order.status;
+    final stage = order.stage;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
-        color: status.foreground,
+        color: stage.foreground,
         borderRadius: BorderRadius.circular(12),
       ),
       child: Row(
         children: [
-          Icon(_statusIcon(status), size: 20, color: AppColors.white),
+          Icon(_stageIcon(stage), size: 20, color: AppColors.white),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              order.kind == OrderKind.standard &&
-                      status == OrderStatus.delivered
-                  ? 'Order delivered'
-                  : _statusHeadline(status),
+              stage.label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
@@ -332,7 +318,7 @@ class _TrackCardState extends State<_TrackCard> {
                   if (_expanded) ...[
                     const SizedBox(height: 12),
                     _Callout(
-                      icon: _statusIcon(track.order.status),
+                      icon: _stageIcon(track.stage),
                       title: track.headline,
                       sub: track.subhead,
                       caretX: caretX,

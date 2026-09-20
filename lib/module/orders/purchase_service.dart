@@ -30,6 +30,30 @@ enum OrderStatus {
   bool get counts => this != OrderStatus.cancelled;
 }
 
+/// The four stages a member sees an order move through — and the only status
+/// they see. Derived by [Purchase.stage] from what the store has actually done
+/// (the raw [OrderStatus] keeps driving delivery and cancellation behind the
+/// scenes), so a stage can only advance when the store really did the step:
+///
+///  * [placed] — the order exists.
+///  * [storeContact] — staff used Call / WhatsApp on the member in the admin
+///    console (`app."order".store_contacted_at`).
+///  * [billed] — the store has sent a bill for it.
+///  * [complete] — the store completed the order.
+enum OrderStage {
+  placed('Placed', Color(0xFFFDF3E0), Color(0xFFB4761A)),
+  storeContact('Store contact', AppColors.offerTint, AppColors.brandBlue),
+  billed('Billed', Color(0xFFEDE7F6), Color(0xFF5E35B1)),
+  complete('Complete', AppColors.greenTint, AppColors.brandGreenDark),
+  cancelled('Cancelled', Color(0xFFFBEBEB), Color(0xFFB4322F));
+
+  final String label;
+  final Color background;
+  final Color foreground;
+
+  const OrderStage(this.label, this.background, this.foreground);
+}
+
 /// Where an order came from — which decides the stages it moves through.
 ///
 /// A [standard] order is picked from stock and goes straight to packing. A
@@ -109,6 +133,12 @@ class Purchase {
   /// `sentAt`. Null until fetched, same as [billImage].
   final DateTime? billedAt;
 
+  /// When staff first contacted the member about this order — the
+  /// `storeContactedAt` on each `GET /v1/member/orders` row. Null until the
+  /// store has (or for an order that predates it and skipped straight to a
+  /// bill; [stage] handles both).
+  final DateTime? storeContactedAt;
+
   const Purchase({
     required this.id,
     required this.placedOn,
@@ -124,7 +154,30 @@ class Purchase {
     this.billStatus,
     this.billImage,
     this.billedAt,
+    this.storeContactedAt,
   });
+
+  /// The furthest stage the order has reached — see [OrderStage].
+  ///
+  /// Cancelled and delivered come straight from the order's status. Below
+  /// that, a bill row (`billStatus` is only ever non-null once the store has
+  /// sent one) means [OrderStage.billed], and a contact stamp — or an order
+  /// already out for delivery, which the store obviously handled — means
+  /// [OrderStage.storeContact]. Reading the *furthest* signal means an order
+  /// billed without anyone pressing Call still shows as billed, never stuck.
+  OrderStage get stage {
+    if (status == OrderStatus.cancelled) return OrderStage.cancelled;
+    if (status == OrderStatus.delivered) return OrderStage.complete;
+    if (billStatus != null) return OrderStage.billed;
+    if (storeContactedAt != null || status == OrderStatus.outForDelivery) {
+      return OrderStage.storeContact;
+    }
+    return OrderStage.placed;
+  }
+
+  /// `₹450` — what the store billed, or null before a bill has a price.
+  String? get billLabel =>
+      billAmount == null ? null : '₹${formatRupees(billAmount!)}';
 
   /// A copy with just the payment fields swapped in — what a wallet "Pay now"
   /// applies once the debit has gone through, so the order and its bill read
@@ -153,6 +206,7 @@ class Purchase {
     billStatus: billStatus ?? this.billStatus,
     billImage: billImage ?? this.billImage,
     billedAt: billedAt ?? this.billedAt,
+    storeContactedAt: storeContactedAt,
   );
 
   /// Whether the store has actually sent an invoice picture for this order —
@@ -215,6 +269,9 @@ class Purchase {
           : (str(row['billStatus']).toUpperCase() == 'PAID'
                 ? OrderPaymentStatus.paid
                 : OrderPaymentStatus.pending),
+      // Null while the store hasn't contacted the member (or the backend
+      // predates migration 0045) — DateTime.tryParse('') is null too.
+      storeContactedAt: DateTime.tryParse(str(row['storeContactedAt']))?.toLocal(),
     );
   }
 }

@@ -140,7 +140,7 @@ class _OrderCard extends StatelessWidget {
                   ),
                 ),
               ),
-              _StatusChip(status: order.status),
+              _StatusChip(stage: order.stage),
             ],
           ),
           const SizedBox(height: 6),
@@ -242,24 +242,24 @@ class _OrderCard extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  final OrderStatus status;
+  final OrderStage stage;
 
-  const _StatusChip({required this.status});
+  const _StatusChip({required this.stage});
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
       decoration: BoxDecoration(
-        color: status.background,
+        color: stage.background,
         borderRadius: BorderRadius.circular(20),
       ),
       child: Text(
-        status.label,
+        stage.label,
         style: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w700,
-          color: status.foreground,
+          color: stage.foreground,
         ),
       ),
     );

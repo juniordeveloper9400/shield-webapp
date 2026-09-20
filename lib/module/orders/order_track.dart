@@ -14,42 +14,45 @@ class TrackStep {
   const TrackStep({required this.title, this.detail, required this.state});
 }
 
-/// The tracker for one [Purchase]: the stages it moves through, where it is
-/// now, and the promise printed above them.
+/// The tracker for one [Purchase]: the four stages it moves through
+/// (Placed → Store contact → Billed → Complete), where it is now, and the
+/// line printed above them.
 ///
-/// Everything here is derived from the order — its kind, its status, whether
-/// it has been priced and paid. Nothing new is stored, so the graph can never
-/// drift from the order it describes.
+/// Everything here is derived from the order — [Purchase.stage] reads whether
+/// the store has contacted the member, sent a bill, or completed it. Nothing
+/// new is stored, so the graph can never drift from the order it describes.
 class OrderTrack {
   final Purchase order;
 
   OrderTrack(this.order);
 
-  bool get isCancelled => order.status == OrderStatus.cancelled;
+  OrderStage get stage => order.stage;
 
-  bool get isDelivered => order.status == OrderStatus.delivered;
+  bool get isCancelled => stage == OrderStage.cancelled;
 
-  bool get awaitingPayment => order.awaitingPayment;
-
-  /// A prescription order is priced once a real bill has been attached.
-  bool get _priced => order.mrpTotal > 0 || order.paidTotal > 0;
+  bool get isComplete => stage == OrderStage.complete;
 
   /// The stage the order sits on, as an index into [_stageTitles].
   int get _reachedIndex {
-    switch (order.status) {
-      case OrderStatus.delivered:
-        return 3;
-      case OrderStatus.outForDelivery:
-        return 2;
-      case OrderStatus.processing:
-        return 1;
-      case OrderStatus.cancelled:
+    switch (stage) {
+      case OrderStage.placed:
+      case OrderStage.cancelled:
         return 0;
+      case OrderStage.storeContact:
+        return 1;
+      case OrderStage.billed:
+        return 2;
+      case OrderStage.complete:
+        return 3;
     }
   }
 
-  List<String> get _stageTitles =>
-      const ['Order placed', 'Processing', 'Out for delivery', 'Delivered'];
+  static const List<String> _stageTitles = [
+    'Placed',
+    'Store contact',
+    'Billed',
+    'Complete',
+  ];
 
   /// The graph, newest stage last.
   ///
@@ -67,15 +70,14 @@ class OrderTrack {
       ];
     }
 
-    final titles = _stageTitles;
     final reached = _reachedIndex;
     return [
-      for (var i = 0; i < titles.length; i++)
+      for (var i = 0; i < _stageTitles.length; i++)
         TrackStep(
-          title: titles[i],
-          detail: i == 0 ? order.placedOn : _detailFor(i),
-          // A delivered order has cleared every node, the last one included.
-          state: isDelivered || i < reached
+          title: _stageTitles[i],
+          detail: _detailFor(i),
+          // A complete order has cleared every node, the last one included.
+          state: isComplete || i < reached
               ? TrackState.done
               : i == reached
               ? TrackState.current
@@ -84,51 +86,61 @@ class OrderTrack {
     ];
   }
 
+  /// The small date under a node — only once that step has really happened
+  /// and its date is known, never a promised one.
   String? _detailFor(int index) {
-    if (index == 3) {
-      return isDelivered ? null : _deliveryBy;
+    switch (index) {
+      case 0:
+        return order.placedOn;
+      case 1:
+        final at = order.storeContactedAt;
+        return at == null || _reachedIndex < 1 ? null : formatDayMonth(at);
+      case 2:
+        final at = order.billedAt;
+        return at == null || _reachedIndex < 2 ? null : formatDayMonth(at);
+      default:
+        return null;
     }
-    if (index == 2) {
-      return dispatchBy;
-    }
-    return null;
   }
 
   /// The line above the graph: what is happening at the current stage.
   String get headline {
-    if (isCancelled) {
-      return 'This order was cancelled.';
-    }
-    if (isDelivered) {
-      return 'Delivered. Thanks for shopping with SHIELD.';
-    }
-    switch (order.status) {
-      case OrderStatus.outForDelivery:
-        return 'Your order is out for delivery.';
-      case OrderStatus.processing:
-        return 'Your order is being processed by the store.';
-      case OrderStatus.delivered:
-      case OrderStatus.cancelled:
-        return '';
+    switch (stage) {
+      case OrderStage.cancelled:
+        return 'This order was cancelled.';
+      case OrderStage.placed:
+        return 'Your order is placed. The store will contact you soon.';
+      case OrderStage.storeContact:
+        return 'The store has contacted you about this order.';
+      case OrderStage.billed:
+        return 'Your bill is ready.';
+      case OrderStage.complete:
+        return 'Order complete. Thanks for shopping with SHIELD.';
     }
   }
 
   /// A softer second line for the callout, or null.
   String? get subhead {
-    if (isCancelled || isDelivered) {
-      return null;
+    switch (stage) {
+      case OrderStage.cancelled:
+      case OrderStage.complete:
+        return null;
+      case OrderStage.placed:
+        return 'Our store will call you to confirm the details.';
+      case OrderStage.storeContact:
+        return 'We are preparing your bill.';
+      case OrderStage.billed:
+        final label = order.billLabel;
+        if (label == null) return 'Order ${order.id}';
+        return order.billStatus == OrderPaymentStatus.paid
+            ? '$label · Paid'
+            : '$label · Payment pending';
     }
-    if (awaitingPayment) {
-      return _priced
-          ? 'Our store will call to confirm and collect ${order.mrpLabel}.'
-          : 'You will see the price before anything is charged.';
-    }
-    return 'Order ${order.id}';
   }
 
-  /// `29 Aug – 31 Aug` — the window the order is promised in, counted from the
-  /// day it was placed. Falls back to a today-based window if the stored date
-  /// cannot be read.
+  /// `29 Aug – 31 Aug` — the window a prescription order is promised in,
+  /// counted from the day it was placed. Falls back to a today-based window
+  /// if the stored date cannot be read.
   String get _deliveryBy {
     final placed = parseDate(order.placedOn) ?? DateTime.now();
     final from = placed.add(const Duration(days: 3));
@@ -136,16 +148,10 @@ class OrderTrack {
     return '${formatDayMonth(from)} – ${formatDayMonth(to)}';
   }
 
-  /// What the "Delivery by" strip shows, or null when the order has already
-  /// arrived or been called off.
+  /// What the "Delivery by" strip shows, or null for a standard order, or one
+  /// that is already complete or called off.
   String? get deliveryWindow =>
-      (order.kind == OrderKind.standard || isDelivered || isCancelled)
+      (order.kind == OrderKind.standard || isComplete || isCancelled)
       ? null
       : _deliveryBy;
-
-  /// The dispatch date shown mid-graph on the strip, `by 27 Aug`.
-  String get dispatchBy {
-    final placed = parseDate(order.placedOn) ?? DateTime.now();
-    return 'by ${formatDayMonth(placed.add(const Duration(days: 2)))}';
-  }
 }

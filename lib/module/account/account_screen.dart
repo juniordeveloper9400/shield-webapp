@@ -34,7 +34,6 @@ class AccountScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final phone = AuthService.instance.currentUser.value?.phone;
     final investor = InvestorService.instance.investorForPhone(phone);
-    final agent = AgentService.instance.agentForPhone(phone);
 
     return Scaffold(
       backgroundColor: AppColors.pageTint,
@@ -92,32 +91,7 @@ class AccountScreen extends StatelessWidget {
             ),
             const SizedBox(height: 14),
           ],
-          // An approved agent gets straight through to their portal; a
-          // plain member — the common case — gets the way to apply.
-          // Neither shows for a recruit whose application is still with
-          // the admin console: BecomeAgentScreen itself reads that status
-          // and shows "under review" instead of the form, so this row
-          // still opens something useful for them, not a dead end.
-          _MenuGroup(
-            items: [
-              agent != null
-                  ? _MenuItem(
-                      icon: Icons.badge_rounded,
-                      label: 'Agent Portal',
-                      trailing: agent.agentCode,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => AgentPortalScreen(agent: agent),
-                        ),
-                      ),
-                    )
-                  : _MenuItem(
-                      icon: Icons.how_to_reg_outlined,
-                      label: 'Become a SHIELD Agent',
-                      onTap: () => BecomeAgentScreen.open(context),
-                    ),
-            ],
-          ),
+          const _AgentMenuGroup(),
           const SizedBox(height: 14),
           _MenuGroup(
             items: [
@@ -407,6 +381,53 @@ class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
   }
 }
 
+/// The Agent Portal / "Become a SHIELD Agent" row.
+///
+/// An approved agent gets straight through to their portal; a plain member —
+/// the common case — gets the way to apply. Neither shows for a recruit whose
+/// application is still with the admin console: BecomeAgentScreen itself
+/// reads that status and shows "under review" instead of the form, so this
+/// row still opens something useful for them, not a dead end.
+///
+/// Listens to [AgentService] so a conversion the admin console makes while
+/// the account tab is open (picked up by `PersonaService`) swaps the row in
+/// place, in step with the profile card's ID line.
+class _AgentMenuGroup extends StatelessWidget {
+  const _AgentMenuGroup();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: AgentService.instance,
+      builder: (context, _) {
+        final agent = AgentService.instance.agentForPhone(
+          AuthService.instance.currentUser.value?.phone,
+        );
+        return _MenuGroup(
+          items: [
+            agent != null
+                ? _MenuItem(
+                    icon: Icons.badge_rounded,
+                    label: 'Agent Portal',
+                    trailing: agent.agentCode,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => AgentPortalScreen(agent: agent),
+                      ),
+                    ),
+                  )
+                : _MenuItem(
+                    icon: Icons.how_to_reg_outlined,
+                    label: 'Become a SHIELD Agent',
+                    onTap: () => BecomeAgentScreen.open(context),
+                  ),
+          ],
+        );
+      },
+    );
+  }
+}
+
 class _ProfileCard extends StatelessWidget {
   const _ProfileCard();
 
@@ -421,11 +442,14 @@ class _ProfileCard extends StatelessWidget {
     ReferralService.instance.ensureLoaded();
     // Listens so completing the form fills the store line in, and the real
     // Member ID replaces the placeholder once it loads, without the tab
-    // having to be left and come back.
+    // having to be left and come back. AgentService is in the mix for the
+    // same reason: the moment the admin console converts this member to an
+    // agent, the Member ID line gives way to their Agent ID.
     return ListenableBuilder(
       listenable: Listenable.merge([
         RegistrationService.instance,
         ReferralService.instance,
+        AgentService.instance,
       ]),
       builder: (context, _) => _build(context),
     );
@@ -434,7 +458,14 @@ class _ProfileCard extends StatelessWidget {
   Widget _build(BuildContext context) {
     final user = AuthService.instance.currentUser.value;
     final store = RegistrationService.instance.profile?.store;
-    final memberId = ReferralService.instance.code;
+    // An approved agent is identified by their Agent ID alone — the Member ID
+    // (their referral code) is not shown once they have one. A plain member,
+    // or a recruit still pending approval, keeps the Member ID.
+    final agent = AgentService.instance.agentForPhone(user?.phone);
+    final idLabel = agent != null ? 'Agent ID' : 'Member ID';
+    final idValue = agent != null
+        ? agent.agentCode
+        : ReferralService.instance.code;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -492,14 +523,12 @@ class _ProfileCard extends StatelessWidget {
                 const SizedBox(height: 5),
                 InkWell(
                   onTap: () async {
-                    await Clipboard.setData(ClipboardData(text: memberId));
+                    await Clipboard.setData(ClipboardData(text: idValue));
                     if (!context.mounted) return;
                     ScaffoldMessenger.of(context)
                       ..hideCurrentSnackBar()
                       ..showSnackBar(
-                        const SnackBar(
-                          content: Text('Member ID copied'),
-                        ),
+                        SnackBar(content: Text('$idLabel copied')),
                       );
                   },
                   borderRadius: BorderRadius.circular(6),
@@ -508,7 +537,7 @@ class _ProfileCard extends StatelessWidget {
                     children: [
                       Flexible(
                         child: Text(
-                          'Member ID: $memberId',
+                          '$idLabel: $idValue',
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
