@@ -55,6 +55,31 @@ class OrderPrescription {
   });
 }
 
+/// One line item on a standard order, as [OrderRepository.fetchItems] reads
+/// it back — enough for the "Items in this order" card to show the real
+/// product picture rather than naming it with no picture at all.
+class OrderItem {
+  final String name;
+  final String pack;
+  final int qty;
+  final int unitPrice;
+  final int mrp;
+
+  /// The product's own catalogue picture (a `data:` URI or a network URL),
+  /// or null when the line carries no product (a stale cart add) or the
+  /// product has since lost its picture.
+  final String? image;
+
+  const OrderItem({
+    required this.name,
+    required this.pack,
+    required this.qty,
+    required this.unitPrice,
+    required this.mrp,
+    required this.image,
+  });
+}
+
 /// One package booked in the lab cart, as [OrderRepository.saveLabBookings]
 /// sends it — the same shape root's direct-Neon `LabBookingInput` carries,
 /// so `lab_cart_screen.dart`'s checkout call needs no changes beyond its
@@ -509,6 +534,41 @@ class OrderRepository {
       }).toList(growable: false);
     } catch (error) {
       BackendHttp.log('OrderRepository.fetchPrescriptions failed', error: error);
+      return null;
+    }
+  }
+
+  /// This order's own line items with a real product picture against each
+  /// one — `GET /v1/member/orders/:id/items` (see `OrderService.
+  /// getItemsForOrder`). Empty for a prescription order, which never has
+  /// `order_line` rows at all; null when the backend is unreachable.
+  /// [orderId] is the backend's numeric id ([Purchase.backendId]).
+  ///
+  /// Fetched lazily per order, the same reasoning as [fetchBill] and
+  /// [fetchPrescriptions]: a product picture is a `data:` URI that can run
+  /// to a hundred KB or more, so it does not belong on every row of
+  /// [listForMember]'s list.
+  Future<List<OrderItem>?> fetchItems(int orderId) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows = await BackendHttp.instance.request('GET', '/v1/member/orders/$orderId/items')
+          as List<dynamic>;
+      return rows.cast<Map<String, dynamic>>().map((row) {
+        int i(Object? v) => v is int ? v : (double.tryParse((v ?? '').toString())?.round() ?? 0);
+        final image = (row['image'] as String?)?.trim();
+        return OrderItem(
+          name: (row['name'] ?? '').toString(),
+          pack: (row['pack'] ?? '').toString(),
+          qty: i(row['qty']),
+          unitPrice: i(row['unitPrice']),
+          mrp: i(row['mrp']),
+          image: image == null || image.isEmpty ? null : image,
+        );
+      }).toList(growable: false);
+    } catch (error) {
+      BackendHttp.log('OrderRepository.fetchItems failed', error: error);
       return null;
     }
   }

@@ -1,6 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
+import '../../data/backend/order_repository.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
 import 'order_bill_screen.dart';
 import 'order_track_screen.dart';
 import 'purchase_service.dart';
@@ -129,25 +133,42 @@ class _OrderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _OrderThumbnail(order: order),
+              const SizedBox(width: 12),
               Expanded(
-                child: Text(
-                  order.id,
-                  style: const TextStyle(
-                    fontSize: 15.5,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            order.id,
+                            style: const TextStyle(
+                              fontSize: 15.5,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                        _StatusChip(stage: order.stage),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Placed on ${order.placedOn}  ·  ${order.itemCount} item'
+                      '${order.itemCount == 1 ? '' : 's'}',
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              _StatusChip(stage: order.stage),
             ],
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Placed on ${order.placedOn}  ·  ${order.itemCount} item'
-            '${order.itemCount == 1 ? '' : 's'}',
-            style: const TextStyle(fontSize: 13.5, color: AppColors.textMuted),
           ),
           const SizedBox(height: 12),
           const Divider(height: 1, color: AppColors.border),
@@ -262,6 +283,111 @@ class _StatusChip extends StatelessWidget {
           color: stage.foreground,
         ),
       ),
+    );
+  }
+}
+
+/// The one picture that says what an order is, at a glance: the first
+/// product's photo for a standard order, the uploaded scan for a
+/// prescription order — a "+N" badge when there is more than one — rather
+/// than the same generic square for every card in the list.
+///
+/// Fetches lazily per card, same reasoning as [PrescriptionUploadedCard] /
+/// [OrderItemsCard] on the order's own detail screen: a picture is a `data:`
+/// URI that does not belong on every row of `GET /v1/member/orders`'s list.
+/// Best-effort: while loading, or when nothing comes back, the fallback icon
+/// below stands in — never an error in its place.
+class _OrderThumbnail extends StatefulWidget {
+  final Purchase order;
+
+  const _OrderThumbnail({required this.order});
+
+  @override
+  State<_OrderThumbnail> createState() => _OrderThumbnailState();
+}
+
+class _OrderThumbnailState extends State<_OrderThumbnail> {
+  String? _image;
+  int _extra = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final backendId = widget.order.backendId;
+    if (backendId == null) {
+      return;
+    }
+    if (widget.order.kind == OrderKind.prescription) {
+      final rows = await OrderRepository.instance.fetchPrescriptions(backendId);
+      if (!mounted || rows == null) return;
+      _apply(images: rows.map((r) => r.image).toList(), total: rows.length);
+    } else {
+      final rows = await OrderRepository.instance.fetchItems(backendId);
+      if (!mounted || rows == null) return;
+      _apply(images: rows.map((r) => r.image).toList(), total: rows.length);
+    }
+  }
+
+  void _apply({required List<String?> images, required int total}) {
+    setState(() {
+      _image = images.firstWhere((i) => i != null, orElse: () => null);
+      _extra = total > 1 ? total - 1 : 0;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final fallbackIcon = widget.order.kind == OrderKind.prescription
+        ? Icons.description_rounded
+        : Icons.medication_outlined;
+
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: AppColors.pageTint,
+              border: Border.all(color: AppColors.border),
+            ),
+            child: AppImage(
+              image: _image,
+              fit: BoxFit.cover,
+              fallbackIcon: fallbackIcon,
+              iconSize: 22,
+              iconColor: AppColors.brandBlue,
+            ),
+          ),
+        ),
+        if (_extra > 0)
+          Positioned(
+            right: -5,
+            bottom: -5,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppColors.brandBlue,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppColors.white, width: 1.5),
+              ),
+              child: Text(
+                '+$_extra',
+                style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.white,
+                ),
+              ),
+            ),
+          ),
+      ],
     );
   }
 }

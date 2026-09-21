@@ -148,7 +148,11 @@ class _OrderTrackScreenState extends State<OrderTrackScreen>
                 if (order.kind == OrderKind.prescription) ...[
                   PrescriptionUploadedCard(order: order),
                   const SizedBox(height: 14),
-                ],
+                ] else
+                  // Adds its own trailing gap only once it actually has
+                  // something to show — nothing here yet must not leave a
+                  // bare gap floating above DeliverToCard.
+                  OrderItemsCard(order: order),
                 DeliverToCard(order: order),
                 if (order.status == OrderStatus.processing) ...[
                   const SizedBox(height: 14),

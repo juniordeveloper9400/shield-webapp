@@ -751,6 +751,168 @@ class _SocialIcon extends StatelessWidget {
 }
 
 // ---------------------------------------------------------------------------
+// Order items
+// ---------------------------------------------------------------------------
+
+/// "Items in this order" — a standard order's own lines, each with the real
+/// product picture rather than only its name, as `_OrderCard`'s "N items"
+/// line on My Orders has always summarised them.
+///
+/// Fetches `GET /v1/member/orders/:id/items` (`OrderRepository.fetchItems`,
+/// `OrderService.getItemsForOrder`) the same lazy, per-order way
+/// [PrescriptionUploadedCard] fetches its own scan: nothing here is carried
+/// on the orders list, which stays cheap. Best-effort: while loading, or
+/// when the fetch fails, the card simply does not show — never an error in
+/// its place, since [order.backendId] can genuinely be null for an order
+/// this session placed but never heard back from the backend about.
+class OrderItemsCard extends StatefulWidget {
+  final Purchase order;
+
+  const OrderItemsCard({super.key, required this.order});
+
+  @override
+  State<OrderItemsCard> createState() => _OrderItemsCardState();
+}
+
+class _OrderItemsCardState extends State<OrderItemsCard> {
+  List<OrderItem>? _items;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(_load());
+  }
+
+  Future<void> _load() async {
+    final backendId = widget.order.backendId;
+    if (backendId == null) {
+      return;
+    }
+    final rows = await OrderRepository.instance.fetchItems(backendId);
+    if (mounted && rows != null) {
+      setState(() => _items = rows);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final items = _items;
+    if (items == null || items.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    // The trailing gap rides with the card itself — nothing here yet (still
+    // loading, or a genuine fetch failure) must not leave a bare gap
+    // floating above whatever the caller places next.
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: _PlainCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              items.length > 1 ? 'Items in this order' : 'Item in this order',
+              style: _titleStyle,
+            ),
+            const SizedBox(height: 12),
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) ...[
+                const SizedBox(height: 10),
+                _line,
+                const SizedBox(height: 10),
+              ],
+              _OrderItemRow(item: items[i]),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _OrderItemRow extends StatelessWidget {
+  final OrderItem item;
+
+  const _OrderItemRow({required this.item});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = item.image;
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: image == null
+              ? null
+              : () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => FullScreenImageView(
+                      image: image,
+                      title: item.name,
+                    ),
+                  ),
+                ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Container(
+              width: 56,
+              height: 56,
+              decoration: BoxDecoration(
+                color: AppColors.pageTint,
+                border: Border.all(color: AppColors.border),
+              ),
+              child: AppImage(
+                image: image,
+                fit: BoxFit.cover,
+                fallbackIcon: Icons.medication_outlined,
+                iconSize: 24,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                item.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              if (item.pack.isNotEmpty) ...[
+                const SizedBox(height: 2),
+                Text(
+                  item.pack,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: _mutedStyle,
+                ),
+              ],
+              const SizedBox(height: 4),
+              Text(
+                'Qty ${item.qty}  ·  ₹${formatRupees(item.unitPrice)} each',
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textBody,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Store invoice
 // ---------------------------------------------------------------------------
 
