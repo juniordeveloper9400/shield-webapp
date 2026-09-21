@@ -45,10 +45,12 @@ class _TopPackagesScreenState extends State<TopPackagesScreen> {
   Widget build(BuildContext context) {
     final category = widget.category;
     final all = _packages;
+    // "All Packages" lists real packages only — the single tests listed under
+    // "Top Profiles and Tests" have their own list. A category holds both.
     final packages = all == null
         ? null
         : category == null
-        ? all
+        ? all.where((p) => !p.isProfile).toList()
         : all.where((p) => p.categoryId == category.id).toList();
     return Scaffold(
       backgroundColor: AppColors.pageTint,

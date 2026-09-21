@@ -45,6 +45,12 @@ class LabPackage {
   /// Which "Explore by health concern" tile this sits under; empty when the
   /// package carries no category.
   final String categoryId;
+
+  /// True for the one-test listing the console keeps for a test or group test
+  /// switched on with "Show in the app" (`app.lab_package.source_test_id`,
+  /// migration 0056) — a profile / test in "Top Profiles and Tests" — and false
+  /// for a real package.
+  final bool isProfile;
   final int testCount;
   final int profileCount;
   final String rating;
@@ -93,6 +99,7 @@ class LabPackage {
     this.slug = '',
     required this.name,
     this.categoryId = '',
+    this.isProfile = false,
     required this.testCount,
     required this.profileCount,
     this.rating = '',

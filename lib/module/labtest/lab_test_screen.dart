@@ -7,13 +7,19 @@ import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
 import 'lab_package.dart';
 import 'package_card.dart';
+import 'profile_tile.dart';
 import 'top_packages_screen.dart';
+import 'top_profiles_screen.dart';
 
 /// The strip shows the first [_topPackageCount] packages in the admin's own
 /// sort order — the whole point of setting `sort` on `app.lab_package` is to
 /// choose what leads here, so this reads directly off it rather than a
 /// separate "is this one featured" flag the schema doesn't have.
 const int _topPackageCount = 5;
+
+/// How many single tests the "Top Profiles and Tests" card lists before "View
+/// all N tests ›" opens the rest.
+const int _topProfileCount = 5;
 
 /// Lab landing: sample-collection location, search, the Top Packages strip,
 /// booking shortcuts, and the running coupon.
@@ -70,10 +76,33 @@ class _LabTestScreenState extends State<LabTestScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final packages = _packages;
+    final all = _packages;
+    // Real packages and single-test listings arrive in one list (a test
+    // switched on with "Show in the app" is its own one-profile package row);
+    // the strip below is packages, "Top Profiles and Tests" is the rest.
+    final packages = all == null
+        ? null
+        : [
+            for (final p in all)
+              if (!p.isProfile) p,
+          ];
+    final profiles = all == null
+        ? const <LabPackage>[]
+        : [
+            for (final p in all)
+              if (p.isProfile) p,
+          ];
     final topPackages = packages == null
         ? const <LabPackage>[]
         : packages.take(_topPackageCount).toList();
+    // With only single tests on offer there are no packages to lead with, and
+    // an empty "Top Packages" card above them would read as a broken screen.
+    final showPackages =
+        packages == null || packages.isNotEmpty || profiles.isEmpty;
+    final categoryImages = {
+      for (final c in _categories ?? const <LabCategory>[]) c.id: c.image,
+    };
+
     return Scaffold(
       backgroundColor: AppColors.pageTint,
       body: SafeArea(
@@ -92,8 +121,95 @@ class _LabTestScreenState extends State<LabTestScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 18),
+            const SizedBox(height: 14),
+            if (showPackages) ...[
+              _SectionHeading(
+                title: 'Top Packages',
+                actionLabel: 'See all ›',
+                onAction: widget.onSeeAllPackages,
+              ),
+              const SizedBox(height: 10),
+              if (packages == null)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  child: Center(child: CircularProgressIndicator()),
+                )
+              else if (topPackages.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+                  child: _NoPackages(),
+                )
+              else
+                SizedBox(
+                  height: 470,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: topPackages.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 12),
+                    itemBuilder: (context, index) => SizedBox(
+                      width: 330,
+                      child: PackageCard(
+                        package: topPackages[index],
+                        onViewAll: widget.onSeeAllPackages,
+                        fillHeight: true,
+                      ),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 18),
+            ],
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: _BookingShortcuts(),
+            ),
+            if (profiles.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Top Profiles and Tests',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: LabProfileList(
+                  profiles: profiles.take(_topProfileCount).toList(),
+                  images: categoryImages,
+                  footer: profiles.length > _topProfileCount
+                      ? InkWell(
+                          key: const ValueKey('view-all-profiles'),
+                          onTap: () => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => const TopProfilesScreen(),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            child: Center(
+                              child: Text(
+                                'View all ${profiles.length} tests ›',
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.brandBlue,
+                                ),
+                              ),
+                            ),
+                          ),
+                        )
+                      : null,
+                ),
+              ),
+            ],
             if (_categories == null || _categories!.isNotEmpty) ...[
+              const SizedBox(height: 22),
               const Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
                 child: Text(
@@ -113,48 +229,8 @@ class _LabTestScreenState extends State<LabTestScreen> {
                   onTap: _openCategory,
                 ),
               ),
-              const SizedBox(height: 18),
             ],
-            _SectionHeading(
-              title: 'Top Packages',
-              actionLabel: 'See all ›',
-              onAction: widget.onSeeAllPackages,
-            ),
-            const SizedBox(height: 10),
-            if (packages == null)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (topPackages.isEmpty)
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-                child: _NoPackages(),
-              )
-            else
-              SizedBox(
-                height: 470,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: topPackages.length,
-                  separatorBuilder: (_, _) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) => SizedBox(
-                    width: 330,
-                    child: PackageCard(
-                      package: topPackages[index],
-                      onViewAll: widget.onSeeAllPackages,
-                      fillHeight: true,
-                    ),
-                  ),
-                ),
-              ),
             const SizedBox(height: 18),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: _BookingShortcuts(),
-            ),
-            const SizedBox(height: 14),
             const Padding(
               padding: EdgeInsets.fromLTRB(16, 0, 16, 24),
               child: _CouponBanner(),
