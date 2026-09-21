@@ -3,6 +3,26 @@
 // where every price in this file is grouped by it — keep working.
 export '../../money.dart' show formatRupees;
 
+/// "Explore by health concern" — one row of `app.lab_category` (see
+/// `CareRepository.fetchLabCategories`), never hardcoded here. [testCount] is
+/// how many active [LabPackage]s currently sit under it, worked out by the
+/// database at read time.
+class LabCategory {
+  final String id;
+  final String name;
+
+  /// An uploaded data URI; empty shows a plain placeholder tile.
+  final String image;
+  final int testCount;
+
+  const LabCategory({
+    required this.id,
+    required this.name,
+    this.image = '',
+    this.testCount = 0,
+  });
+}
+
 /// One profile inside a diagnostic package, e.g. "CBC · 24 parameters".
 class LabProfile {
   final String emoji;
@@ -21,6 +41,10 @@ class LabPackage {
   final String id;
   final String slug;
   final String name;
+
+  /// Which "Explore by health concern" tile this sits under; empty when the
+  /// package carries no category.
+  final String categoryId;
   final int testCount;
   final int profileCount;
   final String rating;
@@ -68,6 +92,7 @@ class LabPackage {
     required this.id,
     this.slug = '',
     required this.name,
+    this.categoryId = '',
     required this.testCount,
     required this.profileCount,
     this.rating = '',

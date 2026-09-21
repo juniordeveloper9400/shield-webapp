@@ -6,14 +6,18 @@ import 'lab_cart_badge.dart';
 import 'lab_package.dart';
 import 'package_card.dart';
 
-/// Full-page list of diagnostic packages.
+/// Full-page list of diagnostic packages — every one, or just the packages
+/// filed under [category] when it's set (pushed from a tile on the "Explore
+/// by health concern" grid).
 ///
 /// [onBack] is supplied when the screen is hosted as a lab sub-tab; without it
-/// the screen falls back to popping the route.
+/// the screen falls back to popping the route, which is how a category's own
+/// list is opened — a plain pushed screen, not a sub-tab.
 class TopPackagesScreen extends StatefulWidget {
   final VoidCallback? onBack;
+  final LabCategory? category;
 
-  const TopPackagesScreen({super.key, this.onBack});
+  const TopPackagesScreen({super.key, this.onBack, this.category});
 
   @override
   State<TopPackagesScreen> createState() => _TopPackagesScreenState();
@@ -39,7 +43,13 @@ class _TopPackagesScreenState extends State<TopPackagesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final packages = _packages;
+    final category = widget.category;
+    final all = _packages;
+    final packages = all == null
+        ? null
+        : category == null
+        ? all
+        : all.where((p) => p.categoryId == category.id).toList();
     return Scaffold(
       backgroundColor: AppColors.pageTint,
       appBar: AppBar(
@@ -53,9 +63,9 @@ class _TopPackagesScreenState extends State<TopPackagesScreen> {
           color: AppColors.textDark,
           tooltip: 'Back',
         ),
-        title: const Text(
-          'All Packages',
-          style: TextStyle(
+        title: Text(
+          category?.name ?? 'All Packages',
+          style: const TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             color: AppColors.textDark,
@@ -104,11 +114,7 @@ class _NoPackages extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: const [
-            Icon(
-              Icons.science_outlined,
-              size: 40,
-              color: AppColors.textMuted,
-            ),
+            Icon(Icons.science_outlined, size: 40, color: AppColors.textMuted),
             SizedBox(height: 10),
             Text(
               'No packages available right now',

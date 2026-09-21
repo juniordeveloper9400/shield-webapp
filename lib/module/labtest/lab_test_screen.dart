@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 
 import '../../data/backend/care_repository.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
 import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
 import 'lab_package.dart';
 import 'package_card.dart';
+import 'top_packages_screen.dart';
 
 /// The strip shows the first [_topPackageCount] packages in the admin's own
 /// sort order — the whole point of setting `sort` on `app.lab_package` is to
@@ -28,6 +30,7 @@ class LabTestScreen extends StatefulWidget {
 class _LabTestScreenState extends State<LabTestScreen> {
   String? _pincode;
   List<LabPackage>? _packages;
+  List<LabCategory>? _categories;
 
   @override
   void initState() {
@@ -36,14 +39,26 @@ class _LabTestScreenState extends State<LabTestScreen> {
   }
 
   Future<void> _load() async {
-    final packages = await CareRepository.instance.fetchLabPackages();
+    final results = await Future.wait([
+      CareRepository.instance.fetchLabPackages(),
+      CareRepository.instance.fetchLabCategories(),
+    ]);
     if (mounted) {
       // null means "unconfigured or unreachable", same as "nothing to show"
       // as far as this screen is concerned — without the fallback, a build
       // with no database configured (or offline) would spin forever instead
       // of settling on the empty state.
-      setState(() => _packages = packages ?? const []);
+      setState(() {
+        _packages = results[0] as List<LabPackage>? ?? const [];
+        _categories = results[1] as List<LabCategory>? ?? const [];
+      });
     }
+  }
+
+  void _openCategory(LabCategory category) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => TopPackagesScreen(category: category)),
+    );
   }
 
   Future<void> _chooseLocation() async {
@@ -77,7 +92,29 @@ class _LabTestScreenState extends State<LabTestScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 18),
+            if (_categories == null || _categories!.isNotEmpty) ...[
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 16),
+                child: Text(
+                  'Explore by health concern',
+                  style: TextStyle(
+                    fontSize: 19,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: _CategoryGrid(
+                  categories: _categories,
+                  onTap: _openCategory,
+                ),
+              ),
+              const SizedBox(height: 18),
+            ],
             _SectionHeading(
               title: 'Top Packages',
               actionLabel: 'See all ›',
@@ -129,6 +166,111 @@ class _LabTestScreenState extends State<LabTestScreen> {
   }
 }
 
+/// "Explore by health concern": a 4-across grid of category tiles. Kept as
+/// one boxed card (loading spinner while [categories] is null) rather than
+/// bare tiles on the page background, the same framing [_NoPackages] and the
+/// booking shortcuts use elsewhere on this screen.
+class _CategoryGrid extends StatelessWidget {
+  final List<LabCategory>? categories;
+  final ValueChanged<LabCategory> onTap;
+
+  const _CategoryGrid({required this.categories, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final items = categories;
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 6),
+      child: items == null
+          ? const Padding(
+              padding: EdgeInsets.symmetric(vertical: 20),
+              child: Center(child: CircularProgressIndicator()),
+            )
+          : GridView.count(
+              crossAxisCount: 4,
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              // Taller than the icon+two lines of text strictly need, so a
+              // longer category name, a wider system font, or a larger text
+              // scale never overflows the cell.
+              childAspectRatio: 0.66,
+              children: [
+                for (final category in items)
+                  _CategoryTile(
+                    category: category,
+                    onTap: () => onTap(category),
+                  ),
+              ],
+            ),
+    );
+  }
+}
+
+class _CategoryTile extends StatelessWidget {
+  final LabCategory category;
+  final VoidCallback onTap;
+
+  const _CategoryTile({required this.category, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 52,
+              height: 52,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                color: AppColors.pageTint,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: AppImage(
+                image: category.image,
+                fallbackIcon: Icons.science_outlined,
+                iconSize: 24,
+                iconColor: AppColors.brandBlue,
+                fit: BoxFit.cover,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              category.name,
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+                height: 1.15,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              '${category.testCount} test${category.testCount == 1 ? '' : 's'}',
+              style: const TextStyle(
+                fontSize: 10.5,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _NoPackages extends StatelessWidget {
   const _NoPackages();
 
@@ -144,11 +286,7 @@ class _NoPackages extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 28),
       child: const Column(
         children: [
-          Icon(
-            Icons.science_outlined,
-            size: 34,
-            color: AppColors.textMuted,
-          ),
+          Icon(Icons.science_outlined, size: 34, color: AppColors.textMuted),
           SizedBox(height: 8),
           Text(
             'No packages available right now',
@@ -482,4 +620,3 @@ class _CouponBanner extends StatelessWidget {
     );
   }
 }
-

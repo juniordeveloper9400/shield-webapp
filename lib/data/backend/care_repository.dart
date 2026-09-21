@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../module/dietitian/dietitian.dart';
 import '../../module/labtest/lab_package.dart';
 import 'backend_http.dart';
@@ -14,27 +16,45 @@ class CareRepository {
 
   static const CareRepository instance = CareRepository._();
 
+  /// Test-only seams: a widget test can't reach a real backend, so this swaps
+  /// in fixture data instead of exercising the network path — mirrors root's
+  /// identical hooks on its own, direct-Neon `CareRepository`. Reset to null
+  /// in `tearDown`.
+  @visibleForTesting
+  static Future<List<LabPackage>?> Function()? labPackagesOverride;
+  @visibleForTesting
+  static Future<List<LabCategory>?> Function()? labCategoriesOverride;
+
   bool get isAvailable => BackendHttp.isConfigured;
 
   /// Every active package, each with its own profiles (and extras) attached
   /// — the package card shows the full breakdown with nothing else to tap,
   /// so the list itself has to carry it.
   Future<List<LabPackage>?> fetchLabPackages() async {
+    final override = labPackagesOverride;
+    if (override != null) {
+      return override();
+    }
     if (!BackendHttp.isConfigured) {
       return null;
     }
     try {
-      final rows = await BackendHttp.instance.request(
-        'GET',
-        '/v1/public/care/lab-packages',
-        auth: false,
-      ) as List<dynamic>;
+      final rows =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/public/care/lab-packages',
+                auth: false,
+              )
+              as List<dynamic>;
       return [
         for (final row in rows.cast<Map<String, dynamic>>())
           LabPackage(
             id: row['id'].toString(),
             slug: _str(row['slug']),
             name: _str(row['name']),
+            categoryId: row['categoryId'] == null
+                ? ''
+                : row['categoryId'].toString(),
             testCount: _int(row['testCount']),
             profileCount: _int(row['profileCount']),
             rating: _str(row['rating']),
@@ -64,6 +84,40 @@ class CareRepository {
     }
   }
 
+  /// "Explore by health concern" — every active category, each carrying how
+  /// many active packages currently sit under it (`GET
+  /// /v1/public/care/lab-categories` — `CareService.listLabCategories`).
+  Future<List<LabCategory>?> fetchLabCategories() async {
+    final override = labCategoriesOverride;
+    if (override != null) {
+      return override();
+    }
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/public/care/lab-categories',
+                auth: false,
+              )
+              as List<dynamic>;
+      return [
+        for (final row in rows.cast<Map<String, dynamic>>())
+          LabCategory(
+            id: row['id'].toString(),
+            name: _str(row['name']),
+            image: _str(row['image']),
+            testCount: _int(row['testCount']),
+          ),
+      ];
+    } catch (error) {
+      BackendHttp.log('CareRepository.fetchLabCategories failed', error: error);
+      return null;
+    }
+  }
+
   /// Every active dietitian. [Dietitian.initials] has no field of its own —
   /// derived from [Dietitian.name] here, matching root's identical rule.
   Future<List<Dietitian>?> fetchDietitians() async {
@@ -71,11 +125,13 @@ class CareRepository {
       return null;
     }
     try {
-      final rows = await BackendHttp.instance.request(
-        'GET',
-        '/v1/public/care/dietitians',
-        auth: false,
-      ) as List<dynamic>;
+      final rows =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/public/care/dietitians',
+                auth: false,
+              )
+              as List<dynamic>;
       return [
         for (final row in rows.cast<Map<String, dynamic>>())
           Dietitian(
@@ -103,7 +159,11 @@ class CareRepository {
     return [
       for (final row in raw.cast<Map<String, dynamic>>())
         if (_bool(row['isExtra']) == isExtra)
-          LabProfile(_str(row['emoji']), _str(row['name']), _int(row['parameters'])),
+          LabProfile(
+            _str(row['emoji']),
+            _str(row['name']),
+            _int(row['parameters']),
+          ),
     ];
   }
 
@@ -114,9 +174,14 @@ class CareRepository {
     final words = name
         .split(RegExp(r'\s+'))
         .where((w) => w.isNotEmpty && w.replaceAll('.', '').isNotEmpty)
-        .where((w) => !{'dr', 'mr', 'mrs', 'ms'}.contains(
-              w.replaceAll('.', '').toLowerCase(),
-            ))
+        .where(
+          (w) => !{
+            'dr',
+            'mr',
+            'mrs',
+            'ms',
+          }.contains(w.replaceAll('.', '').toLowerCase()),
+        )
         .toList();
     if (words.isEmpty) {
       return '';
