@@ -242,7 +242,7 @@ class ReferralLadder {
   /// Shown on the invite-code card before the member's real code has come
   /// back from Neon (or on a build with no database at all) — a placeholder
   /// so the card is never blank, never the sample fixture below.
-  static const String fallbackCode = 'SHIELD-RN4821';
+  static const String fallbackCode = 'SAHAKAR-RN4821';
 
   /// The rung a member is standing on: the one they last cleared, or the one
   /// they are working towards before anything is cleared.
