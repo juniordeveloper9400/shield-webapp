@@ -102,8 +102,8 @@ class ReferEarnScreen extends StatelessWidget {
                 code: code,
                 accent: standing.accent,
                 // No code yet (still loading, or offline): say so, and keep
-              // Invite off — a link with nothing in it links nobody to you.
-              ready: code.isNotEmpty,
+                // Invite off — a link with nothing in it links nobody to you.
+                ready: code.isNotEmpty,
               ),
             ),
             const SizedBox(height: 14),
@@ -477,7 +477,11 @@ class _StandingCard extends StatelessWidget {
           ),
           const SizedBox(height: 14),
           Text(
-            cleared == 0 ? 'Not started' : 'Level $cleared - ${standing.name}',
+            cleared == 0
+                ? (progress.directReferrals > 0
+                      ? 'Working on Level 1 - ${standing.name}'
+                      : 'Not started')
+                : 'Level $cleared - ${standing.name}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
@@ -589,6 +593,11 @@ class _MetricGrid extends StatelessWidget {
               child: _Metric(
                 value: progress.sahakarMoneyLabel,
                 label: 'Sahakar money earned',
+                // Commission is paid on the server, into the wallet, as soon as
+                // a friend's plan is approved — there is nothing to claim.
+                note: progress.sahakarMoney > 0
+                    ? 'Added to your wallet automatically'
+                    : null,
               ),
             ),
           ],
@@ -602,7 +611,10 @@ class _Metric extends StatelessWidget {
   final String value;
   final String label;
 
-  const _Metric({required this.value, required this.label});
+  /// A small line under the label, when there is something to add.
+  final String? note;
+
+  const _Metric({required this.value, required this.label, this.note});
 
   @override
   Widget build(BuildContext context) {
@@ -631,6 +643,17 @@ class _Metric extends StatelessWidget {
             style: const TextStyle(fontSize: 12, color: Color(0xFFE6EBF3)),
           ),
         ),
+        if (note != null)
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              note!,
+              key: const ValueKey('wallet-credit-note'),
+              maxLines: 1,
+              style: const TextStyle(fontSize: 10.5, color: Color(0xB3E6EBF3)),
+            ),
+          ),
       ],
     );
   }
@@ -750,16 +773,113 @@ class _InviteButton extends StatelessWidget {
 /// Everyone who has joined on the member's code, each at the stage they have
 /// reached — so the referrer can follow a friend from sign-up to first order to
 /// plan, and never wonders whether a registration "took".
-class _ReferredList extends StatelessWidget {
+///
+/// Folded to a one-line summary until asked, like the commission card above it:
+/// a member with a few dozen referrals should not have the page turned into a
+/// list. Opened, it shows the first few and offers the rest a page at a time.
+class _ReferredList extends StatefulWidget {
   final ReferralProgress progress;
 
-  static const int _shown = 10;
+  /// How many are shown when it first opens, and how many more each
+  /// "Show more" adds.
+  static const int firstPage = 5;
+  static const int nextPage = 10;
 
   const _ReferredList({required this.progress});
 
   @override
+  State<_ReferredList> createState() => _ReferredListState();
+}
+
+class _ReferredListState extends State<_ReferredList> {
+  bool _open = false;
+  int _shown = _ReferredList.firstPage;
+
+  void _toggle() => setState(() {
+    _open = !_open;
+    // Folding it away and opening it again starts from the top of the list.
+    if (!_open) _shown = _ReferredList.firstPage;
+  });
+
+  /// "2 joined · 1 transacted · 1 plan" — the whole list in a line.
+  String _summary(List<ReferredMember> people) {
+    final transacted = people
+        .where((p) => p.stage != ReferredStage.joined)
+        .length;
+    final plans = people
+        .where((p) => p.stage == ReferredStage.planActivated)
+        .length;
+    return [
+      '${people.length} joined',
+      '$transacted transacted',
+      if (plans > 0) '$plans ${plans == 1 ? 'plan' : 'plans'}',
+    ].join(' · ');
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final people = progress.invitees;
+    final people = widget.progress.invitees;
+    final hasPeople = people.isNotEmpty;
+
+    final header = Row(
+      children: [
+        const Expanded(
+          child: Text(
+            'People you referred',
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
+          ),
+        ),
+        if (hasPeople) ...[
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
+            decoration: BoxDecoration(
+              color: AppColors.pageTint,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              '${people.length}',
+              style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                color: AppColors.brandBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Semantics(
+            button: true,
+            label: _open
+                ? 'Hide the people you referred'
+                : 'Show the people you referred',
+            child: Container(
+              key: const ValueKey('referred-list-arrow'),
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.pageTint,
+                shape: BoxShape.circle,
+                border: Border.all(color: AppColors.border),
+              ),
+              alignment: Alignment.center,
+              child: AnimatedRotation(
+                turns: _open ? 0.5 : 0,
+                duration: const Duration(milliseconds: 200),
+                curve: Curves.easeOut,
+                child: const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: AppColors.brandBlue,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
 
     return Container(
       key: const ValueKey('referred-list'),
@@ -768,76 +888,88 @@ class _ReferredList extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
-      padding: const EdgeInsets.all(14),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            children: [
-              const Expanded(
-                child: Text(
-                  'People you referred',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-              if (people.isNotEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 9,
-                    vertical: 3,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppColors.pageTint,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    '${people.length}',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.brandBlue,
+          // The whole header is the button once there is somebody to list.
+          InkWell(
+            key: const ValueKey('referred-list-toggle'),
+            onTap: hasPeople ? _toggle : null,
+            child: Padding(
+              padding: const EdgeInsets.all(14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  header,
+                  const SizedBox(height: 4),
+                  Text(
+                    hasPeople
+                        ? _summary(people)
+                        : 'Nobody has joined with your code yet. When a friend '
+                              'registers with it, they show up here straight away.',
+                    key: const ValueKey('referred-list-summary'),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      height: 1.4,
+                      color: hasPeople
+                          ? AppColors.textMuted
+                          : AppColors.textBody,
                     ),
                   ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          const Text(
-            'A friend counts towards your level once they make a transaction.',
-            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-          ),
-          const SizedBox(height: 10),
-          if (people.isEmpty)
-            const Text(
-              'Nobody has joined with your code yet. When a friend registers '
-              'with it, they show up here straight away.',
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.textBody,
+                ],
               ),
-            )
-          else ...[
-            for (var i = 0; i < people.length && i < _shown; i++) ...[
-              if (i > 0) const Divider(height: 1, color: AppColors.border),
-              _ReferredRow(member: people[i]),
-            ],
-            if (people.length > _shown)
-              Padding(
-                padding: const EdgeInsets.only(top: 8),
-                child: Text(
-                  '+${people.length - _shown} more',
-                  style: const TextStyle(
-                    fontSize: 12.5,
-                    color: AppColors.textMuted,
+            ),
+          ),
+          AnimatedSize(
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+            alignment: Alignment.topCenter,
+            child: !hasPeople || !_open
+                ? const SizedBox(width: double.infinity)
+                : Padding(
+                    padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Divider(height: 1, color: AppColors.border),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: Text(
+                            'A friend counts towards your level once they '
+                            'make a transaction.',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                        for (
+                          var i = 0;
+                          i < people.length && i < _shown;
+                          i++
+                        ) ...[
+                          if (i > 0)
+                            const Divider(height: 1, color: AppColors.border),
+                          _ReferredRow(member: people[i]),
+                        ],
+                        if (people.length > _shown)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton(
+                              key: const ValueKey('referred-list-more'),
+                              onPressed: () => setState(
+                                () => _shown += _ReferredList.nextPage,
+                              ),
+                              child: Text(
+                                'Show more (${people.length - _shown} left)',
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-              ),
-          ],
+          ),
         ],
       ),
     );

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import '../../data/backend/backend_http.dart';
 import '../../data/backend/referral_repository.dart';
 import '../auth/auth_service.dart';
+import '../wallet/wallet_service.dart';
 import 'referral_level.dart';
 
 enum ReferralStatus { idle, loading, ready, error }
@@ -107,8 +108,15 @@ class ReferralService extends ChangeNotifier {
     try {
       final code = await ReferralRepository.instance.ensureCodeFor(phone);
       final progress = await ReferralRepository.instance.progressFor(phone);
+      final earnedBefore = _progress.sahakarMoney;
       if (code != null) _code = code;
       if (progress != null) _progress = progress;
+      // Sahakar money is credited to the wallet on the server the moment a
+      // friend's plan is approved; when the figure moves, bring the wallet's
+      // balance and ledger up to date so the two screens agree.
+      if (progress != null && progress.sahakarMoney != earnedBefore) {
+        unawaited(WalletService.instance.refreshFromDatabase(phone));
+      }
       _status = progress == null ? ReferralStatus.error : ReferralStatus.ready;
     } catch (error) {
       BackendHttp.log('ReferralService load failed', error: error);

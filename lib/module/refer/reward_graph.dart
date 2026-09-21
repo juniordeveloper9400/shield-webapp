@@ -26,11 +26,7 @@ class RewardGraph extends StatefulWidget {
   final List<ReferralLevel> levels;
   final ReferralProgress progress;
 
-  const RewardGraph({
-    super.key,
-    required this.levels,
-    required this.progress,
-  });
+  const RewardGraph({super.key, required this.levels, required this.progress});
 
   /// The plotted area, above the row of values and below the marker's pill.
   static const double plotHeight = 74;
@@ -90,33 +86,29 @@ class _RewardGraphState extends State<RewardGraph>
     final levels = widget.levels;
     final cleared = widget.progress.currentLevel(levels);
 
-    // Where the member is standing. Nothing cleared yet still points at the
-    // first rung — that is the one being worked on — but the marker says
-    // "Start here" rather than claiming they are already on it.
     final standing = ReferralLadder.standingFor(widget.progress);
-    final index = levels.indexWhere((level) => level.level == standing.level);
 
-    // The dot the marker sets off from, and how far along the segment to the
-    // next dot it has travelled. A cleared Level 1 with three of the five
-    // referrals Level 2 asks for leaves the marker a third of the way up the
-    // rise between the two — the climb has flow rather than sitting frozen on
-    // a rung.
+    // How far along the segment to the next dot the marker has travelled. The
+    // climb starts from a "start" point before the first rung, so it moves from
+    // the very first transaction: one of the two Starter asks for puts the
+    // marker halfway to Starter, a cleared Level 1 with three of the five
+    // Level 2 asks for a third of the way up the next rise. Frozen until a rung
+    // is cleared, a member would make a transaction and see nothing move.
     final next = widget.progress.nextLevel(levels);
-    final baseIndex = index < 0 ? 0 : index;
-    final advance = (cleared == 0 || next == null)
+    final advance = next == null
         ? 0.0
         : widget.progress.progressTowards(next, levels);
 
     // The rung the flow is heading for: the next uncleared one, or the top
     // once the whole ladder is done.
-    final targetIndex = cleared >= levels.length
-        ? levels.length - 1
-        : cleared;
+    final targetIndex = cleared >= levels.length ? levels.length - 1 : cleared;
 
     return Semantics(
       label: cleared == 0
-          ? 'Reward graph. You have not cleared a level yet. '
-                'Level 1 pays ${levels.first.pointsLabel}.'
+          ? 'Reward graph. You have not cleared a level yet — '
+                '${widget.progress.directReferrals} of '
+                '${levels.first.referralsRequired} referrals towards level 1, '
+                'which pays ${levels.first.pointsLabel}.'
           : 'Reward graph. You are on level $cleared of ${levels.length}, '
                 'which pays ${standing.pointsLabel}.',
       excludeSemantics: true,
@@ -144,7 +136,8 @@ class _RewardGraphState extends State<RewardGraph>
                   points: [for (final level in levels) level.points],
                   accents: [for (final level in levels) level.accent],
                   cleared: cleared,
-                  markerIndex: baseIndex,
+                  // 0 is the start point, k the k-th rung's dot.
+                  markerIndex: cleared,
                   markerAdvance: advance,
                   pulse: _pulse.value,
                 ),
@@ -252,9 +245,7 @@ class _AxisLabel extends StatelessWidget {
               fontSize: 10,
               height: 1,
               fontWeight: marked ? FontWeight.w800 : FontWeight.w600,
-              color: marked || lit
-                  ? AppColors.white
-                  : const Color(0x8CE6EBF3),
+              color: marked || lit ? AppColors.white : const Color(0x8CE6EBF3),
             ),
           ),
         ),
@@ -286,13 +277,14 @@ class _LadderPainter extends CustomPainter {
   /// How many rungs are cleared, 0 to [points].length.
   final int cleared;
 
-  /// The rung the marker sets off from — the last one cleared, or the first
-  /// rung before anything is cleared.
+  /// The point the marker sets off from: 0 is the start of the climb (before
+  /// Starter), k is the k-th rung's dot — i.e. the number of rungs cleared.
   final int markerIndex;
 
-  /// 0 to 1: how far along the rise from [markerIndex] to the next rung the
+  /// 0 to 1: how far along the rise from [markerIndex] to the next point the
   /// member has climbed, so a half-finished Level 2 puts the marker halfway
-  /// up the segment rather than parked on Level 1.
+  /// up the segment rather than parked on Level 1 — and one of Starter's two
+  /// referrals puts it halfway from the start to Starter.
   final double markerAdvance;
 
   /// 0 to 1, driving the ring that opens out of the marker and fades.
@@ -307,17 +299,16 @@ class _LadderPainter extends CustomPainter {
     required this.pulse,
   });
 
-  /// The marker's position: [markerIndex]'s dot, nudged [markerAdvance] of the
-  /// way towards the next dot along the straight segment between them.
-  Offset _markerPoint(List<double> xs, List<double> ys) {
-    if (markerAdvance <= 0 || markerIndex >= xs.length - 1) {
-      return Offset(xs[markerIndex], ys[markerIndex]);
+  /// The marker's position: [markerIndex]'s point, nudged [markerAdvance] of
+  /// the way towards the next point along the straight segment between them.
+  /// [pts] is the start point followed by one dot per rung.
+  Offset _markerPoint(List<Offset> pts) {
+    final from = pts[markerIndex.clamp(0, pts.length - 1)];
+    if (markerAdvance <= 0 || markerIndex >= pts.length - 1) {
+      return from;
     }
     final t = markerAdvance.clamp(0.0, 1.0);
-    return Offset(
-      xs[markerIndex] + (xs[markerIndex + 1] - xs[markerIndex]) * t,
-      ys[markerIndex] + (ys[markerIndex + 1] - ys[markerIndex]) * t,
-    );
+    return Offset.lerp(from, pts[markerIndex + 1], t)!;
   }
 
   /// Kept clear at the top for the marker's ring, and at the sides so the
@@ -346,27 +337,37 @@ class _LadderPainter extends CustomPainter {
     final right = size.width - _inset;
     final top = _topPad;
     final bottom = size.height;
-    final span = right - left;
     final height = bottom - top;
     final max = points.reduce(math.max).toDouble();
 
+    // One dot per rung, each straight above the centre of its own label
+    // column, so a dot and the name under it read as the same rung.
+    final slot = size.width / points.length;
     final xs = <double>[
-      for (var i = 0; i < points.length; i++)
-        left + span * i / (points.length - 1),
+      for (var i = 0; i < points.length; i++) slot * (i + 0.5),
     ];
     final ys = <double>[
       for (final value in points) bottom - height * _scale(value / max),
     ];
 
-    final marker = _markerPoint(xs, ys);
+    // Where the climb begins: at the baseline, just inside the left edge, ahead
+    // of Starter. Kept a little off the baseline so the marker's ring is not
+    // cut by the labels underneath.
+    final start = Offset(left + 2, bottom - _dotRadius - 3);
+    final pts = <Offset>[
+      start,
+      for (var i = 0; i < xs.length; i++) Offset(xs[i], ys[i]),
+    ];
+
+    final marker = _markerPoint(pts);
 
     _paintBaseline(canvas, left, right, bottom);
 
     // Everything past where the member stands, drawn first and thinner, so
     // the climb they have made sits on top of the climb still ahead.
-    final ahead = Path()..moveTo(xs.first, ys.first);
-    for (var i = 1; i < xs.length; i++) {
-      ahead.lineTo(xs[i], ys[i]);
+    final ahead = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (var i = 1; i < pts.length; i++) {
+      ahead.lineTo(pts[i].dx, pts[i].dy);
     }
     canvas.drawPath(
       ahead,
@@ -378,10 +379,18 @@ class _LadderPainter extends CustomPainter {
         ..color = AppColors.white.withValues(alpha: 0.4),
     );
 
-    _paintClimbed(canvas, xs, ys, bottom, marker);
+    _paintClimbed(canvas, pts, bottom, marker);
+
+    // The start of the climb: a small mark, so the first stretch has a
+    // beginning to travel from.
+    canvas.drawCircle(
+      start,
+      2.2,
+      Paint()..color = AppColors.white.withValues(alpha: 0.55),
+    );
 
     for (var i = 0; i < xs.length; i++) {
-      _paintDot(canvas, Offset(xs[i], ys[i]), i);
+      _paintDot(canvas, pts[i + 1], i);
     }
 
     _paintMarker(canvas, marker);
@@ -406,41 +415,41 @@ class _LadderPainter extends CustomPainter {
   /// already under way, not a marker frozen on a rung.
   void _paintClimbed(
     Canvas canvas,
-    List<double> xs,
-    List<double> ys,
+    List<Offset> pts,
     double bottom,
     Offset marker,
   ) {
-    // Nothing cleared and not yet moving: the marker just sits on the first
-    // dot, there is no climb behind it to draw.
+    // At the very start and not yet moving: there is no climb behind the
+    // marker to draw.
     if (markerIndex == 0 && markerAdvance <= 0) {
       return;
     }
 
-    final line = Path()..moveTo(xs.first, ys.first);
-    for (var i = 1; i <= markerIndex; i++) {
-      line.lineTo(xs[i], ys[i]);
+    final line = Path()..moveTo(pts.first.dx, pts.first.dy);
+    for (var i = 1; i <= markerIndex && i < pts.length; i++) {
+      line.lineTo(pts[i].dx, pts[i].dy);
     }
     line.lineTo(marker.dx, marker.dy);
 
     final area = Path.from(line)
       ..lineTo(marker.dx, bottom)
-      ..lineTo(xs.first, bottom)
+      ..lineTo(pts.first.dx, bottom)
       ..close();
 
     canvas.drawPath(
       area,
       Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: [
-            AppColors.white.withValues(alpha: 0.22),
-            AppColors.white.withValues(alpha: 0),
-          ],
-        ).createShader(
-          Rect.fromLTRB(xs.first, marker.dy, marker.dx, bottom),
-        ),
+        ..shader =
+            LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                AppColors.white.withValues(alpha: 0.22),
+                AppColors.white.withValues(alpha: 0),
+              ],
+            ).createShader(
+              Rect.fromLTRB(pts.first.dx, marker.dy, marker.dx, bottom),
+            ),
     );
 
     canvas.drawPath(
@@ -483,7 +492,9 @@ class _LadderPainter extends CustomPainter {
   /// opens out of it and fades on every pulse. White so it reads as the head
   /// of the white climb line rather than as one more coloured rung.
   void _paintMarker(Canvas canvas, Offset at) {
-    final accent = accents[markerIndex];
+    // Cored in the colour of the rung last reached — or of Starter, on the way
+    // to it.
+    final accent = accents[(markerIndex - 1).clamp(0, accents.length - 1)];
 
     if (pulse > 0) {
       canvas.drawCircle(

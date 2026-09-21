@@ -660,27 +660,40 @@ class _DetailBar extends StatelessWidget {
 
     return Row(
       children: [
+        // Wide enough for "Transacted", and scaled down rather than cut to
+        // "Transact…" on a narrow phone or a large text size.
         SizedBox(
-          width: 58,
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 11.5,
-              fontWeight: FontWeight.w600,
-              color: textColour,
+          width: 76,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              label,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: textColour,
+              ),
             ),
           ),
         ),
         Expanded(
           child: ClipRRect(
             borderRadius: BorderRadius.circular(20),
-            child: LinearProgressIndicator(
-              value: fraction,
-              minHeight: 5,
-              backgroundColor: AppColors.border,
-              valueColor: AlwaysStoppedAnimation(barColour),
+            // Glides to the new length when a friend's transaction lands while
+            // the page is open, rather than jumping. The first build draws at
+            // its value with no animation.
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(end: fraction),
+              duration: const Duration(milliseconds: 600),
+              curve: Curves.easeOutCubic,
+              builder: (context, value, _) => LinearProgressIndicator(
+                value: value,
+                minHeight: 5,
+                backgroundColor: AppColors.border,
+                valueColor: AlwaysStoppedAnimation(barColour),
+              ),
             ),
           ),
         ),

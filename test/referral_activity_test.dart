@@ -2,9 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/data/backend/referral_repository.dart';
+import 'package:shield/module/refer/journey_map.dart';
 import 'package:shield/module/refer/refer_earn_screen.dart';
 import 'package:shield/module/refer/referral_level.dart';
 import 'package:shield/module/refer/referral_service.dart';
+import 'package:shield/module/refer/reward_graph.dart';
 
 /// What the referrer sees of the people they referred: somebody joining shows
 /// up straight away, then moves across as they transact and take a plan.
@@ -152,6 +154,11 @@ void main() {
       await tester.pumpAndSettle();
     }
 
+    Future<void> openList(WidgetTester tester) async {
+      await tester.tap(find.byKey(const ValueKey('referred-list-toggle')));
+      await tester.pumpAndSettle();
+    }
+
     testWidgets('a friend who has only joined shows straight away', (
       tester,
     ) async {
@@ -170,9 +177,13 @@ void main() {
         ),
       );
 
-      // Not the empty state the page used to be stuck on.
+      // Not the empty state the page used to be stuck on. The list is folded
+      // to a line, and opens on a tap.
       expect(find.textContaining('Nobody has joined'), findsNothing);
       expect(find.text('People you referred'), findsOneWidget);
+      expect(find.text('1 joined · 0 transacted'), findsOneWidget);
+      expect(find.text('Nihal K.'), findsNothing);
+      await openList(tester);
       expect(find.text('Nihal K.'), findsOneWidget);
       expect(
         find.textContaining('Waiting for their first order'),
@@ -217,6 +228,8 @@ void main() {
         ),
       );
 
+      expect(find.text('2 joined · 2 transacted · 1 plan'), findsOneWidget);
+      await openList(tester);
       expect(find.text('Althaf M.'), findsOneWidget);
       expect(find.text('Plan activated'), findsOneWidget);
       expect(find.text('Made a transaction'), findsOneWidget);
@@ -292,6 +305,201 @@ void main() {
     });
   });
 
+  group('the people list folds and unfolds', () {
+    Future<void> pumpWith(WidgetTester tester, ReferralProgress progress) async {
+      tester.view.physicalSize = const Size(400, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(home: ReferEarnScreen(progress: progress)));
+      await tester.pumpAndSettle();
+    }
+
+    List<ReferredMember> people(int count) => [
+      for (var i = 1; i <= count; i++)
+        ReferredMember(
+          name: 'Friend$i',
+          stage: ReferredStage.joined,
+          joinedAt: DateTime(2026, 9, 1),
+        ),
+    ];
+
+    testWidgets('starts folded to a summary, opens on a tap and folds again', (
+      tester,
+    ) async {
+      await pumpWith(
+        tester,
+        ReferralProgress(
+          directReferrals: 0,
+          pendingReferrals: 2,
+          invitees: people(2),
+        ),
+      );
+
+      expect(find.text('2 joined · 0 transacted'), findsOneWidget);
+      expect(find.text('Friend1'), findsNothing);
+
+      await tester.tap(find.byKey(const ValueKey('referred-list-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.text('Friend1'), findsOneWidget);
+      expect(find.text('Friend2'), findsOneWidget);
+
+      await tester.tap(find.byKey(const ValueKey('referred-list-toggle')));
+      await tester.pumpAndSettle();
+      expect(find.text('Friend1'), findsNothing);
+      // The summary is what is left, so the count is never hidden.
+      expect(find.text('2 joined · 0 transacted'), findsOneWidget);
+    });
+
+    testWidgets('a long list opens five at a time', (tester) async {
+      await pumpWith(
+        tester,
+        ReferralProgress(
+          directReferrals: 0,
+          pendingReferrals: 23,
+          invitees: people(23),
+        ),
+      );
+      await tester.tap(find.byKey(const ValueKey('referred-list-toggle')));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Friend5'), findsOneWidget);
+      expect(find.text('Friend6'), findsNothing);
+      expect(find.text('Show more (18 left)'), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const ValueKey('referred-list-more')));
+      await tester.tap(find.byKey(const ValueKey('referred-list-more')));
+      await tester.pumpAndSettle();
+      expect(find.text('Friend15'), findsOneWidget);
+      expect(find.text('Friend16'), findsNothing);
+      expect(find.text('Show more (8 left)'), findsOneWidget);
+
+      await tester.ensureVisible(find.byKey(const ValueKey('referred-list-more')));
+      await tester.tap(find.byKey(const ValueKey('referred-list-more')));
+      await tester.pumpAndSettle();
+      expect(find.text('Friend23'), findsOneWidget);
+      expect(find.byKey(const ValueKey('referred-list-more')), findsNothing);
+    });
+
+    testWidgets('with nobody to list there is nothing to fold', (tester) async {
+      await pumpWith(tester, const ReferralProgress(directReferrals: 0));
+
+      expect(find.byKey(const ValueKey('referred-list-arrow')), findsNothing);
+      expect(find.textContaining('Nobody has joined'), findsOneWidget);
+    });
+  });
+
+  group('the graph and the level bar follow the transactions', () {
+    Future<void> pumpWith(WidgetTester tester, ReferralProgress progress) async {
+      tester.view.physicalSize = const Size(400, 3200);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(MaterialApp(home: ReferEarnScreen(progress: progress)));
+      await tester.pumpAndSettle();
+    }
+
+    /// The graph painter, read off the widget: where the marker sets off from
+    /// (0 = the start of the climb, k = the k-th rung) and how far it has gone.
+    dynamic graphPainter(WidgetTester tester) {
+      final paint = tester.widget<CustomPaint>(
+        find.descendant(
+          of: find.byType(RewardGraph),
+          matching: find.byWidgetPredicate(
+            (w) => w is CustomPaint && w.painter != null,
+          ),
+        ),
+      );
+      return paint.painter;
+    }
+
+    testWidgets('the marker leaves the start on the first transaction', (
+      tester,
+    ) async {
+      await pumpWith(tester, const ReferralProgress(directReferrals: 0));
+      var painter = graphPainter(tester);
+      expect([painter.markerIndex, painter.markerAdvance], [0, 0.0]);
+
+      // One of the two Starter asks for: halfway from the start to Starter,
+      // before any level is cleared.
+      await pumpWith(tester, const ReferralProgress(directReferrals: 1));
+      painter = graphPainter(tester);
+      expect(painter.cleared, 0);
+      expect(painter.markerIndex, 0);
+      expect(painter.markerAdvance, 0.5);
+    });
+
+    testWidgets('the marker climbs on across the rungs it clears', (tester) async {
+      // Starter cleared, three of the five Riser asks for.
+      await pumpWith(tester, const ReferralProgress(directReferrals: 3));
+      var painter = graphPainter(tester);
+      expect(painter.cleared, 1);
+      expect(painter.markerIndex, 1);
+      expect(painter.markerAdvance, closeTo(1 / 3, 1e-9));
+
+      // The whole ladder: parked on the last rung.
+      await pumpWith(tester, const ReferralProgress(directReferrals: 40));
+      painter = graphPainter(tester);
+      expect(painter.cleared, 5);
+      expect(painter.markerIndex, 5);
+      expect(painter.markerAdvance, 0.0);
+    });
+
+    testWidgets('a joined-but-unpaid friend does not move the marker', (
+      tester,
+    ) async {
+      await pumpWith(
+        tester,
+        const ReferralProgress(directReferrals: 0, pendingReferrals: 9),
+      );
+      final painter = graphPainter(tester);
+      expect([painter.markerIndex, painter.markerAdvance], [0, 0.0]);
+    });
+
+    testWidgets('the bar on a rung fills with transactions', (tester) async {
+      Finder bars() => find.descendant(
+        of: find.byType(JourneyMap),
+        matching: find.byType(LinearProgressIndicator),
+      );
+
+      await pumpWith(tester, const ReferralProgress(directReferrals: 0));
+      expect(tester.widget<LinearProgressIndicator>(bars().first).value, 0.0);
+
+      await pumpWith(tester, const ReferralProgress(directReferrals: 1));
+      expect(tester.widget<LinearProgressIndicator>(bars().first).value, 0.5);
+      expect(find.text('1/2'), findsOneWidget);
+
+      await pumpWith(tester, const ReferralProgress(directReferrals: 2));
+      expect(tester.widget<LinearProgressIndicator>(bars().first).value, 1.0);
+    });
+
+    testWidgets('the title says a level is being worked on once it has begun', (
+      tester,
+    ) async {
+      await pumpWith(tester, const ReferralProgress(directReferrals: 0));
+      expect(find.text('Not started'), findsOneWidget);
+
+      await pumpWith(tester, const ReferralProgress(directReferrals: 1));
+      expect(find.text('Not started'), findsNothing);
+      expect(find.text('Working on Level 1 - Starter'), findsOneWidget);
+
+      await pumpWith(tester, const ReferralProgress(directReferrals: 2));
+      expect(find.text('Level 1 - Starter'), findsWidgets);
+    });
+
+    testWidgets('earned money says it goes to the wallet by itself', (
+      tester,
+    ) async {
+      await pumpWith(tester, const ReferralProgress(directReferrals: 1));
+      expect(find.byKey(const ValueKey('wallet-credit-note')), findsNothing);
+
+      await pumpWith(
+        tester,
+        const ReferralProgress(directReferrals: 1, plansActivated: 1, sahakarMoney: 200),
+      );
+      expect(find.text('₹200'), findsOneWidget);
+      expect(find.text('Added to your wallet automatically'), findsOneWidget);
+    });
+  });
+
   group('the page opened from the app', () {
     tearDown(ReferralService.instance.debugReset);
 
@@ -331,6 +539,8 @@ void main() {
         await tester.pumpAndSettle();
 
         expect(find.text('SAHAKAR-4821'), findsOneWidget);
+        await tester.tap(find.byKey(const ValueKey('referred-list-toggle')));
+        await tester.pumpAndSettle();
         expect(
           find.textContaining('Waiting for their first order'),
           findsOneWidget,
