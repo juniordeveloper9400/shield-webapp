@@ -181,15 +181,32 @@ class AuthService {
   /// calls this, and the half-finished sign-in is completed the same way
   /// [verifyOtp] would have — so the member is not left sitting on the code
   /// screen while Firebase already considers them signed in.
-  void _resolvePendingFromGateway() {
+  Future<void> _resolvePendingFromGateway() async {
     final pending = _pending;
     if (pending == null) {
       return;
     }
     _pending = null;
-    final user = AuthUser(name: pending.name, phone: pending.phone);
+    final user = AuthUser(
+      name: await _nameFor(pending),
+      phone: pending.phone,
+    );
     currentUser.value = user;
     _afterSignIn(user);
+  }
+
+  /// The name a member signs in under. A number that already has an account
+  /// keeps the name stored on it, whatever was typed on the way in — typing a
+  /// different name on the create-account path must not rename an existing
+  /// member. Only a number with no stored name takes the typed one (a new
+  /// account), then a neutral placeholder that registration will overwrite.
+  Future<String> _nameFor(_PendingLogin pending) async {
+    final stored = (await _nameByPhone(pending.phone))?.trim() ?? '';
+    if (stored.isNotEmpty) {
+      return stored;
+    }
+    final typed = pending.name.trim();
+    return typed.isEmpty ? 'Member' : typed;
   }
 
   /// Persists the freshly signed-in user: writes the name onto the Firebase
@@ -360,8 +377,12 @@ class AuthService {
   ///
   /// The login screen uses this to send an unknown number to "Create account"
   /// instead of firing an OTP at a number with no account.
-  Future<bool?> hasAccount(String phone) =>
-      MemberRepository.instance.phoneExists(phone.trim());
+  Future<bool?> hasAccount(String phone) => _phoneExists(phone.trim());
+
+  Future<bool?> Function(String phone) _phoneExists =
+      MemberRepository.instance.phoneExists;
+  Future<String?> Function(String phone) _nameByPhone =
+      MemberRepository.instance.nameByPhone;
 
   /// Sends a code to [phone] and holds the details until it is verified.
   /// Returns null when the code went out, otherwise the reason it did not.
@@ -426,18 +447,10 @@ class AuthService {
 
     _pending = null;
 
-    // Sign-up carries the name; sign-in does not, so read the returning
-    // member's name back from `app.users`, falling back to a neutral
-    // placeholder that registration will overwrite.
-    var name = pending.name.trim();
-    if (name.isEmpty) {
-      name = (await MemberRepository.instance.nameByPhone(pending.phone))
-              ?.trim() ??
-          '';
-    }
-
+    // Sign-up carries a typed name, sign-in does not — either way an existing
+    // account's stored name wins; see [_nameFor].
     final user = AuthUser(
-      name: name.isEmpty ? 'Member' : name,
+      name: await _nameFor(pending),
       phone: pending.phone,
     );
     currentUser.value = user;
@@ -530,7 +543,20 @@ class AuthService {
     _pending = null;
     _freshSignIn = null;
     _gateway = null;
+    _phoneExists = MemberRepository.instance.phoneExists;
+    _nameByPhone = MemberRepository.instance.nameByPhone;
     currentUser.value = null;
+  }
+
+  /// Test hook: answer "has this number an account" and "what name is stored
+  /// on it" from memory instead of the members table.
+  @visibleForTesting
+  void useMemberLookup({
+    required Future<bool?> Function(String phone) phoneExists,
+    required Future<String?> Function(String phone) nameByPhone,
+  }) {
+    _phoneExists = phoneExists;
+    _nameByPhone = nameByPhone;
   }
 
   /// Test hook: run send/verify against [gateway] — an in-memory fake — so the

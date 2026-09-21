@@ -20,9 +20,10 @@ class MemberRepository {
   /// Whether a write would actually reach the database.
   bool get isAvailable => NeonHttp.isConfigured;
 
-  /// Inserts the user on first sign-in, or refreshes their name,
-  /// `firebase_uid` and `last_login_at` on a return sign-in. Keyed on the
-  /// mobile number, which is unique in `app.users`.
+  /// Inserts the user on first sign-in, or refreshes `firebase_uid` and
+  /// `last_login_at` on a return sign-in. Keyed on the mobile number, which is
+  /// unique in `app.users`. An existing live account keeps its stored name —
+  /// the name passed in only lands on a new row or a reactivated deleted one.
   ///
   /// Also clears `deleted_at`: the only way this conflicts against an
   /// existing row for a *deleted* account is a member who deleted their
@@ -42,7 +43,16 @@ class MemberRepository {
           INSERT INTO app.users (phone, name, firebase_uid, last_login_at)
           VALUES (\$1, \$2, \$3, now())
           ON CONFLICT (phone) DO UPDATE SET
-            name          = EXCLUDED.name,
+            -- A live account keeps the name it already has: signing in again
+            -- (or "creating" an account on a number that exists) must never
+            -- rename the member. Only a reactivated deleted account, or a row
+            -- with no usable name, takes the incoming one.
+            name          = CASE
+                              WHEN app.users.deleted_at IS NULL
+                                   AND btrim(coalesce(app.users.name, '')) <> ''
+                                THEN app.users.name
+                              ELSE EXCLUDED.name
+                            END,
             firebase_uid  = COALESCE(EXCLUDED.firebase_uid, app.users.firebase_uid),
             last_login_at = now(),
             updated_at    = now(),
@@ -116,12 +126,14 @@ class MemberRepository {
     });
   }
 
-  /// The stored name for [phone], used at launch when the Firebase profile
-  /// carries no display name. Null when there is no row or the lookup failed.
+  /// The stored name for a live account on [phone] — read back at sign-in so a
+  /// returning member keeps the name they registered with, and at launch when
+  /// the Firebase profile carries no display name. Null when there is no live
+  /// row (none, or a deleted account) or the lookup failed.
   Future<String?> nameByPhone(String phone) async {
     return _run('nameByPhone', () async {
       final rows = await NeonHttp.instance.query(
-        'SELECT name FROM app.users WHERE phone = \$1 LIMIT 1',
+        'SELECT name FROM app.users WHERE phone = \$1 AND deleted_at IS NULL LIMIT 1',
         [phone],
       );
       if (rows.isEmpty) {

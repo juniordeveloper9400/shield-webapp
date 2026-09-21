@@ -14,24 +14,27 @@ import 'otp_field.dart';
 /// Which half of the flow is on screen.
 enum _Step { details, otp }
 
-/// Sign in (returning member — number only) or create account (new member —
-/// name + number). Both finish with the same one-time code step.
+/// Sign in (mobile number only) or create account (name + number). Both finish
+/// with the same one-time code step.
+///
+/// Every visit opens on sign in, with nothing about creating an account on
+/// screen. Create account is only revealed once the number entered turns out
+/// to have no account — see [_LoginScreenState._sendOtp].
 enum _Mode {
-  signIn('Sign in', 'Sign in to Sahakar 360',
+  signIn('Sign in to Sahakar 360',
       'Enter your registered mobile number and we will send a one-time code.'),
-  signUp('Create account', 'Create your Sahakar 360 account',
-      'Tell us your name and mobile number — we verify the number with a '
-          'one-time code.');
+  signUp('Create your Sahakar 360 account',
+      'Add your name to create your account — we then verify your mobile '
+          'number with a one-time code.');
 
-  const _Mode(this.tab, this.title, this.subtitle);
+  const _Mode(this.title, this.subtitle);
 
-  final String tab;
   final String title;
   final String subtitle;
 }
 
-/// The auth gate: a Sign in / Create account switch over a mobile number (and,
-/// for a new member, a name), then a one-time code.
+/// The auth gate: a mobile number (and, for a number with no account yet, a
+/// name), then a one-time code.
 ///
 /// One screen rather than separate routes — the code step replaces the details
 /// in place, so the member only ever sees the one thing being asked of them
@@ -52,9 +55,13 @@ class _LoginScreenState extends State<LoginScreen> {
 
   _Step _step = _Step.details;
 
-  /// Opens on Sign in — most people reaching this screen already have an
-  /// account. A new member switches to Create account from the link below.
+  /// Always opens on Sign in. Only a number found to have no account moves
+  /// this to Create account.
   _Mode _mode = _Mode.signIn;
+
+  /// The number entered on the create-account path already has an account, so
+  /// the code step says the saved name is what they will be signed in under.
+  bool _usingSavedName = false;
 
   /// A send or verify round trip is in flight — blocks the buttons and a
   /// re-entrant submit from the keyboard's "done" action or an autofilled code.
@@ -142,12 +149,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   bool get _canSubmit => _phoneReady && (!_needsName || _nameReady) && !_throttled;
 
-  void _switchMode(_Mode mode) {
-    if (_busy || _mode == mode) {
+  /// Leaves the create-account view for sign in — "wrong number", or the
+  /// member remembered they already have an account.
+  void _backToSignIn() {
+    if (_busy || _mode == _Mode.signIn) {
       return;
     }
     setState(() {
-      _mode = mode;
+      _mode = _Mode.signIn;
+      _name.clear();
       _error = null;
     });
   }
@@ -168,28 +178,36 @@ class _LoginScreenState extends State<LoginScreen> {
       _error = null;
     });
 
-    // Sign in is for numbers that already have an account. An unknown number
-    // belongs on Create account — don't fire an OTP at it. If the check can't
-    // reach the database it returns null and we carry on, so a real member is
-    // never blocked by a blip.
-    if (_mode == _Mode.signIn) {
-      final exists = await AuthService.instance.hasAccount(_phone.text);
-      if (!mounted) {
-        return;
-      }
-      if (exists == false) {
-        setState(() {
-          _busy = false;
-          _mode = _Mode.signUp;
-          _error =
-              "That number doesn't have an account yet — create one to continue.";
-        });
-        return;
-      }
+    // Look the number up before sending anything. If the check can't reach
+    // the database it returns null and we carry on, so a real member is never
+    // blocked by a blip.
+    final exists = await AuthService.instance.hasAccount(_phone.text);
+    if (!mounted) {
+      return;
+    }
+    // A number with no account: no code yet — say so and reveal the name
+    // field. The next tap sends the code, with the name.
+    if (exists == false && _mode == _Mode.signIn) {
+      setState(() {
+        _busy = false;
+        _mode = _Mode.signUp;
+      });
+      return;
+    }
+    // A number that already has an account, reached from the create-account
+    // view (the number was edited there): sign in under the saved name and
+    // ignore whatever name was typed. The service enforces the same rule.
+    var name = _nameArg;
+    if (exists == true && _mode == _Mode.signUp) {
+      name = null;
+      _usingSavedName = true;
+      _mode = _Mode.signIn;
+    } else {
+      _usingSavedName = false;
     }
 
     final failure = await AuthService.instance.requestOtp(
-      name: _nameArg,
+      name: name,
       phone: _phone.text,
     );
     if (!mounted) {
@@ -525,10 +543,14 @@ class _LoginScreenState extends State<LoginScreen> {
       key: const ValueKey(_Step.details),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        _ModeSwitch(mode: _mode, onChanged: _switchMode),
-        const SizedBox(height: 22),
         AuthHeading(title: _mode.title, subtitle: _mode.subtitle),
         const SizedBox(height: 20),
+        if (_needsName) ...[
+          const AuthInfoNote(
+            message: "You're a new user — this number has no account yet.",
+          ),
+          const SizedBox(height: 16),
+        ],
         Form(
           key: _formKey,
           autovalidateMode: AutovalidateMode.onUserInteraction,
@@ -577,8 +599,11 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: _canSubmit ? _sendOtp : null,
         ),
         const SizedBox(height: 14),
-        _ModeSwitchLink(mode: _mode, onSwitch: _switchMode),
-        const SizedBox(height: 12),
+        if (_needsName) ...[
+          _BackToSignInLink(onTap: _backToSignIn),
+          const SizedBox(height: 12),
+        ] else
+          const SizedBox(height: 4),
         const _TermsAndPrivacyNote(),
       ],
     );
@@ -614,6 +639,13 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
           ),
         ),
+        if (_usingSavedName) ...[
+          const SizedBox(height: 10),
+          const AuthInfoNote(
+            message: 'This number already has an account, so you will be '
+                'signed in with your saved name.',
+          ),
+        ],
         const SizedBox(height: 18),
         OtpField(
           controller: _otp,
@@ -639,95 +671,32 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-/// The Sign in / Create account segmented switch at the top of the details
-/// step.
-class _ModeSwitch extends StatelessWidget {
-  final _Mode mode;
-  final ValueChanged<_Mode> onChanged;
+/// "Entered the wrong number? Back to sign in" under the create-account form.
+class _BackToSignInLink extends StatelessWidget {
+  final VoidCallback onTap;
 
-  const _ModeSwitch({required this.mode, required this.onChanged});
+  const _BackToSignInLink({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: AppColors.pageTint,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Row(
-        children: [
-          for (final m in _Mode.values)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => onChanged(m),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 160),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: m == mode ? AppColors.white : AppColors.transparent,
-                    borderRadius: BorderRadius.circular(9),
-                    boxShadow: m == mode
-                        ? [
-                            BoxShadow(
-                              color: AppColors.textDark.withValues(alpha: 0.08),
-                              blurRadius: 6,
-                              offset: const Offset(0, 2),
-                            ),
-                          ]
-                        : null,
-                  ),
-                  child: Text(
-                    m.tab,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 14.5,
-                      fontWeight: FontWeight.w700,
-                      color: m == mode
-                          ? AppColors.brandBlue
-                          : AppColors.textMuted,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The "New to Sahakar 360? Create an account" / "Already have an account? Sign in"
-/// line under the button.
-class _ModeSwitchLink extends StatelessWidget {
-  final _Mode mode;
-  final ValueChanged<_Mode> onSwitch;
-
-  const _ModeSwitchLink({required this.mode, required this.onSwitch});
-
-  @override
-  Widget build(BuildContext context) {
-    final toSignUp = mode == _Mode.signIn;
     return Wrap(
       alignment: WrapAlignment.center,
       crossAxisAlignment: WrapCrossAlignment.center,
       children: [
-        Text(
-          toSignUp ? 'New to Sahakar 360?' : 'Already have an account?',
-          style: const TextStyle(fontSize: 13.5, color: AppColors.textBody),
+        const Text(
+          'Entered the wrong number?',
+          style: TextStyle(fontSize: 13.5, color: AppColors.textBody),
         ),
         TextButton(
-          onPressed: () =>
-              onSwitch(toSignUp ? _Mode.signUp : _Mode.signIn),
+          onPressed: onTap,
           style: TextButton.styleFrom(
             minimumSize: Size.zero,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
             tapTargetSize: MaterialTapTargetSize.shrinkWrap,
           ),
-          child: Text(
-            toSignUp ? 'Create an account' : 'Sign in',
-            style: const TextStyle(
+          child: const Text(
+            'Back to sign in',
+            style: TextStyle(
               fontSize: 13.5,
               fontWeight: FontWeight.w800,
               color: AppColors.brandBlue,
