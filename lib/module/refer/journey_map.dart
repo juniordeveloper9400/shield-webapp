@@ -280,12 +280,41 @@ class _LevelCardState extends State<_LevelCard> {
                     ),
                     const SizedBox(height: 10),
                     _DetailBar(
-                      label: 'Referred',
+                      label: 'Transacted',
                       have: progress.directReferrals,
                       need: level.referralsRequired,
                       accent: accent,
                       state: state,
                     ),
+                    // Somebody has joined but not paid yet: say so on the rung
+                    // being worked on, so a sign-up shows up as progress
+                    // waiting to happen, not as no change.
+                    if (state == _NodeState.current &&
+                        progress.pendingReferrals > 0) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.hourglass_top_rounded,
+                            size: 13,
+                            color: accent,
+                          ),
+                          const SizedBox(width: 5),
+                          Expanded(
+                            child: Text(
+                              '${progress.pendingReferrals} joined — counts once '
+                              '${progress.pendingReferrals == 1 ? 'they make' : 'they each make'} '
+                              'a transaction',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: accent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     AnimatedSize(
                       duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOut,

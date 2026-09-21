@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
+import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../privilege/privilege_tier.dart';
@@ -20,10 +23,15 @@ class ReferEarnScreen extends StatelessWidget {
   final ReferralProgress progress;
   final String code;
 
+  /// Called when the member pulls the page down. Null (the default) leaves the
+  /// list without pull-to-refresh, as it is for a fixture-driven screen.
+  final Future<void> Function()? onRefresh;
+
   const ReferEarnScreen({
     super.key,
     this.progress = ReferralLadder.sampleProgress,
     this.code = ReferralLadder.fallbackCode,
+    this.onRefresh,
   });
 
   /// Pushes the screen wired to the signed-in member's real standing —
@@ -32,18 +40,14 @@ class ReferEarnScreen extends StatelessWidget {
   /// back out and in again.
   static void open(BuildContext context) {
     ReferralService.instance.ensureLoaded();
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ListenableBuilder(
-          listenable: ReferralService.instance,
-          builder: (context, _) => ReferEarnScreen(
-            progress: ReferralService.instance.progress,
-            code: ReferralService.instance.code,
-          ),
-        ),
-      ),
-    );
+    Navigator.of(
+      context,
+    ).push(MaterialPageRoute(builder: (_) => const _LiveReferEarn()));
   }
+
+  Widget _withRefresh(Widget list) => onRefresh == null
+      ? list
+      : RefreshIndicator(onRefresh: onRefresh!, child: list);
 
   @override
   Widget build(BuildContext context) {
@@ -71,50 +75,65 @@ class ReferEarnScreen extends StatelessWidget {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 28),
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: _StandingCard(
-              cleared: cleared,
-              next: next,
-              progress: progress,
-              totalLevels: levels.length,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: const _PlanCommissionCard(),
-          ),
-          const SizedBox(height: 14),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: _CodeCard(code: code, accent: standing.accent),
-          ),
-          const SizedBox(height: 24),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 16),
-            child: Text(
-              'Your journey',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textDark,
+      body: _withRefresh(
+        ListView(
+          // Always scrollable, so a short page can still be pulled to refresh.
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.only(bottom: 28),
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+              child: _StandingCard(
+                cleared: cleared,
+                next: next,
+                progress: progress,
+                totalLevels: levels.length,
               ),
             ),
-          ),
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 2, 16, 0),
-            child: Text(
-              'Clear each level to unlock the next reward.',
-              style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: const _PlanCommissionCard(),
             ),
-          ),
-          const SizedBox(height: 18),
-          JourneyMap(levels: levels, progress: progress),
-        ],
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _CodeCard(
+                code: code,
+                accent: standing.accent,
+                // No code yet (still loading, or offline): say so, and keep
+              // Invite off — a link with nothing in it links nobody to you.
+              ready: code.isNotEmpty,
+              ),
+            ),
+            const SizedBox(height: 14),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _ReferredList(progress: progress),
+            ),
+            const SizedBox(height: 24),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: Text(
+                'Your journey',
+                style: TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 2, 16, 0),
+              child: Text(
+                'Clear each level to unlock the next reward.',
+                style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
+              ),
+            ),
+            const SizedBox(height: 18),
+            JourneyMap(levels: levels, progress: progress),
+          ],
+        ),
       ),
     );
   }
@@ -489,6 +508,26 @@ class _StandingCard extends StatelessWidget {
               ),
             ),
           ],
+          // Somebody joined on the member's code but has not paid yet: it does
+          // not count towards the level, and the card says exactly that rather
+          // than leaving the page looking untouched.
+          if (progress.pendingReferrals > 0) ...[
+            const SizedBox(height: 6),
+            Text(
+              '${progress.pendingReferrals} '
+              '${progress.pendingReferrals == 1 ? 'friend has' : 'friends have'} '
+              'joined — '
+              '${progress.pendingReferrals == 1 ? 'they count' : 'each counts'} '
+              'once they make a transaction',
+              key: const ValueKey('pending-referrals-note'),
+              style: const TextStyle(
+                fontSize: 12.5,
+                height: 1.3,
+                fontWeight: FontWeight.w700,
+                color: AppColors.white,
+              ),
+            ),
+          ],
         ],
       ),
     );
@@ -510,36 +549,49 @@ class _MetricGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      runSpacing: 10,
+    return Column(
       children: [
-        SizedBox(
-          width: MediaQuery.sizeOf(context).width / 2 - 32,
-          child: _Metric(
-            value: '${progress.directReferrals}',
-            label: 'Referred',
-          ),
+        // Read left to right, the way a friend moves: signed up, paid for
+        // something (what levels are cleared on), then took a plan.
+        Row(
+          children: [
+            Expanded(
+              child: _Metric(
+                value: '${progress.joinedReferrals}',
+                label: 'Joined',
+              ),
+            ),
+            Expanded(
+              child: _Metric(
+                value: '${progress.directReferrals}',
+                label: 'Transacted',
+              ),
+            ),
+            Expanded(
+              child: _Metric(
+                value: '${progress.plansActivated}',
+                label: 'Plans activated',
+              ),
+            ),
+          ],
         ),
-        SizedBox(
-          width: MediaQuery.sizeOf(context).width / 2 - 32,
-          child: _Metric(
-            value: '${progress.plansActivated}',
-            label: 'Plans activated',
-          ),
-        ),
-        SizedBox(
-          width: MediaQuery.sizeOf(context).width / 2 - 32,
-          child: _Metric(
-            value: ReferralLadder.pointsEarnedLabel(progress),
-            label: 'Points',
-          ),
-        ),
-        SizedBox(
-          width: MediaQuery.sizeOf(context).width / 2 - 32,
-          child: _Metric(
-            value: progress.sahakarMoneyLabel,
-            label: 'Sahakar money earned',
-          ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _Metric(
+                value: ReferralLadder.pointsEarnedLabel(progress),
+                label: 'Points',
+              ),
+            ),
+            Expanded(
+              flex: 2,
+              child: _Metric(
+                value: progress.sahakarMoneyLabel,
+                label: 'Sahakar money earned',
+              ),
+            ),
+          ],
         ),
       ],
     );
@@ -587,8 +639,13 @@ class _Metric extends StatelessWidget {
 class _CodeCard extends StatelessWidget {
   final String code;
   final Color accent;
+  final bool ready;
 
-  const _CodeCard({required this.code, required this.accent});
+  const _CodeCard({
+    required this.code,
+    required this.accent,
+    required this.ready,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -621,20 +678,21 @@ class _CodeCard extends StatelessWidget {
                     border: Border.all(color: accent, width: 1.3),
                   ),
                   child: Text(
-                    code,
+                    ready ? code : 'Getting your code…',
+                    key: const ValueKey('invite-code-text'),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15.5,
                       fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: AppColors.textDark,
+                      letterSpacing: ready ? 0.6 : 0,
+                      color: ready ? AppColors.textDark : AppColors.textMuted,
                     ),
                   ),
                 ),
               ),
               const SizedBox(width: 10),
-              _InviteButton(code: code),
+              _InviteButton(code: code, enabled: ready),
             ],
           ),
         ],
@@ -645,31 +703,36 @@ class _CodeCard extends StatelessWidget {
 
 class _InviteButton extends StatelessWidget {
   final String code;
+  final bool enabled;
 
-  const _InviteButton({required this.code});
+  const _InviteButton({required this.code, this.enabled = true});
 
   @override
   Widget build(BuildContext context) {
     return FilledButton.icon(
-      onPressed: () async {
-        final messenger = ScaffoldMessenger.of(context);
-        try {
-          await SharePlus.instance.share(
-            ShareParams(
-              subject: 'Join me on Sahakar 360',
-              text:
-                  'Join me on Sahakar 360! Save up to 51% on medicines and unlock Health Pass membership. '
-                  'Use my invite code $code when you sign up.',
-            ),
-          );
-        } on Exception {
-          // Platforms without a share sheet (some desktop browsers) throw
-          // rather than silently doing nothing.
-          messenger.showSnackBar(
-            const SnackBar(content: Text('Sharing is not available here')),
-          );
-        }
-      },
+      onPressed: !enabled
+          ? null
+          : () async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                await SharePlus.instance.share(
+                  ShareParams(
+                    subject: 'Join me on Sahakar 360',
+                    text:
+                        'Join me on Sahakar 360! Save up to 51% on medicines and unlock Health Pass membership. '
+                        'Use my invite code $code when you sign up.',
+                  ),
+                );
+              } on Exception {
+                // Platforms without a share sheet (some desktop browsers)
+                // throw rather than silently doing nothing.
+                messenger.showSnackBar(
+                  const SnackBar(
+                    content: Text('Sharing is not available here'),
+                  ),
+                );
+              }
+            },
       icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
       label: const Text(
         'Invite',
@@ -679,6 +742,263 @@ class _InviteButton extends StatelessWidget {
         backgroundColor: AppColors.brandBlue,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
+  }
+}
+
+/// Everyone who has joined on the member's code, each at the stage they have
+/// reached — so the referrer can follow a friend from sign-up to first order to
+/// plan, and never wonders whether a registration "took".
+class _ReferredList extends StatelessWidget {
+  final ReferralProgress progress;
+
+  static const int _shown = 10;
+
+  const _ReferredList({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    final people = progress.invitees;
+
+    return Container(
+      key: const ValueKey('referred-list'),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'People you referred',
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ),
+              if (people.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.pageTint,
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Text(
+                    '${people.length}',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.brandBlue,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'A friend counts towards your level once they make a transaction.',
+            style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+          ),
+          const SizedBox(height: 10),
+          if (people.isEmpty)
+            const Text(
+              'Nobody has joined with your code yet. When a friend registers '
+              'with it, they show up here straight away.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.4,
+                color: AppColors.textBody,
+              ),
+            )
+          else ...[
+            for (var i = 0; i < people.length && i < _shown; i++) ...[
+              if (i > 0) const Divider(height: 1, color: AppColors.border),
+              _ReferredRow(member: people[i]),
+            ],
+            if (people.length > _shown)
+              Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Text(
+                  '+${people.length - _shown} more',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _ReferredRow extends StatelessWidget {
+  final ReferredMember member;
+
+  const _ReferredRow({required this.member});
+
+  (Color, Color) get _chip => switch (member.stage) {
+    ReferredStage.joined => (AppColors.chipBlueTint, AppColors.brandBlue),
+    ReferredStage.transacted => (AppColors.greenTint, AppColors.brandGreenDark),
+    ReferredStage.planActivated => (AppColors.goldTint, AppColors.goldAccent),
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    final (background, foreground) = _chip;
+    final when = member.lastActivityAt;
+    final detail = switch (member.stage) {
+      ReferredStage.joined => 'Waiting for their first order',
+      ReferredStage.transacted => 'Counts towards your level',
+      ReferredStage.planActivated => 'Earns you commission',
+    };
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            alignment: Alignment.center,
+            decoration: const BoxDecoration(
+              color: AppColors.pageTint,
+              shape: BoxShape.circle,
+            ),
+            child: Text(
+              member.name.isEmpty ? '?' : member.name[0].toUpperCase(),
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w800,
+                color: AppColors.brandBlue,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  member.name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                Text(
+                  when == null
+                      ? detail
+                      : '$detail · ${formatDate(when.toLocal())}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+            decoration: BoxDecoration(
+              color: background,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Text(
+              member.stage.label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                color: foreground,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The Refer & Earn page wired to the signed-in member's real standing, kept
+/// current while it is open.
+///
+/// The standing used to be read once and never again, so somebody signing up
+/// with the member's code — or making their first order — changed nothing on
+/// screen until the app was restarted. It now re-reads on the way in, every 15
+/// seconds while this page is the visible one, whenever the app comes back to
+/// the foreground, and when the member pulls the page down.
+class _LiveReferEarn extends StatefulWidget {
+  const _LiveReferEarn();
+
+  @override
+  State<_LiveReferEarn> createState() => _LiveReferEarnState();
+}
+
+class _LiveReferEarnState extends State<_LiveReferEarn>
+    with WidgetsBindingObserver {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // After the first frame: a refresh notifies listeners, which must not
+    // happen while the tree is still being built.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(ReferralService.instance.refresh());
+    });
+    // Only with a database to ask; a test build has none and so no timer.
+    if (ReferralService.instance.isConfigured) {
+      _timer = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (WidgetsBinding.instance.lifecycleState ==
+                AppLifecycleState.resumed &&
+            ModalRoute.of(context)?.isCurrent == true) {
+          unawaited(ReferralService.instance.refresh());
+        }
+      });
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(ReferralService.instance.refresh());
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: ReferralService.instance,
+      builder: (context, _) => ReferEarnScreen(
+        progress: ReferralService.instance.progress,
+        code: ReferralService.instance.code,
+        onRefresh: ReferralService.instance.refresh,
       ),
     );
   }

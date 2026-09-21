@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import '../../module/refer/referral_level.dart';
 import 'backend_http.dart';
 
@@ -28,8 +30,9 @@ class ReferralRepository {
       return null;
     }
     try {
-      final body = await BackendHttp.instance.request('GET', '/v1/member/referrals/code')
-          as Map<String, dynamic>;
+      final body =
+          await BackendHttp.instance.request('GET', '/v1/member/referrals/code')
+              as Map<String, dynamic>;
       return body['code'] as String?;
     } catch (error) {
       BackendHttp.log('ReferralRepository.ensureCodeFor failed', error: error);
@@ -37,8 +40,9 @@ class ReferralRepository {
     }
   }
 
-  /// The member's real standing: how many invites have transacted, how many
-  /// went on to activate a privilege plan, and the Sahakar money that
+  /// The member's real standing: who has joined on their code and how far each
+  /// has got, how many invites have transacted, how many went on to activate a
+  /// privilege plan, and the Sahakar money that
   /// actually earned — `sahakarMoneyEarned`, the real sum of every
   /// `app.referral.commission_amount` credited to this member as an
   /// inviter (see `ReferralService.getProgress`'s own doc), not a
@@ -49,13 +53,25 @@ class ReferralRepository {
       return null;
     }
     try {
-      final body = await BackendHttp.instance.request('GET', '/v1/member/referrals/progress')
-          as Map<String, dynamic>;
+      final body =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/member/referrals/progress',
+              )
+              as Map<String, dynamic>;
       final directReferrals = _int(body['directReferrals']);
       final activatedCards = (body['activatedWalletCards'] as List<dynamic>)
           .cast<Map<String, dynamic>>();
+      final invitees = inviteesFrom(
+        (body['invitees'] as List<dynamic>? ?? const [])
+            .whereType<Map<String, dynamic>>(),
+      );
       return ReferralProgress(
         directReferrals: directReferrals,
+        // Joined but not yet transacted: the backend counts them apart so the
+        // screen can show a sign-up the moment it happens.
+        pendingReferrals: _int(body['pendingReferrals']),
+        invitees: invitees,
         plansActivated: activatedCards.length,
         sahakarMoney: _int(body['sahakarMoneyEarned']),
       );
@@ -79,11 +95,13 @@ class ReferralRepository {
       return null;
     }
     try {
-      final body = await BackendHttp.instance.request(
-        'POST',
-        '/v1/member/referrals/apply-code',
-        body: {'code': trimmed},
-      ) as Map<String, dynamic>;
+      final body =
+          await BackendHttp.instance.request(
+                'POST',
+                '/v1/member/referrals/apply-code',
+                body: {'code': trimmed},
+              )
+              as Map<String, dynamic>;
       return body['linked'] as String?;
     } catch (error) {
       BackendHttp.log('ReferralRepository.applyCode failed', error: error);
@@ -104,13 +122,46 @@ class ReferralRepository {
     }
     try {
       final body =
-          await BackendHttp.instance.request('GET', '/v1/member/referrals/used-code')
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/member/referrals/used-code',
+              )
               as Map<String, dynamic>;
       return body['code'] as String?;
     } catch (error) {
       BackendHttp.log('ReferralRepository.usedCodeFor failed', error: error);
       return null;
     }
+  }
+
+  /// Reads the `invitees` the progress route returns, in the order given. The
+  /// backend has already cut each name to first name and last initial; a person
+  /// whose status is not one of a member who has joined is left out.
+  @visibleForTesting
+  static List<ReferredMember> inviteesFrom(
+    Iterable<Map<String, dynamic>> rows,
+  ) {
+    final people = <ReferredMember>[];
+    for (final row in rows) {
+      final stage = ReferredStage.fromStatus(row['status']?.toString());
+      if (stage == null) continue;
+      final name = row['name']?.toString().trim() ?? '';
+      people.add(
+        ReferredMember(
+          name: name.isEmpty ? 'A friend' : name,
+          stage: stage,
+          joinedAt: _date(row['registeredAt']),
+          transactedAt: _date(row['transactedAt']),
+          planActivatedAt: _date(row['planActivatedAt']),
+        ),
+      );
+    }
+    return people;
+  }
+
+  static DateTime? _date(Object? value) {
+    if (value == null) return null;
+    return DateTime.tryParse(value.toString());
   }
 
   static int _int(Object? value) {

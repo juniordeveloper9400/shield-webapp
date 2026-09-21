@@ -56,12 +56,95 @@ class ReferralLevel {
       'Refer $referralsRequired member${referralsRequired == 1 ? '' : 's'}';
 }
 
+/// How far one person the member referred has got.
+///
+/// A referral is only worth something to the referrer once the person does
+/// something: joining is where it starts, their first paid order is what
+/// counts towards a level, and a plan is what earns commission. The referrer's
+/// screen shows each person at whichever of these they have reached.
+enum ReferredStage {
+  /// Registered with the member's code; no paid order yet. Not counted towards
+  /// a level — the referrer sees them so a sign-up never looks like nothing
+  /// happened.
+  joined('Joined'),
+
+  /// Completed a paid order. This is what counts towards a level.
+  transacted('Made a transaction'),
+
+  /// Activated a privilege plan — the commission stage.
+  planActivated('Plan activated');
+
+  final String label;
+
+  const ReferredStage(this.label);
+
+  /// Reads an `app.referral_status` token; null for one that is not a person
+  /// who has joined (`SHARED` is an invite that was only sent).
+  static ReferredStage? fromStatus(String? status) =>
+      switch ((status ?? '').toUpperCase()) {
+        'REGISTERED' => ReferredStage.joined,
+        'TRANSACTED' => ReferredStage.transacted,
+        'PLAN_ACTIVATED' => ReferredStage.planActivated,
+        _ => null,
+      };
+}
+
+/// One person who joined on the member's invite code, for the "People you
+/// referred" list.
+@immutable
+class ReferredMember {
+  /// First name and last initial ("Althaf M."), enough to recognise them.
+  final String name;
+  final ReferredStage stage;
+  final DateTime? joinedAt;
+  final DateTime? transactedAt;
+  final DateTime? planActivatedAt;
+
+  const ReferredMember({
+    required this.name,
+    required this.stage,
+    this.joinedAt,
+    this.transactedAt,
+    this.planActivatedAt,
+  });
+
+  /// When they last moved forward — the date the list shows beside them.
+  DateTime? get lastActivityAt => switch (stage) {
+    ReferredStage.planActivated => planActivatedAt ?? transactedAt ?? joinedAt,
+    ReferredStage.transacted => transactedAt ?? joinedAt,
+    ReferredStage.joined => joinedAt,
+  };
+
+  /// "Nihal", "Althaf M." from a full name, so another member's whole name is
+  /// never carried to the referrer's phone.
+  static String shortName(String? fullName) {
+    final parts = (fullName ?? '')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((p) => p.isNotEmpty)
+        .toList();
+    if (parts.isEmpty) return 'A friend';
+    if (parts.length == 1) return parts.first;
+    return '${parts.first} ${parts.last[0].toUpperCase()}.';
+  }
+}
+
 /// How far a member has progressed.
 @immutable
 class ReferralProgress {
-  /// People brought in on this member's invite link. The one number the
-  /// ladder is climbed on: rungs clear on referrals and nothing else.
+  /// People brought in on this member's invite link who have gone on to make a
+  /// transaction. The one number the ladder is climbed on: rungs clear on
+  /// these and nothing else.
   final int directReferrals;
+
+  /// People who joined on this member's code but have not yet made a paid
+  /// order. They do not count towards a level until they do; they are reported
+  /// so the referrer sees a sign-up the moment it happens instead of nothing.
+  final int pendingReferrals;
+
+  /// Everyone who has joined, newest first — each at the stage they have
+  /// reached. Empty until somebody signs up with the member's code.
+  final List<ReferredMember> invitees;
 
   /// How many of those referred members went on to activate a privilege plan.
   ///
@@ -89,9 +172,15 @@ class ReferralProgress {
 
   const ReferralProgress({
     required this.directReferrals,
+    this.pendingReferrals = 0,
+    this.invitees = const [],
     this.plansActivated = 0,
     this.sahakarMoney = 0,
   });
+
+  /// Everyone who has signed up with the member's code: those already counted
+  /// plus those still waiting on their first paid order.
+  int get joinedReferrals => directReferrals + pendingReferrals;
 
   /// "₹1,000" — what the commission has paid so far.
   String get sahakarMoneyLabel => '₹${formatRupees(sahakarMoney)}';

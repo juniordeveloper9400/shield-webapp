@@ -17,6 +17,7 @@ import '../auth/auth_service.dart';
 import '../cart/cart_screen.dart';
 import '../investor/investor_portal_screen.dart';
 import '../investor/investor_service.dart';
+import '../labtest/my_lab_bookings_screen.dart';
 import '../location/address_form_screen.dart';
 import '../orders/bills_screen.dart';
 import '../patients/manage_patients_screen.dart';
@@ -140,6 +141,11 @@ class AccountScreen extends StatelessWidget {
                 icon: Icons.description_outlined,
                 label: 'My Prescriptions',
                 onTap: () {},
+              ),
+              _MenuItem(
+                icon: Icons.biotech_outlined,
+                label: 'My Lab Bookings',
+                onTap: () => MyLabBookingsScreen.open(context),
               ),
               _MenuItem(
                 icon: Icons.receipt_long_outlined,
@@ -479,7 +485,8 @@ class _ProfileCard extends StatelessWidget {
     final idLabel = agent != null ? 'Agent ID' : 'Member ID';
     final idValue = agent != null
         ? agent.agentCode
-        : ReferralService.instance.code;
+        // Empty until the member's own code has loaded — a dash, not a blank.
+        : (ReferralService.instance.code.isEmpty ? '—' : ReferralService.instance.code);
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,

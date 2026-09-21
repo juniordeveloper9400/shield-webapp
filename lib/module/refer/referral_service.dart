@@ -35,10 +35,11 @@ class ReferralService extends ChangeNotifier {
 
   String? _code;
 
-  /// The member's real invite code once it has loaded, the ladder's
-  /// placeholder text before then (or on a build with no database) — the
-  /// code card is never left blank.
-  String get code => _code ?? ReferralLadder.fallbackCode;
+  /// The member's real invite code once it has loaded; empty until then, and
+  /// on a build with no database. Never a stand-in that looks real: a
+  /// placeholder, once shared or shown as the member's ID, belongs to nobody.
+  /// The code card and the Invite button read an empty code as "not ready".
+  String get code => _code ?? '';
 
   String? _phone;
   bool _attached = false;
