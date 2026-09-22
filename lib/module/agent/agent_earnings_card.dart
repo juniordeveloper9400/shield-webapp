@@ -328,7 +328,7 @@ class _EarningsFront extends StatelessWidget {
           Text('Your earnings', style: _ink(15, FontWeight.w800)),
           const SizedBox(height: 10),
           Text(
-            'WITHDRAWABLE',
+            'EARNED',
             style: _ink(
               9,
               FontWeight.w800,
@@ -340,7 +340,7 @@ class _EarningsFront extends StatelessWidget {
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
             child: Text(
-              '₹${formatRupees(withdrawable)}',
+              '₹${formatRupees(service.earnedFor(agent))}',
               maxLines: 1,
               style: _ink(
                 26,
@@ -355,10 +355,7 @@ class _EarningsFront extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
-                child: _Figure(
-                  label: 'EARNED',
-                  amount: service.earnedFor(agent),
-                ),
+                child: _Figure(label: 'WITHDRAWABLE', amount: withdrawable),
               ),
               Expanded(
                 child: _Figure(

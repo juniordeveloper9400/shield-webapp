@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/agent_customer_repository.dart';
 import '../../data/backend/agent_repository.dart';
 import '../../money.dart';
 import '../auth/auth_service.dart';
@@ -156,6 +157,35 @@ class AgentService extends ChangeNotifier {
       notifyListeners();
       _remoteLoadInFlight = null;
     }
+    // After the roster load above, so a fresh sign-in's own agent row (just
+    // folded into _agents) resolves before this looks it up. Its own
+    // best-effort try/catch means a failure here never affects the roster
+    // load this is chained after.
+    await _loadCustomersFromServer();
+  }
+
+  /// Loads the signed-in agent's own Direct Sale customers — see
+  /// [AgentCustomerRepository.fetchAll]'s own doc for why the Direct Sale
+  /// section is empty without this. A no-op for a member who isn't a
+  /// currently-approved agent (nothing to fetch), and best-effort like every
+  /// other remote read here: a failure just leaves the seed-only customer
+  /// list in place.
+  Future<void> _loadCustomersFromServer() async {
+    final me = agentForPhone(AuthService.instance.currentUser.value?.phone);
+    if (me == null) {
+      return;
+    }
+    final remote = await AgentCustomerRepository.instance.fetchAll(me.id);
+    if (remote == null || remote.isEmpty) {
+      return;
+    }
+    final known = _customers.map((c) => c.id).toSet();
+    final fresh = remote.where((c) => !known.contains(c.id)).toList();
+    if (fresh.isEmpty) {
+      return;
+    }
+    _customers.addAll(fresh);
+    notifyListeners();
   }
 
   /// Sets [agent]'s profile photo, replacing their roster entry with a copy
