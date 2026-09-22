@@ -22,9 +22,8 @@ import '../registration/shield_store.dart';
 ///  * flips [isConverted], which `RootScreen` uses to send a converted member
 ///    on the **APK** to a "use the web console" screen instead of the app.
 ///
-/// Best-effort: an unconfigured backend, a member not signed in to it, or an
-/// unreachable backend leaves [snapshot] at [PersonaSnapshot.none] — a plain
-/// member.
+/// Failed lookups retain a confirmed role. A first lookup that fails remains
+/// unresolved, with an error and retry option instead of a member referral card.
 class PersonaService extends ChangeNotifier {
   PersonaService._();
 
@@ -48,6 +47,16 @@ class PersonaService extends ChangeNotifier {
   String? _resolvedFor;
   bool _loading = false;
   bool _attached = false;
+  int _generation = 0;
+  bool _retryQueued = false;
+  String? _error;
+  String? get error => _error;
+  Future<PersonaSnapshot> Function(String)? _testLoader;
+
+  @visibleForTesting
+  void debugSetLoader(Future<PersonaSnapshot> Function(String) loader) {
+    _testLoader = loader;
+  }
 
   /// Ticks [refreshCurrent] every 60 seconds while someone is signed in — the
   /// one automatic trigger that does not depend on the app losing and
@@ -125,9 +134,16 @@ class PersonaService extends ChangeNotifier {
   }
 
   /// Re-reads the persona for [phone] (10 digits, no `+91`) and applies it.
-  /// Safe to call often; an overlapping call is dropped rather than queued.
+  /// An overlapping call queues one fresh lookup for the current account.
   Future<void> reload(String? phone) async {
     final clean = phone?.trim() ?? '';
+    if (_phone != (clean.isEmpty ? null : clean)) {
+      _generation++;
+      _resolvedFor = null;
+      _lastResolvedAt = null;
+      _error = null;
+      _apply(PersonaSnapshot.none);
+    }
     _phone = clean.isEmpty ? null : clean;
     if (clean.isEmpty) {
       _resolvedFor = null;
@@ -135,19 +151,33 @@ class PersonaService extends ChangeNotifier {
       return;
     }
     if (_loading) {
+      _retryQueued = true;
       return;
     }
+    final generation = _generation;
     _loading = true;
+    _error = null;
+    notifyListeners();
     try {
-      final snap = await PersonaRepository.instance.loadFor(clean);
+      final snap = await (_testLoader ?? PersonaRepository.instance.loadFor)(clean);
       // Ignore a result for a number we have since moved off (sign-out/switch).
-      if (_phone == clean) {
+      if (_phone == clean && generation == _generation) {
         _resolvedFor = clean;
         _lastResolvedAt = DateTime.now();
         _apply(snap);
       }
+    } catch (_) {
+      if (_phone == clean && generation == _generation) {
+        _error = 'Could not load your account role. Please retry.';
+        // Retain a confirmed agent/investor role during network failures.
+        notifyListeners();
+      }
     } finally {
       _loading = false;
+      if (_retryQueued) {
+        _retryQueued = false;
+        unawaited(reload(_phone));
+      }
     }
   }
 
@@ -157,6 +187,9 @@ class PersonaService extends ChangeNotifier {
   /// inherits whatever team tree the previous member's one-shot
   /// `ensureLoaded` fetch already pulled in (see that method's doc).
   void clear() {
+    _generation++;
+    _retryQueued = false;
+    _error = null;
     _phone = null;
     _resolvedFor = null;
     _lastResolvedAt = null;
@@ -169,10 +202,10 @@ class PersonaService extends ChangeNotifier {
   void _apply(PersonaSnapshot snap) {
     _snapshot = snap;
     AgentService.instance.applyRemoteAgent(
-      snap.agent == null ? null : _toAgent(snap.agent!),
+      snap.agent == null ? null : _toAgent(snap.agent!, _phone),
     );
     InvestorService.instance.applyRemoteInvestor(
-      snap.investor == null ? null : _toInvestor(snap.investor!),
+      snap.investor == null ? null : _toInvestor(snap.investor!, _phone),
     );
     notifyListeners();
   }
@@ -181,10 +214,12 @@ class PersonaService extends ChangeNotifier {
   // other agent in the roster (see RemoteAgent.id's own doc for why this
   // has to match: AgentService.byId looks the signed-in agent up by this
   // id to find their real roster entry, with correct children/downline).
-  static Agent _toAgent(RemoteAgent r) => Agent(
+  static Agent _toAgent(RemoteAgent r, String? memberPhone) => Agent(
         id: 'db-${r.id}',
         name: r.name,
-        phone: r.phone,
+        // The authenticated endpoint identifies the owner. Use their session
+        // phone as the local lookup key, even if admin contact formatting differs.
+        phone: memberPhone ?? r.phone,
         agentCode: r.code,
         level: AgentLevel.values.firstWhere(
           (l) => l.name == r.level,
@@ -201,10 +236,10 @@ class PersonaService extends ChangeNotifier {
         personalSales: r.personalSales,
       );
 
-  static Investor _toInvestor(RemoteInvestor r) => Investor(
+  static Investor _toInvestor(RemoteInvestor r, String? memberPhone) => Investor(
         id: r.code,
         name: r.name,
-        phone: r.phone,
+        phone: memberPhone ?? r.phone,
         investorCode: r.code,
         investedStore: StoreDirectory.byId(r.storeCode ?? '') ??
             StoreDirectory.all.first,
@@ -220,6 +255,10 @@ class PersonaService extends ChangeNotifier {
 
   @visibleForTesting
   void reset() {
+    _generation++;
+    _retryQueued = false;
+    _error = null;
+    _testLoader = null;
     _phone = null;
     _resolvedFor = null;
     _lastResolvedAt = null;

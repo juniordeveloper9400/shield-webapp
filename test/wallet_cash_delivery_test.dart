@@ -43,19 +43,13 @@ void main() {
       );
     });
 
-    test('debits the real balance once activated, leaving redeemedThisMonth untouched', () {
+    test('commission is spendable without a plan and does not consume allowance', () {
       final wallet = WalletService.instance;
-      // creditEarnings opens no plan, so activate via a plain top-up path
-      // is not available without a privilege load; instead exercise the
-      // guard directly against a wallet the test seeds by hand through a
-      // successful spend attempt once balance is present via creditEarnings
-      // (agent-commission credit, which — unlike topUp — needs no plan).
       wallet.creditEarnings(amount: 500);
-      // creditEarnings alone does not activate the wallet (see its own doc),
-      // so spendBalance is still refused — this documents that boundary
-      // rather than assuming it.
-      expect(wallet.isActivated, isFalse);
-      expect(wallet.spendBalance(amount: 100, label: 'Order X'), isFalse);
+      expect(wallet.isActivated, isTrue);
+      expect(wallet.spendBalance(amount: 100, label: 'Order X'), isTrue);
+      expect(wallet.balance, 400);
+      expect(wallet.redeemedThisMonth, 0);
     });
   });
 

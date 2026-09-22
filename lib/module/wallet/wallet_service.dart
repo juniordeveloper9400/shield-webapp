@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'wallet_allowance.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -142,7 +143,10 @@ class WalletCard {
 
   /// What has been released off this card so far: one instalment for every
   /// month that has come due.
-  int releasedBy(DateTime asOf) => monthlyRedeemable * instalmentOn(asOf);
+  int releasedBy(DateTime asOf) {
+    if (asOf.isBefore(issuedOn)) return 0;
+    return monthlyRedeemable * instalmentOn(asOf);
+  }
 
   /// What is still locked up in the card, waiting on later months.
   int remainingAfter(DateTime asOf) {
@@ -633,10 +637,17 @@ class WalletService extends ChangeNotifier {
   /// Floored at zero rather than allowed to go negative: an allowance that
   /// has been used up is used up, and a negative one would read as a debt the
   /// member does not owe.
-  int get monthlyBalance {
-    final left = monthlyRedeemable - redeemedThisMonth;
-    return left < 0 ? 0 : left;
+  int availableAllowanceOn(DateTime asOf) {
+    final released = _cards.fold<int>(0, (sum, card) => sum + card.releasedBy(asOf));
+    final spent = planDebitsThrough(
+      _entries.reversed.map((e) => (kind: e.kind, amount: e.amount, occurredOn: e.occurredOn)),
+      asOf,
+    );
+    return math.min(_balance, math.max(0, released - spent));
   }
+
+  /// All released allowance less all plan spending, including unused earlier months.
+  int get monthlyBalance => availableAllowanceOn(DateTime.now());
 
   /// The most a purchase of [orderAmount] can draw from the wallet: capped at
   /// this month's remaining allowance, and never more than the real balance

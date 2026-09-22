@@ -31,7 +31,8 @@ class ReferEarnAccess {
 
   static bool get isOffered {
     final phone = AuthService.instance.currentUser.value?.phone;
-    if (phone == null || !PersonaService.instance.isResolved) {
+    if (phone == null || !PersonaService.instance.isResolved ||
+        PersonaService.instance.isConverted) {
       return false;
     }
     return AgentService.instance.agentForPhone(phone) == null &&

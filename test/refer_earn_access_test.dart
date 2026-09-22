@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shield/data/backend/persona_repository.dart';
 
 import 'package:shield/module/account/account_screen.dart';
 import 'package:shield/module/agent/agent_model.dart';
@@ -49,6 +50,7 @@ void main() {
     AuthService.instance.reset();
     AgentService.instance.reset();
     PersonaService.instance.reset();
+    PersonaService.instance.debugSetLoader((_) async => PersonaSnapshot.none);
   });
   tearDown(() {
     AuthService.instance.reset();

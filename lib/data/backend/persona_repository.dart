@@ -96,9 +96,8 @@ class PersonaSnapshot {
 /// Admin has converted them into an agent (`GET /v1/agent/team`) or an
 /// investor (`GET /v1/investor/me`).
 ///
-/// Best-effort over [BackendHttp] — not signed in to the backend, or an
-/// unreachable one, returns [PersonaSnapshot.none], so a converted member is
-/// never locked out of the app by a transient failure.
+/// A missing session or failed request throws. Only successful role checks
+/// may resolve to [PersonaSnapshot.none]; failures must not demote a user.
 class PersonaRepository {
   const PersonaRepository._();
 
@@ -106,13 +105,14 @@ class PersonaRepository {
 
   bool get isAvailable => BackendHttp.isConfigured;
 
-  /// The persona for the member currently signed in to the backend. Never
-  /// throws. [phone] is accepted for parity with the old direct-Neon
+  /// The persona for the member currently signed in to the backend.
+  /// Unavailable identity is an error, never proof of an ordinary member.
+  /// [phone] is accepted for parity with the old direct-Neon
   /// signature (call sites already pass it) but is unused — the backend
   /// resolves identity from the session, not a client-supplied phone.
   Future<PersonaSnapshot> loadFor(String phone) async {
     if (!BackendHttp.isConfigured || !BackendHttp.instance.isSignedIn) {
-      return PersonaSnapshot.none;
+      throw StateError('Backend session is not ready for the role lookup');
     }
     try {
       final results = await Future.wait([_agentFor(), _investorFor()]);
@@ -122,7 +122,7 @@ class PersonaRepository {
       );
     } catch (error) {
       BackendHttp.log('PersonaRepository.loadFor failed', error: error);
-      return PersonaSnapshot.none;
+      rethrow;
     }
   }
 
@@ -151,7 +151,7 @@ class PersonaRepository {
       );
     } on BackendHttpException catch (error) {
       // 403 "Not an approved agent" — the expected shape for a plain member.
-      if (error.isForbidden) return null;
+      if (error.isForbidden && error.message == 'Not an approved agent') return null;
       rethrow;
     }
   }
@@ -175,7 +175,7 @@ class PersonaRepository {
       );
     } on BackendHttpException catch (error) {
       // 403 "Not an investor" — the expected shape for a plain member.
-      if (error.isForbidden) return null;
+      if (error.isForbidden && error.message == 'Not an investor') return null;
       rethrow;
     }
   }

@@ -113,6 +113,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         listenable: PersonaService.instance,
                         builder: (context, _) {
                           if (user != null && !PersonaService.instance.isResolved) {
+                            if (PersonaService.instance.error != null) {
+                              return ListTile(
+                                title: const Text('Account details unavailable'),
+                                subtitle: const Text('Retry to load your member, agent or investor card.'),
+                                trailing: TextButton(
+                                  onPressed: () => PersonaService.instance.reload(user.phone),
+                                  child: const Text('Retry'),
+                                ),
+                              );
+                            }
                             return const AgentCardSkeleton();
                           }
                           // Also rebuild when PersonaService applies the

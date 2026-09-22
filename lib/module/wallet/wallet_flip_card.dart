@@ -376,7 +376,7 @@ class _WalletCardFront extends StatelessWidget {
             // buys the width to set them at a size worth reading: at 320px
             // "MONTHLY REDEEMABLE" did not fit its column and was being
             // clipped even at the smaller size.
-            const _CardCaption('THIS MONTH'),
+            const _CardCaption('MONTHLY ALLOWANCE + CARRY-FORWARD'),
             const SizedBox(height: 6),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -392,7 +392,7 @@ class _WalletCardFront extends StatelessWidget {
                 ),
                 Expanded(
                   child: _CardFigure(
-                    label: 'REMAINING',
+                    label: 'AVAILABLE',
                     amount: monthlyBalance,
                     alignEnd: true,
                     highlight: true,
