@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../../data/backend/care_repository.dart';
 import '../../data/backend/order_repository.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
@@ -9,6 +10,8 @@ import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
+import 'lab_store.dart';
+import 'lab_store_picker_sheet.dart';
 import 'patient_count_sheet.dart';
 
 /// The lab basket: booked packages, how many patients each covers, and the
@@ -54,8 +57,12 @@ class LabCartScreen extends StatelessWidget {
                 _BookingCard(index: index, booking: cart.bookings[index]),
                 const SizedBox(height: 12),
               ],
-              const SizedBox(height: 4),
-              const _BillCard(),
+              _BranchRow(),
+              const SizedBox(height: 12),
+              // Not const — see root's identical note: a canonicalized const
+              // instance here would be skipped on a same-length rebuild
+              // (Flutter's identical-widget fast path) and show a stale bill.
+              _BillCard(),
             ],
           );
         },
@@ -222,6 +229,103 @@ class _BookingCard extends StatelessWidget {
   }
 }
 
+/// The branch this basket collects from — defaults to the member's home
+/// branch once the live, lab-eligible list has loaded (see
+/// [LabCartService.defaultStoreIfNeeded]), tappable to open
+/// [LabStorePickerSheet] and choose a different one.
+class _BranchRow extends StatefulWidget {
+  @override
+  State<_BranchRow> createState() => _BranchRowState();
+}
+
+class _BranchRowState extends State<_BranchRow> {
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final stores = await CareRepository.instance.fetchLabStores();
+    if (!mounted || stores == null) {
+      return;
+    }
+    // Rebuilds through LabCartService's own notification, not setState here.
+    LabCartService.instance.defaultStoreIfNeeded(stores);
+  }
+
+  Future<void> _choose(BuildContext context) async {
+    final store = LabCartService.instance.store;
+    final chosen = await LabStorePickerSheet.show(
+      context,
+      selectedId: store?.id,
+    );
+    if (chosen != null) {
+      LabCartService.instance.chooseStore(chosen);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final LabStore? store = LabCartService.instance.store;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Material(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: () => _choose(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: AppColors.border),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.storefront_outlined,
+                  size: 20,
+                  color: AppColors.brandBlue,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Branch',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      Text(
+                        store?.name ?? 'Choose a branch',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _BillCard extends StatelessWidget {
   const _BillCard();
 
@@ -340,6 +444,7 @@ class _CheckoutBar extends StatelessWidget {
             phone: user.phone,
             name: user.name,
             address: AddressBook.instance.deliverTo,
+            storeId: cart.store?.id,
             bookings: [
               for (final booking in cart.bookings)
                 LabBookingInput(

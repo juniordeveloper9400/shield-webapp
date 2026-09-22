@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../module/dietitian/dietitian.dart';
 import '../../module/labtest/lab_package.dart';
+import '../../module/labtest/lab_store.dart';
 import 'backend_http.dart';
 
 /// Reads the lab-test catalogue and the dietitian panel from `backend/api`'s
@@ -24,6 +25,8 @@ class CareRepository {
   static Future<List<LabPackage>?> Function()? labPackagesOverride;
   @visibleForTesting
   static Future<List<LabCategory>?> Function()? labCategoriesOverride;
+  @visibleForTesting
+  static Future<List<LabStore>?> Function()? labStoresOverride;
 
   bool get isAvailable => BackendHttp.isConfigured;
 
@@ -115,6 +118,47 @@ class CareRepository {
       ];
     } catch (error) {
       BackendHttp.log('CareRepository.fetchLabCategories failed', error: error);
+      return null;
+    }
+  }
+
+  /// Every branch currently open for lab collection (`GET
+  /// /v1/public/care/lab-stores` — `BookingService.listLabStores`), for the
+  /// lab checkout's "Branch" row. Unlike [fetchLabPackages]/
+  /// [fetchLabCategories], there is no bundled fallback for this one: a
+  /// branch this app does not yet know about (or one switched off since the
+  /// app's own `StoreDirectory` was bundled) must never be offered, so a
+  /// failed read simply leaves the picker showing nothing to choose rather
+  /// than a stale guess.
+  Future<List<LabStore>?> fetchLabStores() async {
+    final override = labStoresOverride;
+    if (override != null) {
+      return override();
+    }
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final rows =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/public/care/lab-stores',
+                auth: false,
+              )
+              as List<dynamic>;
+      return [
+        for (final row in rows.cast<Map<String, dynamic>>())
+          LabStore(
+            id: _int(row['id']),
+            code: _str(row['code']),
+            name: _str(row['name']),
+            area: _str(row['area']),
+            city: _str(row['city']),
+            pincode: _str(row['pincode']),
+          ),
+      ];
+    } catch (error) {
+      BackendHttp.log('CareRepository.fetchLabStores failed', error: error);
       return null;
     }
   }

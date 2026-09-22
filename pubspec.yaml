@@ -53,6 +53,7 @@ dependencies:
   # is written to app.prescription.image, so the pharmacy console can view it.
   # Also used by tool/whiten_product_backgrounds.dart.
   image: ^4.5.4
+  sentry_flutter: ^8.14.2
 
 dev_dependencies:
   flutter_test:

@@ -45,6 +45,14 @@ echo "DATABASE_URL length: ${#DB_URL}"  # value not printed; 0 = env var missing
 BACKEND_URL="${BACKEND_API_BASE_URL:-}"
 echo "BACKEND_API_BASE_URL: $BACKEND_URL"
 
+# Sentry (set in the Vercel project's Environment Variables). Public, not a
+# secret — a DSN is meant to travel in client-side code (same as a Firebase
+# web config); it identifies which project to send events to, nothing more.
+# Leave unset and this build simply reports no crashes. See docs/sentry.md.
+SENTRY_DSN_VALUE="${SENTRY_DSN:-}"
+echo "SENTRY_DSN length: ${#SENTRY_DSN_VALUE}"
+
 flutter build web --release \
   --dart-define=DATABASE_URL="$DB_URL" \
-  --dart-define=BACKEND_API_BASE_URL="$BACKEND_URL"
+  --dart-define=BACKEND_API_BASE_URL="$BACKEND_URL" \
+  --dart-define=SENTRY_DSN="$SENTRY_DSN_VALUE"

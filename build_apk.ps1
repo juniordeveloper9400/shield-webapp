@@ -25,6 +25,10 @@
 # variable-interpolated string broke the parser outright ("Unexpected token"
 # / "string is missing the terminator") rather than just printing oddly the
 # way the same character does inside a single-quoted literal.
+#
+# SENTRY_DSN has no '&', so it IS passed via --dart-define, read straight out
+# of the same .env gen_neon_secret.dart already requires. Blank (no line, or
+# no .env yet) just builds with Sentry disabled - see docs/sentry.md.
 
 $ErrorActionPreference = 'Stop'
 Set-Location $PSScriptRoot
@@ -41,8 +45,16 @@ if (Test-Path 'tool/gen_neon_secret.dart') {
     exit 1
 }
 
+$SentryDsn = ''
+if (Test-Path '.env') {
+    $line = Select-String -Path '.env' -Pattern '^\s*SENTRY_DSN\s*=' | Select-Object -Last 1
+    if ($line) {
+        $SentryDsn = ($line.Line -split '=', 2)[1].Trim().Trim('"').Trim("'")
+    }
+}
+
 Write-Host "Building release APK against $BackendApiBaseUrl (one build at a time - close any other flutter build/run) ..." -ForegroundColor Cyan
-flutter build apk --release --dart-define=BACKEND_API_BASE_URL=$BackendApiBaseUrl
+flutter build apk --release --dart-define=BACKEND_API_BASE_URL=$BackendApiBaseUrl --dart-define=SENTRY_DSN=$SentryDsn
 
 Write-Host ''
 Write-Host 'Done: build/app/outputs/flutter-apk/app-release.apk' -ForegroundColor Green

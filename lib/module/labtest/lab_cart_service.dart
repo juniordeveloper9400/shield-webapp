@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import '../registration/registration_service.dart';
 import 'lab_package.dart';
+import 'lab_store.dart';
 
 /// One package booked for a number of patients.
 @immutable
@@ -36,6 +38,44 @@ class LabCartService extends ChangeNotifier {
   static const int maxPatients = 5;
 
   final List<LabBooking> _bookings = [];
+
+  /// The member's own branch pick for this basket — set by [chooseStore]
+  /// (from [LabStorePickerSheet]) or by [defaultStoreIfNeeded] once the live
+  /// branch list has loaded. Unlike root's `LabCartService`, this is kept as
+  /// the fetched [LabStore] itself rather than re-resolved from an id: this
+  /// app has no live-synced store directory to resolve it against (see
+  /// `lab_store.dart`'s own doc), only the one-off read the picker made.
+  LabStore? _chosenStore;
+
+  LabStore? get store => _chosenStore;
+
+  /// Records the member's own branch pick from the checkout's "Branch" row.
+  void chooseStore(LabStore store) {
+    _chosenStore = store;
+    notifyListeners();
+  }
+
+  /// Defaults the branch to the member's registered home branch, matched by
+  /// code against [eligible] — the live, lab-collection-eligible list
+  /// [LabCartScreen]'s branch row just fetched. A no-op once something has
+  /// already been chosen, or when the home branch is not in [eligible]
+  /// (switched off for lab, or not recognised at all).
+  void defaultStoreIfNeeded(List<LabStore> eligible) {
+    if (_chosenStore != null) {
+      return;
+    }
+    final homeCode = RegistrationService.instance.profile?.storeId;
+    if (homeCode == null) {
+      return;
+    }
+    for (final store in eligible) {
+      if (store.code == homeCode) {
+        _chosenStore = store;
+        notifyListeners();
+        return;
+      }
+    }
+  }
 
   List<LabBooking> get bookings => List.unmodifiable(_bookings);
 
@@ -111,6 +151,7 @@ class LabCartService extends ChangeNotifier {
   @visibleForTesting
   void reset() {
     _bookings.clear();
+    _chosenStore = null;
     notifyListeners();
   }
 }

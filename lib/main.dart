@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'data/backend/backend_http.dart';
 import 'data/neon/neon_http.dart';
@@ -21,6 +22,23 @@ import 'widgets/app_messenger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Crash and error reporting. Safe to call unconditionally — the SDK's own
+  // documented behavior is to stay disabled when `dsn` is empty, the same
+  // "no-op until configured" contract every other optional integration in
+  // this app already follows (BackendHttp, NeonHttp, Firebase). Build with
+  // --dart-define=SENTRY_DSN=... to turn it on; see docs/sentry.md.
+  await SentryFlutter.init((options) {
+    options.dsn = const String.fromEnvironment('SENTRY_DSN');
+    options.environment = const String.fromEnvironment(
+      'SENTRY_ENVIRONMENT',
+      defaultValue: 'production',
+    );
+    // Off by default — see backend/api's instrument.ts for the same choice
+    // and why: performance tracing counts separately against a Sentry
+    // plan's event quota from error events.
+    options.tracesSampleRate = 0;
+  });
 
   // Member sign-in is Firebase Phone Auth with no demo or offline fallback.
   // Bring Firebase up before the app starts; if the current platform has no

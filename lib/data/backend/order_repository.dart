@@ -360,6 +360,11 @@ class OrderRepository {
     String? name,
     required List<LabBookingInput> bookings,
     Address? address,
+    /// The branch [LabCartScreen]'s "Branch" row resolved
+    /// (`LabCartService.store?.id`) — threads straight into each booking's
+    /// `storeId`; the backend falls back to the member's own home branch
+    /// when this is null, the same as root's direct-Neon write does.
+    int? storeId,
   }) async {
     if (!BackendHttp.isConfigured || bookings.isEmpty) {
       return;
@@ -385,6 +390,7 @@ class OrderRepository {
               for (var i = 1; i <= booking.patients; i++) {'name': 'Patient $i'},
             ],
             if (addressId != null) 'addressId': addressId,
+            if (storeId != null) 'storeId': storeId,
           },
         );
       } catch (error) {
