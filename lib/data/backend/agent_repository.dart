@@ -62,6 +62,32 @@ class AgentRepository {
 
   bool get isAvailable => BackendHttp.isConfigured;
 
+  Future<void> requestWithdrawal(int amount) async {
+    await BackendHttp.instance.request(
+      'POST',
+      '/v1/agent/withdrawals',
+      body: {'amount': amount},
+    );
+  }
+
+  Future<List<WithdrawalRequest>> fetchWithdrawals() async {
+    final rows =
+        await BackendHttp.instance.request('GET', '/v1/agent/withdrawals')
+            as List<dynamic>;
+    return rows.map((value) {
+      final row = value as Map<String, dynamic>;
+      return WithdrawalRequest(
+        amount: num.parse(row['amount'].toString()).toInt(),
+        requestedOn: DateTime.parse(row['requestedOn'].toString()),
+        status: switch (row['status']) {
+          'PAID' => WithdrawalStatus.paid,
+          'REJECTED' => WithdrawalStatus.rejected,
+          _ => WithdrawalStatus.pending,
+        },
+      );
+    }).toList();
+  }
+
   /// The signed-in member's own agent row plus every descendant
   /// (`GET /v1/agent/team`), or null when unavailable, the member isn't
   /// signed in to the backend, or isn't an approved agent.
@@ -110,12 +136,13 @@ class AgentRepository {
       OwnAgentRequest(
         id: row['id'] as int,
         status: (row['status'] ?? 'PENDING').toString(),
-        level: _levelByName[(row['requestedLevel'] ?? 'WARD').toString()] ??
+        level:
+            _levelByName[(row['requestedLevel'] ?? 'WARD').toString()] ??
             AgentLevel.ward,
         area: (row['requestedArea'] ?? '').toString(),
         createdAt:
             DateTime.tryParse((row['createdAt'] ?? '').toString()) ??
-                DateTime.now(),
+            DateTime.now(),
         reviewerNote: (row['reviewerNote'] ?? '').toString(),
       );
 
@@ -153,30 +180,35 @@ class AgentRepository {
       );
     }
     try {
-      final body = await BackendHttp.instance.request(
-        'POST',
-        '/v1/agent/requests',
-        body: {
-          'requestedLevel': level.name.toUpperCase(),
-          'requestedArea': area,
-          if (areaId != null) 'requestedAreaId': areaId,
-          'firstName': firstName,
-          'middleName': middleName,
-          'lastName': lastName,
-          'dob': _isoDate(dob),
-          'aadhaar': aadhaar,
-          'pan': pan,
-          'address': address,
-          'pincode': pincode,
-          'place': place,
-          'accountNumber': accountNumber,
-        },
-      ) as Map<String, dynamic>;
+      final body =
+          await BackendHttp.instance.request(
+                'POST',
+                '/v1/agent/requests',
+                body: {
+                  'requestedLevel': level.name.toUpperCase(),
+                  'requestedArea': area,
+                  if (areaId != null) 'requestedAreaId': areaId,
+                  'firstName': firstName,
+                  'middleName': middleName,
+                  'lastName': lastName,
+                  'dob': _isoDate(dob),
+                  'aadhaar': aadhaar,
+                  'pan': pan,
+                  'address': address,
+                  'pincode': pincode,
+                  'place': place,
+                  'accountNumber': accountNumber,
+                },
+              )
+              as Map<String, dynamic>;
       return AgentRequestOutcome.success(body['id'] as int?);
     } on BackendHttpException catch (error) {
       return AgentRequestOutcome.failure(error.message);
     } catch (error) {
-      BackendHttp.log('AgentRepository.submitOwnAgentRequest failed', error: error);
+      BackendHttp.log(
+        'AgentRepository.submitOwnAgentRequest failed',
+        error: error,
+      );
       return const AgentRequestOutcome.failure(
         'Something went wrong. Please try again.',
       );

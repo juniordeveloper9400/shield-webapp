@@ -10,6 +10,7 @@ import 'agent_customer.dart';
 import 'agent_customer_directory.dart';
 import 'agent_directory.dart';
 import 'agent_model.dart';
+import 'withdrawal_policy.dart';
 
 /// The live agent roster plus the withdrawal ledger.
 ///
@@ -27,7 +28,8 @@ class AgentService extends ChangeNotifier {
   static final AgentService instance = AgentService._();
 
   /// The smallest amount a withdrawal request may ask for.
-  static const int minWithdrawal = 500;
+  static const int minWithdrawal = minimumAgentWithdrawal;
+  final Set<String> _withdrawalsLoaded = {};
 
   /// The decaying override an agent earns on a downline member's own
   /// personal sales, indexed by how many real `parentId` hops separate the
@@ -298,8 +300,9 @@ class AgentService extends ChangeNotifier {
   /// direct report actually ends up registered at.
   int openPositionsUnder(Agent parent) {
     final slots = slotsUnder(parent);
-    final capacity =
-        slots.isNotEmpty ? slots.length : parent.level.childCapacity;
+    final capacity = slots.isNotEmpty
+        ? slots.length
+        : parent.level.childCapacity;
     return (capacity - _slotHoldersUnder(parent.id).length).clamp(0, capacity);
   }
 
@@ -340,9 +343,8 @@ class AgentService extends ChangeNotifier {
       customer.plans.fold(0, (sum, p) => sum + commissionOnPlan(p));
 
   /// What [agent]'s own direct sales have earned them in total.
-  int directSaleEarnings(Agent agent) => customersOf(
-    agent,
-  ).fold(0, (sum, c) => sum + commissionOnSale(c));
+  int directSaleEarnings(Agent agent) =>
+      customersOf(agent).fold(0, (sum, c) => sum + commissionOnSale(c));
 
   /// The combined card value of every direct sale [agent] has made.
   int directSaleVolume(Agent agent) =>
@@ -390,7 +392,8 @@ class AgentService extends ChangeNotifier {
     return validateName(text, field: 'middle name');
   }
 
-  static String? validatePhone(String? value) => AuthService.validatePhone(value);
+  static String? validatePhone(String? value) =>
+      AuthService.validatePhone(value);
 
   static String? validateAadhaar(String? value) {
     final text = (value ?? '').replaceAll(' ', '');
@@ -455,6 +458,7 @@ class AgentService extends ChangeNotifier {
     required String pincode,
     required String place,
     required String accountNumber,
+
     /// The named slot this agent fills — a zone for a region agent, a state
     /// for a state agent. Becomes their [Agent.area] / [Agent.areaId]; falls
     /// back to [place] (with no id) when the tier has no named slots.
@@ -652,28 +656,63 @@ class AgentService extends ChangeNotifier {
       .where((request) => request.status == WithdrawalStatus.pending)
       .fold(0, (sum, request) => sum + request.amount);
 
-  int earnedFor(Agent agent) => agent.displayEarned;
+  int earnedFor(Agent agent) =>
+      (agentForPhone(agent.phone) ?? agent).displayEarned;
 
   /// What [agent] has taken out of the commission pot: paid out on the seed
   /// data, plus anything moved into the wallet from the portal this session.
   /// Zero while the agent is still awaiting approval, same as [earnedFor] —
   /// there is nothing to have taken out of a pot that reads zero.
-  int redeemedFor(Agent agent) =>
-      agent.isApproved ? agent.redeemed + movedToWalletFor(agent) : 0;
+  int redeemedFor(Agent agent) {
+    agent = agentForPhone(agent.phone) ?? agent;
+    return agent.isApproved ? agent.redeemed + movedToWalletFor(agent) : 0;
+  }
 
   /// Commission [agent] has moved into their Sahakar 360 wallet this session.
   int movedToWalletFor(Agent agent) => _movedToWallet[agent.id] ?? 0;
 
   /// What [agent] could ask to withdraw right now: earned, less what has been
   /// taken out ([redeemedFor]), less what is already in flight. Never negative.
-  int withdrawableFor(Agent agent) =>
-      (agent.displayEarned - redeemedFor(agent) - pendingFor(agent))
-          .clamp(0, agent.displayEarned)
+  int availableEarningsFor(Agent agent) =>
+      (earnedFor(agent) - redeemedFor(agent) - pendingFor(agent))
+          .clamp(0, earnedFor(agent))
           .toInt();
+
+  int withdrawableFor(Agent agent) {
+    final current = agentForPhone(agent.phone) ?? agent;
+    if (!current.active || !current.isApproved) return 0;
+    if (!_withdrawalsLoaded.contains(agent.phone)) return 0;
+    return eligibleWithdrawalAmount(
+      earned: earnedFor(agent),
+      redeemed: redeemedFor(agent),
+      pending: pendingFor(agent),
+    );
+  }
+
+  Future<void> refreshWithdrawals(Agent agent) async {
+    try {
+      final requests = await AgentRepository.instance.fetchWithdrawals();
+      final roster = await AgentRepository.instance.fetchAll();
+      if (roster == null) return;
+      if (AuthService.instance.currentUser.value?.phone != agent.phone) return;
+      _requests[agent.id] = requests;
+      _withdrawalsLoaded.add(agent.phone);
+      for (final row in roster) {
+        final index = _agents.indexWhere(
+          (a) => a.id == row.id || a.phone == row.phone,
+        );
+        if (index >= 0) _agents[index] = row;
+        if (row.phone == agent.phone) _requests[row.id] = requests;
+      }
+      notifyListeners();
+    } catch (_) {
+      // Keep the last confirmed history; a request is always rechecked by the server.
+    }
+  }
 
   /// Raises a withdrawal request for [amount]. Returns null on success, or the
   /// reason it was refused.
-  String? requestWithdrawal(Agent agent, int amount) {
+  Future<String?> requestWithdrawal(Agent agent, int amount) async {
     if (amount < minWithdrawal) {
       return 'Minimum withdrawal is ₹${formatRupees(minWithdrawal)}';
     }
@@ -681,9 +720,12 @@ class AgentService extends ChangeNotifier {
       return 'Amount exceeds your withdrawable balance';
     }
 
-    (_requests[agent.id] ??= <WithdrawalRequest>[]).add(
-      WithdrawalRequest(amount: amount, requestedOn: DateTime.now()),
-    );
+    try {
+      await AgentRepository.instance.requestWithdrawal(amount);
+      _requests[agent.id] = await AgentRepository.instance.fetchWithdrawals();
+    } catch (_) {
+      return 'Could not confirm the request. Refresh before trying again.';
+    }
     notifyListeners();
     return null;
   }
@@ -695,7 +737,7 @@ class AgentService extends ChangeNotifier {
     if (amount <= 0) {
       return 'Enter an amount to add';
     }
-    if (amount > withdrawableFor(agent)) {
+    if (amount > availableEarningsFor(agent)) {
       return 'Amount exceeds your withdrawable balance';
     }
 
@@ -723,9 +765,8 @@ class AgentService extends ChangeNotifier {
 
   /// Total sales closed anywhere in [agent]'s downline. A member still
   /// awaiting approval contributes nothing — see [Agent.displayPersonalSales].
-  int teamSalesTotal(Agent agent) => teamOf(
-    agent,
-  ).fold(0, (sum, member) => sum + member.displayPersonalSales);
+  int teamSalesTotal(Agent agent) =>
+      teamOf(agent).fold(0, (sum, member) => sum + member.displayPersonalSales);
 
   /// How many real `parentId` hops separate [member] from [ancestor] —
   /// 1 when [ancestor] is [member]'s own immediate parent, 2 for a
@@ -784,6 +825,7 @@ class AgentService extends ChangeNotifier {
   /// requests, wallet transfers, registrations) goes with it too — none of
   /// it means anything for whoever signs in next.
   void reset() {
+    _withdrawalsLoaded.clear();
     _requests.clear();
     _movedToWallet.clear();
     _agents

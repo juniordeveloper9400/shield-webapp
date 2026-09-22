@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -34,6 +35,17 @@ class AgentEarningsCard extends StatefulWidget {
 
 class _AgentEarningsCardState extends State<AgentEarningsCard>
     with SingleTickerProviderStateMixin {
+  Timer? _refreshTimer;
+
+  @override
+  void initState() {
+    super.initState();
+    unawaited(AgentService.instance.refreshWithdrawals(widget.agent));
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(AgentService.instance.refreshWithdrawals(widget.agent));
+    });
+  }
+
   late final AnimationController _controller = AnimationController(
     vsync: this,
     duration: AgentEarningsCard.flipDuration,
@@ -46,6 +58,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
 
   @override
   void dispose() {
+    _refreshTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -158,8 +171,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
                         child: showBack
                             ? Transform(
                                 alignment: Alignment.center,
-                                transform: Matrix4.identity()
-                                  ..rotateY(math.pi),
+                                transform: Matrix4.identity()..rotateY(math.pi),
                                 child: _EarningsBack(agent: widget.agent),
                               )
                             : _EarningsFront(agent: widget.agent),
@@ -317,9 +329,11 @@ class _EarningsFront extends StatelessWidget {
           const SizedBox(height: 10),
           Text(
             'WITHDRAWABLE',
-            style: _ink(9, FontWeight.w800, color: _muted).copyWith(
-              letterSpacing: 0.7,
-            ),
+            style: _ink(
+              9,
+              FontWeight.w800,
+              color: _muted,
+            ).copyWith(letterSpacing: 0.7),
           ),
           const SizedBox(height: 2),
           FittedBox(
@@ -494,8 +508,11 @@ class _Figure extends StatelessWidget {
           child: Text(
             label,
             maxLines: 1,
-            style: _ink(9, FontWeight.w800, color: const Color(0xCCFFFFFF))
-                .copyWith(letterSpacing: 0.6),
+            style: _ink(
+              9,
+              FontWeight.w800,
+              color: const Color(0xCCFFFFFF),
+            ).copyWith(letterSpacing: 0.6),
           ),
         ),
         const SizedBox(height: 4),
@@ -553,7 +570,7 @@ class _AmountSheet extends StatefulWidget {
   final String subtitle;
   final String actionLabel;
   final String emptyError;
-  final String? Function(int amount) onSubmit;
+  final FutureOr<String?> Function(int amount) onSubmit;
 
   const _AmountSheet({
     required this.title,
@@ -570,6 +587,7 @@ class _AmountSheet extends StatefulWidget {
 class _AmountSheetState extends State<_AmountSheet> {
   final _amount = TextEditingController();
   String? _error;
+  bool _submitting = false;
 
   @override
   void dispose() {
@@ -577,13 +595,17 @@ class _AmountSheetState extends State<_AmountSheet> {
     super.dispose();
   }
 
-  void _submit() {
+  Future<void> _submit() async {
+    if (_submitting) return;
     final value = int.tryParse(_amount.text.trim());
     if (value == null || value <= 0) {
       setState(() => _error = widget.emptyError);
       return;
     }
-    final failure = widget.onSubmit(value);
+    setState(() => _submitting = true);
+    final failure = await widget.onSubmit(value);
+    if (!mounted) return;
+    setState(() => _submitting = false);
     if (failure != null) {
       setState(() => _error = failure);
       return;
@@ -686,7 +708,7 @@ class _AmountSheetState extends State<_AmountSheet> {
           ],
           const SizedBox(height: 16),
           FilledButton(
-            onPressed: _submit,
+            onPressed: _submitting ? null : _submit,
             style: FilledButton.styleFrom(
               backgroundColor: AppColors.brandBlue,
               padding: const EdgeInsets.symmetric(vertical: 14),
