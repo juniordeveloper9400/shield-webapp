@@ -227,15 +227,29 @@ class Agent {
   Agent withApprovalStatus(AgentApprovalStatus status) =>
       _copyWith(approvalStatus: status);
 
-  Agent _copyWith({Uint8List? photoBytes, AgentApprovalStatus? approvalStatus}) =>
-      Agent(
+  /// A copy of this agent reparented under [parentId]. Used only to correct
+  /// a `null`-parent row — [AgentRepository] maps that onto the seed
+  /// national placeholder's id, since it has no view of the rest of the
+  /// roster while mapping one row — onto whichever agent is actually the
+  /// real, fetched national agent, once `AgentService` has seen one; see
+  /// `AgentService._loadFromServer`. Without this, a member converted
+  /// straight to a national-rooted agent with no parent chosen looks
+  /// unreachable from the real national agent's own id, and every override
+  /// commission the national agent should earn on them computes as zero.
+  Agent withParentId(String parentId) => _copyWith(parentId: parentId);
+
+  Agent _copyWith({
+    Uint8List? photoBytes,
+    AgentApprovalStatus? approvalStatus,
+    String? parentId,
+  }) => Agent(
         id: id,
         name: name,
         phone: phone,
         agentCode: agentCode,
         level: level,
         active: active,
-        parentId: parentId,
+        parentId: parentId ?? this.parentId,
         area: area,
         areaId: areaId,
         earned: earned,

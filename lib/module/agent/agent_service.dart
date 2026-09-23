@@ -170,6 +170,30 @@ class AgentService extends ChangeNotifier {
           if (id != null) _dbId[row.id] = Future.value(id);
         }
       }
+      // A real agent row with no `parentId` (an admin converted them with no
+      // parent chosen) is mapped by `AgentRepository` onto the seed national
+      // placeholder's id, since that mapping happens one row at a time with
+      // no view of the rest of the roster. Once a real national agent has
+      // actually been fetched, reparent any such row onto that real id
+      // instead — otherwise `ancestorsOf` never walks through the national
+      // agent actually signed in, and every override commission they should
+      // earn on that row computes as zero even though `descendantsOf`
+      // (which special-cases national separately) already counts the sale
+      // in their team total.
+      final realNational = remote
+          .where(
+            (a) => a.level == AgentLevel.national && a.id != AgentDirectory.national.id,
+          )
+          .firstOrNull;
+      if (realNational != null) {
+        for (var i = 0; i < _agents.length; i++) {
+          final agent = _agents[i];
+          if (agent.id != realNational.id &&
+              agent.parentId == AgentDirectory.national.id) {
+            _agents[i] = agent.withParentId(realNational.id);
+          }
+        }
+      }
       if (customers != null) {
         _customers.removeWhere((c) => c.agentId == self.id);
         _customers.addAll(customers);
