@@ -87,11 +87,74 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     AgentGeo.instance.ensureLoaded();
     // Same for the roster itself — every agent already registered in
     // app.agent, so a fresh app launch (or a second device) shows who is
-    // really on the team rather than just the national seed persona.
-    // AgentService is already a ListenableBuilder above, so no separate
-    // listener is needed here.
+    // really on the team rather than just the national seed persona. The
+    // ListenableBuilder further down already rebuilds on this same
+    // notification; this separate listener exists only to reconcile
+    // _expanded first — see _onAgentsChanged's own doc for why.
+    AgentService.instance.addListener(_onAgentsChanged);
     AgentService.instance.ensureLoaded();
     WidgetsBinding.instance.addPostFrameCallback((_) => _openOnRoot());
+  }
+
+  /// Keeps [_expanded] pointing at real content when a registration —
+  /// completed from this very screen, returning to this same instance
+  /// rather than a fresh mount — turns an open "+" seat already sitting
+  /// open in [_expanded] into a real agent.
+  ///
+  /// A seat's open-position id (`slot/<parent>/<tier>/<geoId>`) is built
+  /// from its PARENT's own current id (see [_MindNode]/[_MindPlusNode]), so
+  /// registering a real agent into any ancestor along that chain — not
+  /// just the seat itself — changes the id every descendant seat is now
+  /// built with too, even though none of them personally gained or lost an
+  /// occupant. Without this, `_expanded` goes on holding the old ids, which
+  /// the tree no longer builds any card for at all, so that whole branch —
+  /// and everything the user had drilled into beneath it — reads as having
+  /// silently collapsed, even though nothing was ever closed; the branch
+  /// just lost the only keys that still pointed at it.
+  void _onAgentsChanged() {
+    if (!mounted) return;
+    var changed = false;
+    final migrated = <String>{};
+    for (final entry in _expanded) {
+      if (entry.startsWith('slot/')) {
+        final current = _currentIdForGeoNode(entry.split('/').last);
+        if (current != entry) changed = true;
+        migrated.add(current);
+      } else {
+        migrated.add(entry);
+      }
+    }
+    if (changed) {
+      setState(() {
+        _expanded
+          ..clear()
+          ..addAll(migrated);
+      });
+    }
+  }
+
+  /// The id the tree would build RIGHT NOW for the geo position [geoId] —
+  /// a real agent's own id if one occupies it, otherwise the open-seat
+  /// `slot/…` path [_MindNode]/[_MindPlusNode] would construct for it,
+  /// rebuilt from [AgentGeo]'s own parent chain rather than string surgery
+  /// on a possibly-stale existing key, so it stays correct no matter how
+  /// many ancestors along the way are real agents versus still-open seats.
+  String _currentIdForGeoNode(String geoId) {
+    final direct = AgentService.instance.agentAtSlot(geoId);
+    if (direct != null) return direct.id;
+    final tier = AgentGeo.current.levelOfId(geoId);
+    final parentGeoId = AgentGeo.current.parentIdOf(geoId);
+    // A region has no geo parent of its own — it always sits directly under
+    // whichever agent this tree is rooted at (only ever meaningful when
+    // that root is the national agent; a region-rooted tree has no region
+    // slots to reconcile in the first place).
+    final parentId = parentGeoId == null
+        ? widget.root.id
+        : _currentIdForGeoNode(parentGeoId);
+    final tierName = tier?.name ?? 'region';
+    return parentId.startsWith('slot/')
+        ? '$parentId/$tierName/$geoId'
+        : 'slot/$parentId/$tierName/$geoId';
   }
 
   void _onGeoChanged() {
@@ -114,6 +177,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   @override
   void dispose() {
     AgentGeo.instance.removeListener(_onGeoChanged);
+    AgentService.instance.removeListener(_onAgentsChanged);
     _panController.dispose();
     _transform.dispose();
     super.dispose();
