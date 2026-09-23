@@ -223,11 +223,51 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     });
     // Opening a card glides down to the tier it just revealed; closing one
     // glides back up to its parent, so the chevron pulls the view in the
-    // direction it points.
-    final focus = opening ? id : (_parentId(id) ?? id);
+    // direction it points. When the tier just opened already has a real,
+    // registered agent somewhere in it — not just open "+" positions — land
+    // on THEM instead of the row's own start: a real person several seats
+    // into a wide row (a district's 17 assemblies, say) is what the tap was
+    // almost certainly trying to reach, and is more useful to land on than
+    // an empty seat that happens to sort first.
+    final focus = opening
+        ? (_firstRealAgentUnder(id)?.id ?? id)
+        : (_parentId(id) ?? id);
     WidgetsBinding.instance.addPostFrameCallback(
       (_) => _flowTo(focus, zoomIn: opening),
     );
+  }
+
+  /// The first real, registered agent occupying one of [id]'s own named
+  /// slots, in slot order — or null when every seat under [id] is still
+  /// open, or [id] heads no named slots at all.
+  ///
+  /// [id] is either a real agent's own id (its slots come from
+  /// [AgentService.slotsUnder]) or an open `slot/…` position (its geo id is
+  /// the path's own tail — the same convention [_openGeoSlotsEnclosing] and
+  /// [AgentGeo.levelOfId] use).
+  Agent? _firstRealAgentUnder(String id) {
+    final AgentLevel level;
+    final String? geoId;
+    if (id.startsWith('slot/')) {
+      geoId = id.split('/').last;
+      final tierOfSlot = AgentGeo.current.levelOfId(geoId);
+      if (tierOfSlot == null) return null;
+      level = tierOfSlot;
+    } else {
+      final agent = AgentService.instance.byId(id);
+      if (agent == null) return null;
+      level = agent.level;
+      geoId = agent.areaId;
+    }
+    // slotsUnder ignores [level] for every tier but national (see its own
+    // doc) — passing it through here is just what lets national's fixed
+    // six regions resolve without a real geo id of their own.
+    final slots = AgentGeo.current.slotsUnder(level, geoId);
+    for (final slot in slots) {
+      final filled = AgentService.instance.agentAtSlot(slot.id);
+      if (filled != null) return filled;
+    }
+    return null;
   }
 
   /// Every currently-open "+" geo seat (a `slot/…` id already in [_expanded])
