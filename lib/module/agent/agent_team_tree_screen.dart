@@ -296,22 +296,6 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
 
     // The card's position inside the (untransformed) map content.
     final topLeft = pillBox.localToGlobal(Offset.zero, ancestor: chartBox);
-    // Re-fit the width every glide, not just reuse whatever scale the last
-    // tier happened to need — a district can open onto a state with 6
-    // siblings one time and Malappuram's 17 assemblies the next. Reusing
-    // the old scale left most of a wide tier off both edges of the
-    // viewport, with nothing to say a pinch-out would help: opening the
-    // tier looked exactly like it had opened onto nothing. Capped at 1.0
-    // the same way _fitToScreen's own width fit is, so a narrow tier still
-    // shows at its natural size instead of stretching to fill the screen.
-    // Re-fit the width every glide, not just reuse whatever scale the last
-    // tier happened to need — a district can open onto a state with 6
-    // siblings one time and Malappuram's 17 assemblies the next. Reusing
-    // the old scale left most of a wide tier off both edges of the
-    // viewport, with nothing to say a pinch-out would help: opening the
-    // tier looked exactly like it had opened onto nothing. Capped at 1.0
-    // the same way _fitToScreen's own width fit is, so a narrow tier still
-    // shows at its natural size instead of stretching to fill the screen.
     final chartWidth = chartBox.size.width;
     final scale = chartWidth == 0
         ? _transform.value.getMaxScaleOnAxis()
@@ -709,7 +693,7 @@ class _MindNode extends StatelessWidget {
     // whole shape of their team, approved or not, so the chevron still fans
     // it out — real reports if any exist, open positions otherwise.
     final locked = !agent.isApproved;
-    final canExpand = capacity > 0;
+    final canExpand = (childLevel != null) && (capacity > 0);
     final isExpanded = canExpand && expanded.contains(agent.id);
 
     return _MindBranch(
@@ -871,8 +855,6 @@ class _MindPlusNode extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final slot = this.slot;
-    final canExpand = level.childCapacity > 0;
-    final isExpanded = canExpand && expanded.contains(slotId);
 
     // If this open slot itself names a place, its own preview positions are
     // that place's named children rather than the plain doubling shape.
@@ -887,6 +869,9 @@ class _MindPlusNode extends StatelessWidget {
             ? null
             : AgentGeo.current.childLevelOfId(slot.id)) ??
         level.child;
+
+    final canExpand = (childLevel != null) && (previewCapacity > 0);
+    final isExpanded = canExpand && expanded.contains(slotId);
 
     return _MindBranch(
       connectorColor: _connectorColor,
@@ -932,7 +917,7 @@ class _MindPlusNode extends StatelessWidget {
                   )
                 else
                   _MindPlusNode(
-                    level: childLevel!,
+                    level: childLevel,
                     depth: depth + 1,
                     slotId: '$slotId/${childLevel.name}/$i',
                     realParent: realParent,
