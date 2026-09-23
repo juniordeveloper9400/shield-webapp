@@ -721,12 +721,15 @@ class _MindNode extends StatelessWidget {
         expanded: expanded,
         keyFor: keyFor,
         onToggle: onToggle,
+        onOpen: onOpen,
         onAdd: onAdd,
       );
 
   /// The rows under an expanded agent: its filled reports, then the open
   /// positions. With named slots ([slots] — the zones, or a zone's states)
-  /// each slot is either the agent filling it (matched by [Agent.areaId]) or
+  /// each slot is either whoever actually holds that geo position
+  /// ([AgentService.agentAtSlot] — not just this agent's own direct
+  /// [childrenOf], which a skipped-past empty tier would miss entirely) or
   /// an open "+ North" card; otherwise the plain "+ child" cards fill the
   /// remaining [capacity].
   List<Widget> _buildChildNodes(
@@ -745,10 +748,10 @@ class _MindNode extends StatelessWidget {
           _slot(childLevel, 'slot/${agent.id}/${childLevel.name}/$i'),
       ];
     }
+    final service = AgentService.instance;
     final nodes = <Widget>[
       for (final slot in slots)
-        if (children.where((c) => c.areaId == slot.id).firstOrNull
-            case final Agent filled)
+        if (service.agentAtSlot(slot.id) case final Agent filled)
           _child(filled)
         else
           _slot(
@@ -792,6 +795,7 @@ class _MindPlusNode extends StatelessWidget {
   final Set<String> expanded;
   final GlobalKey Function(String id) keyFor;
   final void Function(String id) onToggle;
+  final void Function(Agent agent) onOpen;
   final void Function(Agent parent, AgentLevel level, [GeoSlot? slot]) onAdd;
 
   const _MindPlusNode({
@@ -802,6 +806,7 @@ class _MindPlusNode extends StatelessWidget {
     required this.expanded,
     required this.keyFor,
     required this.onToggle,
+    required this.onOpen,
     required this.onAdd,
     this.slot,
   });
@@ -848,17 +853,39 @@ class _MindPlusNode extends StatelessWidget {
       children: isExpanded
           ? [
               for (var i = 0; i < previewCapacity; i++)
-                _MindPlusNode(
-                  level: childLevel!,
-                  depth: depth + 1,
-                  slotId: '$slotId/${childLevel.name}/$i',
-                  realParent: realParent,
-                  slot: previewSlots.isNotEmpty ? previewSlots[i] : null,
-                  expanded: expanded,
-                  keyFor: keyFor,
-                  onToggle: onToggle,
-                  onAdd: onAdd,
-                ),
+                if ((previewSlots.isEmpty
+                        ? null
+                        : AgentService.instance.agentAtSlot(previewSlots[i].id))
+                    case final Agent filled)
+                  // Someone actually holds this position — their real
+                  // parentId may skip straight past every empty tier back
+                  // to whichever ancestor is real (see [AgentService.
+                  // agentAtSlot]'s doc), so this preview walk, not
+                  // [AgentService.childrenOf], is what finds them and
+                  // draws them at their true geo depth instead of at
+                  // wherever their parentId shortcut lands.
+                  _MindNode(
+                    agent: filled,
+                    depth: depth + 1,
+                    expanded: expanded,
+                    keyFor: keyFor,
+                    onToggle: onToggle,
+                    onOpen: onOpen,
+                    onAdd: onAdd,
+                  )
+                else
+                  _MindPlusNode(
+                    level: childLevel!,
+                    depth: depth + 1,
+                    slotId: '$slotId/${childLevel.name}/$i',
+                    realParent: realParent,
+                    slot: previewSlots.isNotEmpty ? previewSlots[i] : null,
+                    expanded: expanded,
+                    keyFor: keyFor,
+                    onToggle: onToggle,
+                    onOpen: onOpen,
+                    onAdd: onAdd,
+                  ),
             ]
           : const [],
     );

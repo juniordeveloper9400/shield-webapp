@@ -182,7 +182,9 @@ class AgentService extends ChangeNotifier {
       // in their team total.
       final realNational = remote
           .where(
-            (a) => a.level == AgentLevel.national && a.id != AgentDirectory.national.id,
+            (a) =>
+                a.level == AgentLevel.national &&
+                a.id != AgentDirectory.national.id,
           )
           .firstOrNull;
       if (realNational != null) {
@@ -284,6 +286,29 @@ class AgentService extends ChangeNotifier {
   /// The agents reporting directly to [id], in insertion order.
   List<Agent> childrenOf(String id) =>
       _agents.where((agent) => agent.parentId == id).toList(growable: false);
+
+  /// Whoever actually holds the named geo position [slotId] — a region, a
+  /// district, a ward — regardless of how far their real `parentId` chain
+  /// skips to get there.
+  ///
+  /// `parentId` intentionally skips straight past any tier nobody has been
+  /// registered into yet (so a hop-based commission override always reaches
+  /// the nearest real ancestor, not a vacant seat — see [ancestorsOf]'s own
+  /// doc). "My Team"'s org-chart tree must not read that shortcut as the
+  /// tree's own shape, though: an assembly agent registered under an empty
+  /// region and district still sits at that assembly position, under that
+  /// empty region and district drawn as open "+" seats — not flattened up
+  /// next to the region row itself, which is what a lookup keyed off
+  /// [childrenOf] alone would draw. This is the whole-roster, id-matched
+  /// lookup the tree walks by instead: see `_MindNode`/`_MindPlusNode` in
+  /// `agent_team_tree_screen.dart`.
+  Agent? agentAtSlot(String slotId) => _agents
+      .where(
+        (a) =>
+            a.areaId == slotId &&
+            a.approvalStatus != AgentApprovalStatus.rejected,
+      )
+      .firstOrNull;
 
   /// [childrenOf], minus anyone an admin rejected — a rejected registration
   /// gives its slot back, so it must not count against capacity or hold a

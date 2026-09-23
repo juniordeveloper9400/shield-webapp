@@ -114,6 +114,44 @@ void main() {
       expect(reparented?.parentId, isNot(AgentDirectory.national.id));
     },
   );
+  test(
+    'agentAtSlot finds whoever holds a geo position by areaId, even when '
+    'their real parentId skips straight past it',
+    () async {
+      // Muzaa registered as an assembly agent under an empty South Region /
+      // Kerala / Malappuram chain — `deriveParentAgentId` intentionally
+      // skips those vacant tiers for the commission chain, so `parentId`
+      // points straight at the national agent. "My Team"'s org-chart tree
+      // must still draw Muzaa at the assembly position, nested under those
+      // three empty "+" seats, not flattened up next to National's own
+      // region row — `agentAtSlot`, not `childrenOf`, is what the tree now
+      // walks by to find them there.
+      final althaf = agent('db-1', level: AgentLevel.national);
+      final muzaa = Agent(
+        id: 'db-2',
+        name: 'Muzaa',
+        phone: 'db-2',
+        agentCode: 'SHD-AGT-002',
+        level: AgentLevel.assembly,
+        active: true,
+        parentId: althaf.id,
+        area: 'Perinthalmanna',
+        areaId: 'assembly/perinthalmanna',
+      );
+      service.debugSetLoaders(
+        team: () async => [althaf, muzaa],
+        pending: () async => [],
+        customers: (_) async => [],
+      );
+      await service.refresh();
+      expect(service.agentAtSlot('assembly/perinthalmanna'), muzaa);
+      // Nobody actually holds the region or district seats above Muzaa —
+      // those stay open "+" positions in the tree.
+      expect(service.agentAtSlot('south-region'), isNull);
+      expect(service.agentAtSlot('kerala'), isNull);
+      expect(service.agentAtSlot('malappuram'), isNull);
+    },
+  );
   test('failed load remains retryable', () async {
     var attempts = 0;
     final self = agent('db-1');
