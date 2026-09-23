@@ -653,11 +653,13 @@ class _MindNode extends StatelessWidget {
     final capacity = slots.isNotEmpty
         ? slots.length
         : agent.level.childCapacity;
-    // A recruit still awaiting an admin's approval heads nobody yet: their
-    // card is locked — name and reference code only, no chevron to fan a
-    // tier out under them — until the console approves or removes them.
+    // A recruit still awaiting an admin's approval has their own detail
+    // screen locked (nothing to review there yet — see `_showLockedNotice`),
+    // but the tier they would head is not: a recruiter needs to see the
+    // whole shape of their team, approved or not, so the chevron still fans
+    // it out — real reports if any exist, open positions otherwise.
     final locked = !agent.isApproved;
-    final canExpand = capacity > 0 && !locked;
+    final canExpand = capacity > 0;
     final isExpanded = canExpand && expanded.contains(agent.id);
 
     return _MindBranch(
