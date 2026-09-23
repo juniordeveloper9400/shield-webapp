@@ -919,7 +919,9 @@ class _MindPlusNode extends StatelessWidget {
                   _MindPlusNode(
                     level: childLevel,
                     depth: depth + 1,
-                    slotId: '$slotId/${childLevel.name}/$i',
+                    slotId: previewSlots.isNotEmpty
+                        ? '$slotId/${childLevel.name}/${previewSlots[i].id}'
+                        : '$slotId/${childLevel.name}/$i',
                     realParent: realParent,
                     slot: previewSlots.isNotEmpty ? previewSlots[i] : null,
                     expanded: expanded,
