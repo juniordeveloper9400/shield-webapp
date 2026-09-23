@@ -229,11 +229,16 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // into a wide row (a district's 17 assemblies, say) is what the tap was
     // almost certainly trying to reach, and is more useful to land on than
     // an empty seat that happens to sort first.
-    final focus = opening
-        ? (_firstRealAgentUnder(id)?.id ?? id)
-        : (_parentId(id) ?? id);
+    final preferredAgentId = opening ? _firstRealAgentUnder(id)?.id : null;
+    final focus = preferredAgentId ?? (opening ? id : (_parentId(id) ?? id));
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _flowTo(focus, zoomIn: opening),
+      // [id] itself as a fallback: if the preferred real agent's own card
+      // somehow isn't found (its GlobalKey not yet attached this frame, say
+      // — the tier it sits in only just got these extra "irregular report"
+      // cards added), landing on the tier that was actually tapped is still
+      // a real result, not the silent no-op a lookup miss used to leave the
+      // whole tap looking like.
+      (_) => _flowTo(focus, zoomIn: opening, fallback: preferredAgentId != null ? id : null),
     );
   }
 
@@ -323,8 +328,11 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   }
 
   /// Glides the view so [id]'s card sits high and centred, its tier fanned
-  /// out in the frame below it.
-  void _flowTo(String id, {bool zoomIn = false}) {
+  /// out in the frame below it. Retries once with [fallback] — the tier
+  /// that was actually tapped, when [id] is a preferred-focus substitute for
+  /// it — rather than silently doing nothing at all when [id] itself can't
+  /// be found (no built, mounted card behind its key this frame).
+  void _flowTo(String id, {bool zoomIn = false, String? fallback}) {
     final pillBox =
         _pillKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
     final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
@@ -332,6 +340,9 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         chartBox == null ||
         !pillBox.hasSize ||
         _viewportSize.isEmpty) {
+      if (fallback != null && fallback != id) {
+        _flowTo(fallback, zoomIn: zoomIn);
+      }
       return;
     }
 
@@ -380,6 +391,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     final branchBox = pillBox.parent;
     if (zoomIn &&
         branchBox is _RenderMindBranch &&
+        branchBox.hasSize &&
         branchBox.size.width > pillBox.size.width + 1) {
       // The branch's own local origin (x=0) is the left edge of its widest
       // row; `nodeCenterX` is this card's offset from that origin, already
