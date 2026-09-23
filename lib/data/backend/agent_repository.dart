@@ -242,6 +242,12 @@ class AgentRepository {
               '/v1/agent/requests',
               body: {
                 if (parentDbId != null) 'parentAgentId': parentDbId,
+                // The recruit's own, already OTP-verified phone. Without
+                // this the backend has no way to tell this request apart
+                // from a plain self "become an agent" one, and falls back
+                // to the signed-in recruiter's own phone — see
+                // agent.service.ts's submitRequest for the bug that caused.
+                'phone': phone,
                 'requestedLevel': level.name.toUpperCase(),
                 'requestedArea': area,
                 if (areaId != null) 'requestedAreaId': areaId,
