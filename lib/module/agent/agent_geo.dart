@@ -99,6 +99,7 @@ class GeoHierarchy {
     required Map<String, List<GeoSlot>> childrenByParentId,
     required Map<String, String> codeById,
     required Map<String, String> nameById,
+    required Map<String, String> idByName,
     required Map<String, AgentLevel> levelById,
     required Map<String, String> parentIdByChildId,
     required Map<String, AgentLevel> childLevelByParentId,
@@ -111,6 +112,7 @@ class GeoHierarchy {
        _childrenByParentId = childrenByParentId,
        _codeById = codeById,
        _nameById = nameById,
+       _idByName = idByName,
        _levelById = levelById,
        _parentIdByChildId = parentIdByChildId,
        _childLevelByParentId = childLevelByParentId;
@@ -136,13 +138,14 @@ class GeoHierarchy {
   final Map<String, List<GeoSlot>> _childrenByParentId;
   final Map<String, String> _codeById;
   final Map<String, String> _nameById;
+  final Map<String, String> _idByName;
   final Map<String, AgentLevel> _levelById;
   final Map<String, String> _parentIdByChildId;
   final Map<String, AgentLevel> _childLevelByParentId;
 
   /// The tier [id] is a slot of, or null when [id] is not a real slot (a
   /// free-text place has no id at all).
-  AgentLevel? levelOfId(String id) => _levelById[id];
+  AgentLevel? levelOfId(String id) => _levelById[id] ?? _levelByName[id];
 
   /// The id of the slot one tier up from [id], or null at a region / for an
   /// unknown id.
@@ -150,22 +153,26 @@ class GeoHierarchy {
 
   /// Whether [id] is [ancestorId] itself, or sits somewhere under it in the
   /// real geo hierarchy — walking [parentIdOf] up from [id], regardless of
-  /// how many tiers between them have nobody registered. This is the geo
-  /// position, not any agent's own `parentId` chain (that one deliberately
-  /// skips empty tiers — see `AgentService.agentAtSlot`'s doc); an agent
-  /// several empty tiers below an open seat still counts as within it here.
+  /// how many tiers between them have nobody registered.
   bool isWithin(String id, String ancestorId) {
     var current = id;
-    while (true) {
+    var guard = 0;
+    while (guard++ < 20) {
       if (current == ancestorId) {
         return true;
       }
-      final parent = parentIdOf(current);
+      final parent = parentIdOf(current) ??
+          (_idByName[current] != null ? _parentIdByChildId[_idByName[current]!] : null);
       if (parent == null) {
+        final currentName = _nameById[current];
+        if (currentName != null && currentName == ancestorId) {
+          return true;
+        }
         return false;
       }
       current = parent;
     }
+    return false;
   }
 
   /// The tier of [parentId]'s children — normally the enum successor of
@@ -173,8 +180,15 @@ class GeoHierarchy {
   /// irregular branch is honoured (a ward sitting directly under an
   /// assembly, skipping the LSGD tier, say). Null when [parentId] has no
   /// children.
-  AgentLevel? childLevelOfId(String parentId) =>
-      _childLevelByParentId[parentId];
+  AgentLevel? childLevelOfId(String parentId) {
+    final byId = _childLevelByParentId[parentId];
+    if (byId != null) return byId;
+    final byName = _childLevelByParentName[parentId];
+    if (byName != null) return byName;
+    final idFromName = _idByName[parentId];
+    if (idFromName != null) return _childLevelByParentId[idFromName];
+    return null;
+  }
 
   /// The slots one tier below a [level] agent heading [parentId], or an
   /// empty list where that tier just doubles (a ward heads nobody) or
@@ -187,7 +201,18 @@ class GeoHierarchy {
     if (parentId == null) {
       return const <GeoSlot>[];
     }
-    return _childrenByParentId[parentId] ?? const <GeoSlot>[];
+    final byId = _childrenByParentId[parentId];
+    if (byId != null && byId.isNotEmpty) {
+      return byId;
+    }
+    final idFromName = _idByName[parentId];
+    if (idFromName != null) {
+      final byMappedId = _childrenByParentId[idFromName];
+      if (byMappedId != null && byMappedId.isNotEmpty) {
+        return byMappedId;
+      }
+    }
+    return const <GeoSlot>[];
   }
 
   /// The printed code for a slot that carries one (`AC136`, `TVC`,
@@ -358,6 +383,7 @@ class GeoHierarchy {
           if (n.code.isNotEmpty) n.id: n.code,
       },
       nameById: {for (final n in nodes) n.id: n.name},
+      idByName: {for (final n in nodes) if (n.name.isNotEmpty) n.name: n.id},
       levelById: {for (final n in nodes) n.id: n.level},
       parentIdByChildId: parentIdByChildId,
       childLevelByParentId: childLevelByParentId,

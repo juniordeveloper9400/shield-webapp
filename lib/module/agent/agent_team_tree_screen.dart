@@ -790,8 +790,8 @@ class _MindNode extends StatelessWidget {
           _child(filled)
         else
           _slot(
-            childLevel,
-            'slot/${agent.id}/${childLevel.name}/${slot.id}',
+            slot.level,
+            'slot/${agent.id}/${slot.level.name}/${slot.id}',
             slot: slot,
           ),
       // Anyone whose slot isn't one of the named ones, and isn't nested
@@ -916,10 +916,12 @@ class _MindPlusNode extends StatelessWidget {
                   )
                 else
                   _MindPlusNode(
-                    level: childLevel,
+                    level: previewSlots.isNotEmpty
+                        ? previewSlots[i].level
+                        : childLevel,
                     depth: depth + 1,
                     slotId: previewSlots.isNotEmpty
-                        ? '$slotId/${childLevel.name}/${previewSlots[i].id}'
+                        ? '$slotId/${previewSlots[i].level.name}/${previewSlots[i].id}'
                         : '$slotId/${childLevel.name}/$i',
                     realParent: realParent,
                     slot: previewSlots.isNotEmpty ? previewSlots[i] : null,
