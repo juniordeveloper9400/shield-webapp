@@ -24,7 +24,7 @@ enum CustomerReviewsStatus {
 
 /// "What our customers have to say" — the reel's single source of clips.
 ///
-/// Loads every active row from `app.customer_review_video` once per session
+/// Loads every active row from `app.customer_review_video` with a short-lived cache
 /// (see [CustomerReviewRepository]) and keeps it in memory. [items] is
 /// that list minus any row the in-app player cannot stream (a leftover
 /// YouTube link, a bundled asset path that no longer ships) — there is no
@@ -50,42 +50,50 @@ class CustomerReviewsService extends ChangeNotifier {
   List<CustomerReviewItem> get items => _admin;
 
   Future<void>? _inFlight;
+  DateTime? _lastLoadedAt;
+  Future<List<CustomerReviewItem>?> Function()? _testLoader;
+
+  @visibleForTesting
+  void debugSetLoader(Future<List<CustomerReviewItem>?> Function() loader) {
+    _testLoader = loader;
+  }
 
   /// Loads the reel the first time it is needed. Safe to call from
   /// `initState`: concurrent calls share one request and a finished load is a
-  /// no-op. Call [refresh] to force a reload.
+  /// no-op for 30 seconds. Call [refresh] to force a reload.
   Future<void> ensureLoaded() {
-    if (_isSettled) {
+    if (_isSettled &&
+        _lastLoadedAt != null &&
+        DateTime.now().difference(_lastLoadedAt!) <
+            const Duration(seconds: 30)) {
       return Future.value();
     }
-    return _inFlight ??= _load();
+    return _inFlight ??= _load().whenComplete(() => _inFlight = null);
   }
 
   /// Drop what was loaded and fetch again — for the admin console's "Add
   /// clip" to show up without a restart, and for pull-to-refresh.
   Future<void> refresh() {
-    _inFlight = null;
-    _status = CustomerReviewsStatus.idle;
-    return ensureLoaded();
+    return _inFlight ??= _load().whenComplete(() => _inFlight = null);
   }
 
   bool get _isSettled =>
       _status == CustomerReviewsStatus.ready ||
-      _status == CustomerReviewsStatus.empty ||
-      _status == CustomerReviewsStatus.error;
+      _status == CustomerReviewsStatus.empty;
 
   Future<void> _load() async {
-    if (!BackendHttp.isConfigured) {
-      _set(CustomerReviewsStatus.error, const []);
+    if (!isConfigured && _testLoader == null) {
+      _set(CustomerReviewsStatus.error, _admin);
       _inFlight = null;
       return;
     }
     _status = CustomerReviewsStatus.loading;
     notifyListeners();
     try {
-      final clips = await CustomerReviewRepository.instance.listActive();
+      final clips =
+          await (_testLoader ?? CustomerReviewRepository.instance.listActive)();
       if (clips == null) {
-        _set(CustomerReviewsStatus.error, const []);
+        _set(CustomerReviewsStatus.error, _admin);
       } else {
         final playable = _playable(clips);
         _set(
@@ -97,7 +105,7 @@ class CustomerReviewsService extends ChangeNotifier {
       }
     } catch (error) {
       BackendHttp.log('CustomerReviewsService load failed', error: error);
-      _set(CustomerReviewsStatus.error, const []);
+      _set(CustomerReviewsStatus.error, _admin);
     } finally {
       _inFlight = null;
     }
@@ -109,6 +117,7 @@ class CustomerReviewsService extends ChangeNotifier {
       clips.where((clip) => clip.isPlayable).toList(growable: false);
 
   void _set(CustomerReviewsStatus status, List<CustomerReviewItem> clips) {
+    if (status == CustomerReviewsStatus.ready || status == CustomerReviewsStatus.empty) { _lastLoadedAt = DateTime.now(); }
     _status = status;
     _admin = clips;
     notifyListeners();
@@ -134,6 +143,8 @@ class CustomerReviewsService extends ChangeNotifier {
   /// the next.
   @visibleForTesting
   void debugReset() {
+    _testLoader = null;
+    _lastLoadedAt = null;
     _inFlight = null;
     _set(CustomerReviewsStatus.idle, const []);
   }

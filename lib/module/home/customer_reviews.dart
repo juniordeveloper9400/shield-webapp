@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
@@ -72,10 +73,33 @@ class CustomerReviews extends StatefulWidget {
   State<CustomerReviews> createState() => _CustomerReviewsState();
 }
 
-class _CustomerReviewsState extends State<CustomerReviews> {
+class _CustomerReviewsState extends State<CustomerReviews>
+    with WidgetsBindingObserver {
+  Timer? _refreshTimer;
+
+  void _startRefreshTimer() {
+    _refreshTimer?.cancel();
+    if (!CustomerReviewsService.instance.isConfigured) return;
+    _refreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      unawaited(CustomerReviewsService.instance.refresh());
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(CustomerReviewsService.instance.refresh());
+      _startRefreshTimer();
+    } else {
+      _refreshTimer?.cancel();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _startRefreshTimer();
     CustomerReviewsService.instance.ensureLoaded();
     CustomerReviewsService.instance.addListener(_onServiceChanged);
   }
@@ -83,6 +107,8 @@ class _CustomerReviewsState extends State<CustomerReviews> {
   @override
   void dispose() {
     CustomerReviewsService.instance.removeListener(_onServiceChanged);
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 

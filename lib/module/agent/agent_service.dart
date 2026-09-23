@@ -106,86 +106,88 @@ class AgentService extends ChangeNotifier {
   /// not being signed in to it, or a network blip just leaves the seed-only
   /// roster in place). Safe to call from every screen's `initState`; only
   /// the first call does any work.
+  String? loadError;
+  int _loadGeneration = 0;
+  Future<List<Agent>?> Function()? _teamLoader;
+  Future<List<Agent>?> Function()? _pendingLoader;
+  Future<List<AgentCustomer>?> Function(String)? _customerLoader;
+
+  @visibleForTesting
+  void debugSetLoaders({
+    required Future<List<Agent>?> Function() team,
+    required Future<List<Agent>?> Function() pending,
+    required Future<List<AgentCustomer>?> Function(String) customers,
+  }) {
+    _teamLoader = team;
+    _pendingLoader = pending;
+    _customerLoader = customers;
+  }
+
   Future<void> ensureLoaded() {
-    if (_remoteLoaded) {
-      return Future<void>.value();
-    }
+    if (_remoteLoaded) return Future<void>.value();
+    return refresh();
+  }
+
+  Future<void> refresh() {
     return _remoteLoadInFlight ??= _loadFromServer();
   }
 
   Future<void> _loadFromServer() async {
+    final generation = _loadGeneration;
     try {
-      final approved = await AgentRepository.instance.fetchAll();
-      final pending = await AgentRepository.instance.fetchPendingRequests();
-      final remote = <Agent>[
-        if (approved != null) ...approved,
-        if (pending != null) ...pending,
-      ];
-      if (remote.isEmpty) {
+      final approved =
+          await (_teamLoader ?? AgentRepository.instance.fetchAll)();
+      if (generation != _loadGeneration) return;
+      if (approved == null || approved.isEmpty) {
+        loadError = 'Could not load agent sales. Please retry.';
         return;
       }
-      // Skip any approved row that is the seed root's own database counterpart
-      // — written the first time a registration under it needed one to parent
-      // under — so the national persona never shows twice. Pending requests
-      // keep their `req-` ids and never collide.
-      final have = _agents.map((a) => a.phone).toSet();
-      final ids = _agents.map((a) => a.id).toSet();
-      final fresh = remote
-          .where((a) => !ids.contains(a.id) && !have.contains(a.phone))
-          .toList();
-      if (fresh.isEmpty) {
-        return;
-      }
-      _agents.addAll(fresh);
-      // Cache the real database id for every approved fetched row so a
-      // registration under one of them resolves its parent id immediately.
-      for (final agent in fresh) {
-        if (agent.id.startsWith('db-')) {
-          final dbId = int.tryParse(agent.id.substring(3));
-          if (dbId != null) {
-            _dbId[agent.id] = Future.value(dbId);
-          }
+      final pending =
+          await (_pendingLoader ??
+              AgentRepository.instance.fetchPendingRequests)();
+      if (generation != _loadGeneration) return;
+      // The authenticated team endpoint returns the caller first. Phone
+      // formatting in the admin profile can differ from the login number.
+      final self = approved.first;
+      final customers =
+          await (_customerLoader ?? AgentCustomerRepository.instance.fetchAll)(
+            self.id,
+          );
+      if (generation != _loadGeneration) return;
+      final remote = [...approved, if (pending != null) ...pending];
+      final ids = remote.map((a) => a.id).toSet();
+      _agents.removeWhere((a) => a.id.startsWith('db-') && !ids.contains(a.id));
+      if (pending != null) _agents.removeWhere((a) => a.id.startsWith('req-'));
+      for (final row in remote) {
+        final index = _agents.indexWhere((a) => a.id == row.id);
+        if (index < 0) {
+          _agents.add(row);
+        } else {
+          _agents[index] = row;
+        }
+        if (row.id.startsWith('db-')) {
+          final id = int.tryParse(row.id.substring(3));
+          if (id != null) _dbId[row.id] = Future.value(id);
         }
       }
-    } finally {
+      if (customers != null) {
+        _customers.removeWhere((c) => c.agentId == self.id);
+        _customers.addAll(customers);
+      }
+      loadError = customers == null || pending == null
+          ? 'Some agent records could not be refreshed. Please retry.'
+          : null;
       _remoteLoaded = true;
-      // Unconditionally, even when there was nothing new to fold in — an
-      // agent with a genuinely empty team is the common case, not the
-      // exception, and a screen waiting on [isTeamLoaded] to leave its
-      // skeleton needs to hear about that outcome too, not just a non-empty
-      // one.
-      notifyListeners();
-      _remoteLoadInFlight = null;
+    } catch (_) {
+      if (generation == _loadGeneration) {
+        loadError = 'Could not load agent sales. Please retry.';
+      }
+    } finally {
+      if (generation == _loadGeneration) {
+        _remoteLoadInFlight = null;
+        notifyListeners();
+      }
     }
-    // After the roster load above, so a fresh sign-in's own agent row (just
-    // folded into _agents) resolves before this looks it up. Its own
-    // best-effort try/catch means a failure here never affects the roster
-    // load this is chained after.
-    await _loadCustomersFromServer();
-  }
-
-  /// Loads the signed-in agent's own Direct Sale customers — see
-  /// [AgentCustomerRepository.fetchAll]'s own doc for why the Direct Sale
-  /// section is empty without this. A no-op for a member who isn't a
-  /// currently-approved agent (nothing to fetch), and best-effort like every
-  /// other remote read here: a failure just leaves the seed-only customer
-  /// list in place.
-  Future<void> _loadCustomersFromServer() async {
-    final me = agentForPhone(AuthService.instance.currentUser.value?.phone);
-    if (me == null) {
-      return;
-    }
-    final remote = await AgentCustomerRepository.instance.fetchAll(me.id);
-    if (remote == null || remote.isEmpty) {
-      return;
-    }
-    final known = _customers.map((c) => c.id).toSet();
-    final fresh = remote.where((c) => !known.contains(c.id)).toList();
-    if (fresh.isEmpty) {
-      return;
-    }
-    _customers.addAll(fresh);
-    notifyListeners();
   }
 
   /// Sets [agent]'s profile photo, replacing their roster entry with a copy
@@ -210,6 +212,10 @@ class AgentService extends ChangeNotifier {
       return null;
     }
     final clean = phone.trim();
+    if (clean == _remoteAgentPhone && _remoteAgentId != null) {
+      final remote = byId(_remoteAgentId!);
+      if (remote != null && remote.isApproved) return remote;
+    }
     for (final agent in _agents) {
       if (agent.phone == clean && agent.isApproved) {
         return agent;
@@ -221,6 +227,7 @@ class AgentService extends ChangeNotifier {
   /// The phone of the agent row applied from Neon by `PersonaService` (a member
   /// the Super Admin converted), held so it can be swapped cleanly.
   String? _remoteAgentPhone;
+  String? _remoteAgentId;
 
   /// Applies — or, with null, removes — the `app.agent` row the console created
   /// for the signed-in member. Keyed on phone, so [agentForPhone] and every
@@ -229,18 +236,20 @@ class AgentService extends ChangeNotifier {
     var changed = false;
     final prev = _remoteAgentPhone;
     if (prev != null && (agent == null || agent.phone != prev)) {
-      _agents.removeWhere((a) => a.phone == prev);
+      _agents.removeWhere((a) => a.id == _remoteAgentId);
       _remoteAgentPhone = null;
+      _remoteAgentId = null;
       changed = true;
     }
     if (agent != null) {
-      final index = _agents.indexWhere((a) => a.phone == agent.phone);
+      final index = _agents.indexWhere((a) => a.id == agent.id);
       if (index >= 0) {
         _agents[index] = agent;
       } else {
         _agents.add(agent);
       }
       _remoteAgentPhone = agent.phone;
+      _remoteAgentId = agent.id;
       changed = true;
     }
     if (changed) {
@@ -855,6 +864,11 @@ class AgentService extends ChangeNotifier {
   /// requests, wallet transfers, registrations) goes with it too — none of
   /// it means anything for whoever signs in next.
   void reset() {
+    _loadGeneration++;
+    loadError = null;
+    _teamLoader = null;
+    _pendingLoader = null;
+    _customerLoader = null;
     _withdrawalsLoaded.clear();
     _requests.clear();
     _movedToWallet.clear();
@@ -867,6 +881,7 @@ class AgentService extends ChangeNotifier {
     _added = 0;
     _dbId.clear();
     _remoteAgentPhone = null;
+    _remoteAgentId = null;
     _remoteLoaded = false;
     _remoteLoadInFlight = null;
     notifyListeners();

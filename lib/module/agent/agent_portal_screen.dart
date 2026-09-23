@@ -17,10 +17,35 @@ import 'agent_team_tree_screen.dart';
 /// the direct-sale list, the team-sales roll-up, the full team roster — never
 /// folded away, unlike the roll-up's own per-tier detail — and the way
 /// through to the team tree.
-class AgentPortalScreen extends StatelessWidget {
+class AgentPortalScreen extends StatefulWidget {
   final Agent agent;
 
   const AgentPortalScreen({super.key, required this.agent});
+
+  @override
+  State<AgentPortalScreen> createState() => _AgentPortalScreenState();
+}
+
+class _AgentPortalScreenState extends State<AgentPortalScreen> {
+  Agent get agent =>
+      AgentService.instance.byId(widget.agent.id) ?? widget.agent;
+
+  @override
+  void initState() {
+    super.initState();
+    AgentService.instance.addListener(_salesChanged);
+    AgentService.instance.refresh();
+  }
+
+  void _salesChanged() {
+    if (mounted) setState(() {});
+  }
+
+  @override
+  void dispose() {
+    AgentService.instance.removeListener(_salesChanged);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +53,6 @@ class AgentPortalScreen extends StatelessWidget {
     // remote fetch it ever makes has settled), so calling it here on every
     // build is safe and is what actually starts the team's own data
     // loading — nothing else on the path into this screen does.
-    AgentService.instance.ensureLoaded();
 
     return Scaffold(
       backgroundColor: AppColors.pageTint,
@@ -49,37 +73,55 @@ class AgentPortalScreen extends StatelessWidget {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
-        children: [
-          _AgentStrip(agent: agent),
-          const SizedBox(height: 16),
-          AgentEarningsCard(agent: agent),
-          const SizedBox(height: 22),
-          AgentDirectSaleSection(agent: agent),
-          const SizedBox(height: 22),
-          const Text(
-            'Team',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
+      body: RefreshIndicator(
+        onRefresh: AgentService.instance.refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 20),
+          children: [
+            ListenableBuilder(
+              listenable: AgentService.instance,
+              builder: (context, _) {
+                final error = AgentService.instance.loadError;
+                if (error == null) return const SizedBox.shrink();
+                return ListTile(
+                  title: Text(error),
+                  trailing: TextButton(
+                    onPressed: AgentService.instance.refresh,
+                    child: const Text('Retry'),
+                  ),
+                );
+              },
             ),
-          ),
-          const SizedBox(height: 10),
-          ListenableBuilder(
-            listenable: AgentService.instance,
-            builder: (context, _) => AgentService.instance.isTeamLoaded
-                ? Column(
-                    children: [
-                      AgentTeamSalesCard(agent: agent),
-                      const SizedBox(height: 18),
-                      AgentTeamRosterSection(agent: agent),
-                    ],
-                  )
-                : const AgentTeamSkeleton(),
-          ),
-        ],
+            _AgentStrip(agent: agent),
+            const SizedBox(height: 16),
+            AgentEarningsCard(agent: agent),
+            const SizedBox(height: 22),
+            AgentDirectSaleSection(agent: agent),
+            const SizedBox(height: 22),
+            const Text(
+              'Team',
+              style: TextStyle(
+                fontSize: 17,
+                fontWeight: FontWeight.w800,
+                color: AppColors.textDark,
+              ),
+            ),
+            const SizedBox(height: 10),
+            ListenableBuilder(
+              listenable: AgentService.instance,
+              builder: (context, _) => AgentService.instance.isTeamLoaded
+                  ? Column(
+                      children: [
+                        AgentTeamSalesCard(agent: agent),
+                        const SizedBox(height: 18),
+                        AgentTeamRosterSection(agent: agent),
+                      ],
+                    )
+                  : const AgentTeamSkeleton(),
+            ),
+          ],
+        ),
       ),
       // Pinned to the bottom, always in reach however far the portal is
       // scrolled — the team tree is the screen's main way onward.
