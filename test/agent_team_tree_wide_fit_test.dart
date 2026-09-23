@@ -15,16 +15,23 @@ void main() {
 
   testWidgets(
     'expanding a wide tier (17 siblings, matching Malappuram\'s real '
-    'assembly count) still zooms in on the tapped card, rather than '
-    'shrinking the whole row to fit',
+    'assembly count) zooms in and lands on the start of the row, rather '
+    'than shrinking it to fit or centring on whichever siblings happen to '
+    'sit in the middle',
     (tester) async {
       // A district with as many named children as Malappuram's real 17
       // assemblies — wider than any tier above it (South's own states,
-      // Kerala's 14 districts). Zooming OUT to force all 17 into frame at
-      // once was tried and reverted: it shrank the newly-opened cards to
-      // the point of being unreadable. The tapped card zooming IN, with the
-      // rest of a wide row reachable by panning sideways (an ordinary
-      // zoomed-in map), is the wanted behaviour instead.
+      // Kerala's 14 districts). Two things were tried and reverted before
+      // this: zooming OUT to force all 17 into frame at once shrank the
+      // newly-opened cards to the point of being unreadable; centring the
+      // tapped card (Malappuram) over its own children only ever brought
+      // whichever couple of siblings sat nearest the row's exact middle
+      // into view, which for the real district data left the sibling
+      // actually being looked for off both edges. Landing on the row's own
+      // start — so the first sibling is what's on screen, panning right for
+      // the rest — is the wanted behaviour instead; the tapped card itself
+      // scrolling out of view above is an acceptable trade, since it was
+      // already seen and tapped to get here.
       final assemblyNames = [
         for (var i = 0; i < 17; i++) 'Assembly $i',
       ];
@@ -61,11 +68,11 @@ void main() {
       for (final name in assemblyNames) {
         expect(find.text(name), findsOneWidget);
       }
-      // ...the tapped card (Malappuram) itself is on screen and zoomed in,
-      // not shrunk down trying to fit its whole wide row into view...
-      final malappuramTopLeft = tester.getTopLeft(find.text('Malappuram'));
-      expect(malappuramTopLeft.dx, inInclusiveRange(0, 390));
-      expect(malappuramTopLeft.dy, inInclusiveRange(0, 844));
+      // ...the FIRST of them lands on screen without any panning, zoomed in
+      // (not shrunk down trying to fit all 17 into view)...
+      final firstTopLeft = tester.getTopLeft(find.text(assemblyNames.first));
+      expect(firstTopLeft.dx, inInclusiveRange(0, 390));
+      expect(firstTopLeft.dy, inInclusiveRange(0, 844));
       final interactiveViewer = tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
       expect(interactiveViewer.transformationController!.value.getMaxScaleOnAxis(), greaterThanOrEqualTo(1.0));
     },

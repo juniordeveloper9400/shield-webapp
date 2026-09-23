@@ -307,8 +307,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // than the pan.
     final scale = zoomIn ? math.max(1.0, currentScale) : currentScale;
 
-    final targetX =
-        _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;
+    final targetX = _targetXFor(pillBox, topLeft, scale, zoomIn);
     final targetY = _flowTopInset - topLeft.dy * scale;
 
     final target = Matrix4.identity()
@@ -316,6 +315,44 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       ..scaleByDouble(scale, scale, scale, 1);
 
     _animateTransformTo(target);
+  }
+
+  /// Where to land [pillBox]'s card horizontally.
+  ///
+  /// Normally dead centre — same as always, and what a collapse (`!zoomIn`)
+  /// always gets. But a tier that was just opened (`zoomIn`) with more than
+  /// one sibling — [pillBox]'s render object's own parent is always the
+  /// `_RenderMindBranch` [_MindBranch] built it into, and that branch now
+  /// measures wider than the card alone once it has fanned children out
+  /// beneath it — lands with the LEFT edge of that whole newly-fanned row
+  /// just inside the frame instead.
+  ///
+  /// Centering the tapped card, as this used to do unconditionally, only
+  /// ever brings whichever siblings sit nearest the row's own middle into
+  /// view: opening National's 6 real regions this way puts East and West
+  /// India on screen and leaves South India (Kerala's own region) off both
+  /// edges, with nothing on screen to suggest panning would find it — a
+  /// real Kerala district can open a dozen-plus assembly seats too (17, for
+  /// Malappuram), so the same thing happens one tier further down. Landing
+  /// on the row's own start and panning right from there reads as an
+  /// ordinary zoomed-in map instead of "the chevron did nothing".
+  double _targetXFor(RenderBox pillBox, Offset topLeft, double scale, bool zoomIn) {
+    final branchBox = pillBox.parent;
+    if (zoomIn &&
+        branchBox is _RenderMindBranch &&
+        branchBox.size.width > pillBox.size.width + 1) {
+      // The branch's own local origin (x=0) is the left edge of its widest
+      // row; `nodeCenterX` is this card's offset from that origin, already
+      // computed by _RenderMindBranch.performLayout to centre the card over
+      // its children — so subtracting it back out of the card's own known
+      // global position recovers the row's left edge, with no extra layout
+      // pass needed.
+      final rowLeftEdge =
+          topLeft.dx - (branchBox.nodeCenterX - pillBox.size.width / 2);
+      const margin = 20.0;
+      return margin - rowLeftEdge * scale;
+    }
+    return _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;
   }
 
   void _animateTransformTo(Matrix4 target) {
