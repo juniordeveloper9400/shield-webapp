@@ -225,7 +225,9 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // glides back up to its parent, so the chevron pulls the view in the
     // direction it points.
     final focus = opening ? id : (_parentId(id) ?? id);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _flowTo(focus));
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _flowTo(focus, zoomIn: opening),
+    );
   }
 
   /// Every currently-open "+" geo seat (a `slot/…` id already in [_expanded])
@@ -282,24 +284,21 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
 
   /// Glides the view so [id]'s card sits high and centred, its tier fanned
   /// out in the frame below it.
-  void _flowTo(String id) {
+  void _flowTo(String id, {bool zoomIn = false}) {
     final pillBox =
         _pillKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
     final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
     if (pillBox == null ||
         chartBox == null ||
         !pillBox.hasSize ||
-        !chartBox.hasSize ||
         _viewportSize.isEmpty) {
       return;
     }
 
     // The card's position inside the (untransformed) map content.
     final topLeft = pillBox.localToGlobal(Offset.zero, ancestor: chartBox);
-    final chartWidth = chartBox.size.width;
-    final scale = chartWidth == 0
-        ? _transform.value.getMaxScaleOnAxis()
-        : math.min((_viewportSize.width - 40) / chartWidth, 1.0);
+    final currentScale = _transform.value.getMaxScaleOnAxis();
+    final scale = zoomIn ? math.max(1.0, currentScale) : currentScale;
 
     final targetX =
         _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;

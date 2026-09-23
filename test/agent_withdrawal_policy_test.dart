@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/module/agent/withdrawal_policy.dart';
+import 'package:shield/module/agent/withdrawal_policy.dart';
 
 void main() {
   test('withdrawal is zero below 3000 and available from exactly 3000', () {

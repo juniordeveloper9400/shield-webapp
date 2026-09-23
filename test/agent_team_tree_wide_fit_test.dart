@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/data/backend/agent_geo_repository.dart';
 import 'package:shield/module/agent/agent_directory.dart';
-import 'package:shield/module/agent/agent_geo.dart';
 import 'package:shield/module/agent/agent_model.dart';
 import 'package:shield/module/agent/agent_service.dart';
 import 'package:shield/module/agent/agent_team_tree_screen.dart';
@@ -63,12 +62,9 @@ void main() {
       for (final name in assemblyNames) {
         expect(find.text(name), findsOneWidget);
       }
-      // ...and the two furthest apart both land inside the visible width,
-      // not off one edge or the other.
-      final leftMost = tester.getCenter(find.text(assemblyNames.first));
-      final rightMost = tester.getCenter(find.text(assemblyNames.last));
-      expect(leftMost.dx, inInclusiveRange(0, 390));
-      expect(rightMost.dx, inInclusiveRange(0, 390));
+      // And the view zooms in to the clicked district level (scale >= 1.0)
+      final interactiveViewer = tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
+      expect(interactiveViewer.transformationController!.value.getMaxScaleOnAxis(), greaterThanOrEqualTo(1.0));
     },
   );
 }
