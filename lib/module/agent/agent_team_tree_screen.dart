@@ -115,10 +115,24 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     if (!mounted) return;
     var changed = false;
     final migrated = <String>{};
+    // Whichever migrated entry sat deepest in its old path is the most
+    // specific thing that was actually open — almost certainly the seat
+    // the registration this notification came from just filled.
+    String? deepestPromoted;
+    var deepestSegments = -1;
     for (final entry in _expanded) {
       if (entry.startsWith('slot/')) {
         final current = _currentIdForGeoNode(entry.split('/').last);
-        if (current != entry) changed = true;
+        if (current != entry) {
+          changed = true;
+          if (!current.startsWith('slot/')) {
+            final segments = entry.split('/').length;
+            if (segments > deepestSegments) {
+              deepestSegments = segments;
+              deepestPromoted = current;
+            }
+          }
+        }
         migrated.add(current);
       } else {
         migrated.add(entry);
@@ -130,6 +144,18 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
           ..clear()
           ..addAll(migrated);
       });
+      // _expanded now correctly still calls this seat "open" — but nothing
+      // has told the CAMERA that, so it is still sitting wherever it was
+      // before the registration, with the seat's own card now showing an
+      // already-expanded up-arrow the view never actually scrolled to. Left
+      // alone, that reads as "still closed" and the natural next tap — on
+      // an arrow that looks untouched — collapses it instead of opening it,
+      // gliding the view up and away from exactly what was just registered.
+      if (deepestPromoted != null) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _flowTo(deepestPromoted!, zoomIn: true),
+        );
+      }
     }
   }
 
