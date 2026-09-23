@@ -20,11 +20,12 @@ void main() {
     (tester) async {
       // A district with as many named children as Malappuram's real 17
       // assemblies — wider than any tier above it (South's own 8 states,
-      // Kerala's 14 districts). _flowTo used to reuse whatever scale the
-      // narrower tier above had needed, so this tier's own siblings spilled
-      // past both sides of the viewport — nothing wrong with the data or
-      // the widgets built, just nothing left inside the frame to look at,
-      // which reads exactly like the chevron did nothing.
+      // Kerala's 14 districts). _flowTo used to zoom in to at least 1x
+      // unconditionally, so this tier's own siblings spilled past both
+      // sides of the viewport — nothing wrong with the data or the widgets
+      // built, just nothing left inside the frame to look at, which reads
+      // exactly like the chevron did nothing (or, worse, like the view
+      // slid back up to whatever tier was last fully on screen).
       final assemblyNames = [
         for (var i = 0; i < 17; i++) 'Assembly $i',
       ];
@@ -62,9 +63,22 @@ void main() {
       for (final name in assemblyNames) {
         expect(find.text(name), findsOneWidget);
       }
-      // And the view zooms in to the clicked district level (scale >= 1.0)
-      final interactiveViewer = tester.widget<InteractiveViewer>(find.byType(InteractiveViewer));
-      expect(interactiveViewer.transformationController!.value.getMaxScaleOnAxis(), greaterThanOrEqualTo(1.0));
+      // ...and, the actual bug this guards against, actually visible: the
+      // first and last of the 17 both land inside the viewport, not off one
+      // edge or both. (A weaker "scale >= 1.0" check here would pass even
+      // while every sibling but Malappuram's own card sat off-screen — 1x is
+      // exactly the scale that was too zoomed-in to fit a 17-wide row.)
+      bool onScreen(Finder finder) {
+        final topLeft = tester.getTopLeft(finder);
+        return topLeft.dx >= 0 &&
+            topLeft.dx <= 390 &&
+            topLeft.dy >= 0 &&
+            topLeft.dy <= 844;
+      }
+
+      expect(onScreen(find.text('Malappuram')), isTrue);
+      expect(onScreen(find.text(assemblyNames.first)), isTrue);
+      expect(onScreen(find.text(assemblyNames.last)), isTrue);
     },
   );
 }
