@@ -59,14 +59,28 @@ class _OrdersScreenState extends State<OrdersScreen> {
               child: CircularProgressIndicator(color: AppColors.brandBlue),
             );
           }
+          Widget content;
           if (orders.isEmpty) {
-            return const _EmptyOrders();
+            content = const SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              child: SizedBox(
+                height: 400,
+                child: _EmptyOrders(),
+              ),
+            );
+          } else {
+            content = ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+              itemCount: orders.length,
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
+              itemBuilder: (context, index) => _OrderCard(order: orders[index]),
+            );
           }
-          return ListView.separated(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            itemCount: orders.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 12),
-            itemBuilder: (context, index) => _OrderCard(order: orders[index]),
+          return RefreshIndicator(
+            onRefresh: () => service.ensureLoaded(force: true),
+            color: AppColors.brandBlue,
+            child: content,
           );
         },
       ),

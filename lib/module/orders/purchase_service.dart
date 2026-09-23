@@ -476,7 +476,10 @@ class PurchaseService extends ChangeNotifier {
 
   /// Loads the member's orders if not already loaded. A no-op while signed
   /// out.
-  Future<void> ensureLoaded() {
+  Future<void> ensureLoaded({bool force = false}) {
+    if (force) {
+      return refresh();
+    }
     if (_phone == null || _status == PurchaseStatus.ready) {
       return Future.value();
     }
