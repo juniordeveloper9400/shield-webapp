@@ -204,8 +204,16 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         // Accordion: only one branch per tier stays open. Opening a card
         // collapses everything that is not one of its own ancestors — its
         // open siblings and their subtrees, and any other branch left open
-        // elsewhere — then opens this card.
-        final keep = _ancestorsOf(id);
+        // elsewhere — then opens this card. _ancestorsOf alone only knows
+        // the real parentId chain, which deliberately skips straight past
+        // an empty tier (see AgentService.agentAtSlot's doc) — so an agent
+        // registered under an open region/district "+" seat is invisible to
+        // it, and opening that agent's own chevron would read its own
+        // parent seat as "not an ancestor" and collapse it right out from
+        // under the card being opened. _openGeoSlotsEnclosing covers that:
+        // whichever already-open "+" seats this id's real geo position
+        // sits under also get to stay.
+        final keep = _ancestorsOf(id)..addAll(_openGeoSlotsEnclosing(id));
         _expanded.removeWhere((e) => !keep.contains(e));
         _expanded.add(id);
       } else {
@@ -218,6 +226,28 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // direction it points.
     final focus = opening ? id : (_parentId(id) ?? id);
     WidgetsBinding.instance.addPostFrameCallback((_) => _flowTo(focus));
+  }
+
+  /// Every currently-open "+" geo seat (a `slot/…` id already in [_expanded])
+  /// [id]'s own real geo position sits under — region, state, district, …
+  /// whatever tiers between them are still vacant. [_ancestorsOf] alone
+  /// cannot see these: a real agent's own `parentId` skips straight past a
+  /// vacant tier (see `AgentService.agentAtSlot`'s doc), so it has no entry
+  /// for the open seat that vacant tier is drawn as, even while that seat's
+  /// card is what visually encloses [id] on screen right now.
+  Set<String> _openGeoSlotsEnclosing(String id) {
+    final areaId = AgentService.instance.byId(id)?.areaId;
+    if (areaId == null) {
+      return const {};
+    }
+    return _expanded.where((e) {
+      if (!e.startsWith('slot/')) {
+        return false;
+      }
+      final tail = e.split('/').last;
+      return AgentGeo.current.levelOfId(tail) != null &&
+          AgentGeo.current.isWithin(areaId, tail);
+    }).toSet();
   }
 
   /// Every id on the path from [id] up to the root, not including [id] itself.
