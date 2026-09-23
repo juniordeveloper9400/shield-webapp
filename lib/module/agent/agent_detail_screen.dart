@@ -194,7 +194,14 @@ class _HeaderCard extends StatelessWidget {
           const Divider(height: 1, color: AppColors.border),
           const SizedBox(height: 12),
           _KeyValue(label: 'Agent code', value: agent.agentCode),
-          _KeyValue(label: 'Area', value: agent.area),
+          // The national seed agent heads every region at once, not a single
+          // place — its own `.area` is a leftover from before the six-region
+          // hierarchy existed ('Kerala', from when Kerala was the only
+          // region seeded) and showing it here reads as if National were
+          // scoped to Kerala alone. Every other level's `.area` is set for
+          // real, at registration, against its own actual geo slot.
+          if (agent.level != AgentLevel.national)
+            _KeyValue(label: 'Area', value: agent.area),
           _KeyValue(label: 'Mobile', value: agent.maskedPhone),
         ],
       ),

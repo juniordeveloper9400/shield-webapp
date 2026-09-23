@@ -298,9 +298,14 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // The card's position inside the (untransformed) map content.
     final topLeft = pillBox.localToGlobal(Offset.zero, ancestor: chartBox);
     final currentScale = _transform.value.getMaxScaleOnAxis();
-    final scale = zoomIn
-        ? _zoomInScaleFor(pillBox, math.max(1.0, currentScale))
-        : currentScale;
+    // Always zoom IN on the level just tapped (never out) — a wide tier (a
+    // real Kerala district can open up to 17 assembly seats) still ends up
+    // wider than the viewport at this scale, but that reads as "pan sideways
+    // to see the rest", the same way any zoomed-in map does. Zooming out to
+    // force the whole row into frame instead (tried once) shrank everything
+    // so far that the newly-opened cards became too small to read — worse
+    // than the pan.
+    final scale = zoomIn ? math.max(1.0, currentScale) : currentScale;
 
     final targetX =
         _viewportSize.width / 2 - (topLeft.dx + pillBox.size.width / 2) * scale;
@@ -311,35 +316,6 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       ..scaleByDouble(scale, scale, scale, 1);
 
     _animateTransformTo(target);
-  }
-
-  /// The scale to zoom in to for the tier a chevron just fanned out —
-  /// [preferred] (at least 1x) unless that tier has more siblings than fit
-  /// the viewport at that scale, in which case zoom out just enough to fit
-  /// them instead.
-  ///
-  /// [pillBox] is the tapped card's own render box; in the widget tree built
-  /// by [_MindBranch] its render object's direct parent is always the
-  /// `_RenderMindBranch` that laid out this exact card *and* whatever is
-  /// currently fanned out beneath it — so `pillBox.parent`'s width already
-  /// accounts for however many children this tap just revealed. A real
-  /// Kerala district can open as many as 17 assembly seats (Malappuram) in a
-  /// single row; at a fixed >=1x zoom that row is several screens wide, so
-  /// only a couple of assemblies ever land inside the viewport and the rest
-  /// sit off both edges — reading exactly like the chevron did nothing, or
-  /// like the view slid back up to whatever tier was last fully visible.
-  double _zoomInScaleFor(RenderBox pillBox, double preferred) {
-    final branchBox = pillBox.parent;
-    final branchWidth = (branchBox is RenderBox && branchBox.hasSize)
-        ? branchBox.size.width
-        : pillBox.size.width;
-    if (branchWidth <= 0 || _viewportSize.width <= 0) {
-      return preferred;
-    }
-    // Leave a little breathing room at both edges rather than fitting the
-    // row exactly flush against the viewport.
-    final fitScale = (_viewportSize.width - 24) / branchWidth;
-    return math.min(preferred, fitScale).clamp(0.1, preferred);
   }
 
   void _animateTransformTo(Matrix4 target) {
