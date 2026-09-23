@@ -70,11 +70,11 @@ class GeoSlot {
   /// "Corporation" / "Municipality" / "Grama Panchayat", or '' when this slot
   /// is not an LSGD or its kind is unknown.
   String get typeLabel => switch (type) {
-        'corporation' => 'Corporation',
-        'municipality' => 'Municipality',
-        'grama_panchayat' => 'Grama Panchayat',
-        _ => '',
-      };
+    'corporation' => 'Corporation',
+    'municipality' => 'Municipality',
+    'grama_panchayat' => 'Grama Panchayat',
+    _ => '',
+  };
 
   @override
   bool operator ==(Object other) => other is GeoSlot && other.id == id;
@@ -147,6 +147,26 @@ class GeoHierarchy {
   /// The id of the slot one tier up from [id], or null at a region / for an
   /// unknown id.
   String? parentIdOf(String id) => _parentIdByChildId[id];
+
+  /// Whether [id] is [ancestorId] itself, or sits somewhere under it in the
+  /// real geo hierarchy — walking [parentIdOf] up from [id], regardless of
+  /// how many tiers between them have nobody registered. This is the geo
+  /// position, not any agent's own `parentId` chain (that one deliberately
+  /// skips empty tiers — see `AgentService.agentAtSlot`'s doc); an agent
+  /// several empty tiers below an open seat still counts as within it here.
+  bool isWithin(String id, String ancestorId) {
+    var current = id;
+    while (true) {
+      if (current == ancestorId) {
+        return true;
+      }
+      final parent = parentIdOf(current);
+      if (parent == null) {
+        return false;
+      }
+      current = parent;
+    }
+  }
 
   /// The tier of [parentId]'s children — normally the enum successor of
   /// the parent's own level, but read straight from the data so an
@@ -284,12 +304,12 @@ class GeoHierarchy {
     regions.sort(order);
 
     GeoSlot toSlot(GeoNode n) => GeoSlot(
-          id: n.id,
-          name: n.name,
-          level: n.level,
-          code: n.code,
-          type: n.type,
-        );
+      id: n.id,
+      name: n.name,
+      level: n.level,
+      code: n.code,
+      type: n.type,
+    );
 
     final childrenByParentName = <String, List<String>>{};
     final parentNameByChild = <String, String>{};
@@ -413,9 +433,9 @@ class AgentGeo extends ChangeNotifier {
       // error) within a bounded time no matter what, so "My Team" can never
       // sit on "Loading the team hierarchy…" forever — it always ends up
       // showing either the real tree or a Retry button.
-      final nodes = await AgentGeoRepository.instance
-          .fetchAll()
-          .timeout(const Duration(seconds: 30));
+      final nodes = await AgentGeoRepository.instance.fetchAll().timeout(
+        const Duration(seconds: 30),
+      );
       if (nodes != null && nodes.isNotEmpty) {
         _current = GeoHierarchy.fromNodes(nodes);
         _fromDatabase = true;

@@ -759,9 +759,14 @@ class _MindNode extends StatelessWidget {
             'slot/${agent.id}/${childLevel.name}/${slot.id}',
             slot: slot,
           ),
-      // Anyone whose slot isn't one of the named ones still shows, after.
+      // Anyone whose slot isn't one of the named ones, and isn't nested
+      // somewhere under one of them either (that agent's own slot — matched
+      // above — already draws them there, at their real geo depth), still
+      // shows here as an irregular direct report.
       for (final child in children)
-        if (!slots.any((s) => s.id == child.areaId)) _child(child),
+        if (child.areaId == null ||
+            !slots.any((s) => AgentGeo.current.isWithin(child.areaId!, s.id)))
+          _child(child),
     ];
     return nodes;
   }
