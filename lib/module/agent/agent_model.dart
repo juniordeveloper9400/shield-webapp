@@ -153,6 +153,15 @@ class Agent {
   /// Sales this agent closed themselves, before anything their downline did.
   final int personalSales;
 
+  /// How many Health Pass plans this agent has personally sold — every
+  /// activated `agentCustomerPlan`, not just linked-but-not-yet-activated
+  /// customers. Fetched alongside [personalSales] for every agent in the
+  /// caller's own team, not only the caller's own (`AgentService.
+  /// listCustomers`'s own plans list is deliberately scoped to the caller
+  /// alone and cannot answer this for anyone else — see `AgentService.
+  /// withPlansSold` on the backend).
+  final int plansSold;
+
   // ---- Registration (KYC) ----
   // Blank on the seed agents; filled in for anyone added through the agent
   // registration flow. [isRegistered] is the "has this been filled in" flag.
@@ -204,6 +213,7 @@ class Agent {
     this.earned = 0,
     this.redeemed = 0,
     this.personalSales = 0,
+    this.plansSold = 0,
     this.firstName = '',
     this.middleName = '',
     this.lastName = '',
@@ -255,6 +265,7 @@ class Agent {
         earned: earned,
         redeemed: redeemed,
         personalSales: personalSales,
+        plansSold: plansSold,
         firstName: firstName,
         middleName: middleName,
         lastName: lastName,
@@ -286,6 +297,8 @@ class Agent {
   int get displayRedeemed => isApproved ? redeemed : 0;
 
   int get displayPersonalSales => isApproved ? personalSales : 0;
+
+  int get displayPlansSold => isApproved ? plansSold : 0;
 
   /// `04 Sep 1994`, or a dash when there is no date on file.
   String get dobLabel => dob == null ? '—' : formatDate(dob!);

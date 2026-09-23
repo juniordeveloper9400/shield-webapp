@@ -252,7 +252,7 @@ class _MemberTable extends StatelessWidget {
       for (final member in members)
         (
           agent: member,
-          plans: service.customersOf(member).length,
+          plans: member.displayPlansSold,
           amount: member.displayPersonalSales,
           earning: service.commissionFrom(viewer, member),
         ),

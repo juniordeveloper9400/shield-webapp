@@ -305,6 +305,7 @@ class AgentRepository {
       earned: money(row['earned']),
       redeemed: money(row['redeemed']),
       personalSales: money(row['personalSales']),
+      plansSold: int.tryParse(str(row['plansSold'])) ?? 0,
       firstName: str(row['firstName']),
       middleName: str(row['middleName']),
       lastName: str(row['lastName']),

@@ -9,7 +9,9 @@ Agent agent(
   String id, {
   String? parent,
   int sales = 0,
+  int plans = 0,
   AgentLevel level = AgentLevel.district,
+  AgentApprovalStatus approvalStatus = AgentApprovalStatus.approved,
 }) => Agent(
   id: id,
   name: id,
@@ -20,6 +22,8 @@ Agent agent(
   parentId: parent,
   area: '',
   personalSales: sales,
+  plansSold: plans,
+  approvalStatus: approvalStatus,
 );
 
 void main() {
@@ -150,6 +154,43 @@ void main() {
       expect(service.agentAtSlot('south-region'), isNull);
       expect(service.agentAtSlot('kerala'), isNull);
       expect(service.agentAtSlot('malappuram'), isNull);
+    },
+  );
+  test(
+    'a team member\'s own plan count survives a refresh, gated on approval '
+    'the same way personalSales already is',
+    () async {
+      // The roster's "Plans" column used to read
+      // service.customersOf(member).length — the caller's own Direct Sale
+      // customer list, which AgentCustomerRepository only ever fetches for
+      // the signed-in agent, not for a team member being viewed from above.
+      // It always read 0 for anyone but self. plansSold rides in on the
+      // same /v1/agent/team row personalSales already does — every agent in
+      // the tree gets their own real count.
+      final self = agent('db-1', level: AgentLevel.national);
+      final downline = agent(
+        'db-2',
+        parent: self.id,
+        sales: 110000,
+        plans: 1,
+      );
+      service.debugSetLoaders(
+        team: () async => [self, downline],
+        pending: () async => [],
+        customers: (_) async => [],
+      );
+      await service.refresh();
+      expect(service.byId(downline.id)?.displayPlansSold, 1);
+
+      // Same gate personalSales/earned already read through: nothing to
+      // show for a recruit nobody has approved yet.
+      final pendingAgent = agent(
+        'db-3',
+        parent: self.id,
+        plans: 3,
+        approvalStatus: AgentApprovalStatus.pending,
+      );
+      expect(pendingAgent.displayPlansSold, 0);
     },
   );
   test('failed load remains retryable', () async {

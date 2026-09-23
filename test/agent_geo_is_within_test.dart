@@ -1,6 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shield/data/backend/agent_geo_repository.dart';
-import 'package:shield/module/agent/agent_geo.dart';
 import 'package:shield/module/agent/agent_model.dart';
 
 /// A tiny South Region → Kerala → Malappuram → Perinthalmanna chain — enough
