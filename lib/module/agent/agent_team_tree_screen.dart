@@ -873,19 +873,25 @@ class _MindNode extends StatelessWidget {
     );
   }
 
-  /// "Region · South", "Ward · Valiyangadi", or just the bare tier name for
-  /// a slot with no named place at all.
+  /// "Region · South · REG-SOU-01", "Ward · Valiyangadi · WRD-VALIYANGADI-…",
+  /// or just the bare tier name for a slot with no named place at all.
   ///
-  /// Always the readable [Agent.area] — never [AgentGeo.codeForId]'s printed
-  /// code (`AC136-L1-W005` and the like). The open "+" position this agent
-  /// filled showed its place by the same readable name (see
-  /// [_MindPlusPill.slotLabel]); this card has to keep showing it, not swap
-  /// it out for a code the moment someone actually registers there.
+  /// Always leads with the readable [Agent.area] — never swaps it out for
+  /// [AgentGeo.codeForId]'s printed code (`AC136-L1-W005` and the like). The
+  /// open "+" position this agent filled showed its place by the same
+  /// readable name (see [_MindPlusPill.slotLabel]); this card has to keep
+  /// showing it too. The level-tagged prefix code
+  /// (`backend/db/migrations/0062_geo_prefix_codes.sql`) is appended after
+  /// it, additively, when this agent's own slot has one.
   static String _slotSubtitle(Agent agent) {
-    if (agent.area.isNotEmpty) {
-      return '${agent.level.label} · ${agent.area}';
-    }
-    return agent.level.label;
+    final base = agent.area.isNotEmpty
+        ? '${agent.level.label} · ${agent.area}'
+        : agent.level.label;
+    final areaId = agent.areaId;
+    final prefix = areaId != null && areaId.isNotEmpty
+        ? AgentGeo.current.prefixCodeForId(areaId)
+        : null;
+    return prefix != null && prefix.isNotEmpty ? '$base · $prefix' : base;
   }
 
   _MindNode _child(Agent child) => _MindNode(
@@ -957,6 +963,22 @@ class _MindNode extends StatelessWidget {
     ];
     return nodes;
   }
+}
+
+/// The second line on an open "+" position's card: its kind (an LSGD's
+/// Corporation / Municipality / Grama Panchayat) or its printed code
+/// (`AC136`, …) — whichever [GeoSlot] carries — then, on its own segment,
+/// the level-tagged prefix code (`ASS-TVM-134`, `COR-TVM-C01001`, …) when
+/// this slot has one. Null when neither is available.
+String? _slotCodeLine(GeoSlot slot) {
+  final parts = <String>[
+    if (slot.typeLabel.isNotEmpty)
+      slot.typeLabel
+    else if (slot.code.isNotEmpty)
+      slot.code,
+    if (slot.prefixCode.isNotEmpty) slot.prefixCode,
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 /// One open position on the fixed org shape — a "+" card in that tier's tint.
@@ -1035,13 +1057,13 @@ class _MindPlusNode extends StatelessWidget {
         onAdd: () => onAdd(realParent, level, slot),
         onToggle: canExpand ? () => onToggle(slotId) : null,
         slotLabel: slot?.name,
-        // For an LSGD show its kind (Corporation / Municipality / Grama
-        // Panchayat); every other tier shows its printed code.
-        slotCode: slot == null
-            ? null
-            : (slot.typeLabel.isNotEmpty
-                  ? slot.typeLabel
-                  : (slot.code.isNotEmpty ? slot.code : null)),
+        // For an LSGD, its kind (Corporation / Municipality / Grama
+        // Panchayat) then its printed code; every other tier just its
+        // printed code — plus, either way, the level-tagged prefix code
+        // (backend/db/migrations/0062_geo_prefix_codes.sql) when this slot
+        // has one, so an open position previews exactly what registering
+        // there would carry.
+        slotCode: slot == null ? null : _slotCodeLine(slot),
       ),
       children: isExpanded
           ? [

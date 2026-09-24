@@ -53,6 +53,13 @@ class GeoSlot {
   final String id;
   final String name;
   final String code;
+
+  /// The level-tagged display code — `REG-SOU-01`, `TVM-01`,
+  /// `GP-<name>-G01001`, and so on (`backend/db/migrations/
+  /// 0062_geo_prefix_codes.sql`'s `prefix_code` column). Separate from
+  /// [code], which stays the real government-assigned source code. Empty
+  /// until a slot has been backfilled.
+  final String prefixCode;
   final AgentLevel level;
 
   /// LSGD tier only — `corporation` / `municipality` / `grama_panchayat`.
@@ -64,6 +71,7 @@ class GeoSlot {
     required this.name,
     required this.level,
     this.code = '',
+    this.prefixCode = '',
     this.type = '',
   });
 
@@ -99,6 +107,7 @@ class GeoHierarchy {
     required Map<AgentLevel, Map<String, String>> idByLevelAndName,
     required Map<String, List<GeoSlot>> childrenByParentId,
     required Map<String, String> codeById,
+    required Map<String, String> prefixCodeById,
     required Map<String, String> nameById,
     required Map<String, String> idByName,
     required Map<String, AgentLevel> levelById,
@@ -113,6 +122,7 @@ class GeoHierarchy {
        _idByLevelAndName = idByLevelAndName,
        _childrenByParentId = childrenByParentId,
        _codeById = codeById,
+       _prefixCodeById = prefixCodeById,
        _nameById = nameById,
        _idByName = idByName,
        _levelById = levelById,
@@ -140,6 +150,7 @@ class GeoHierarchy {
   final Map<AgentLevel, Map<String, String>> _idByLevelAndName;
   final Map<String, List<GeoSlot>> _childrenByParentId;
   final Map<String, String> _codeById;
+  final Map<String, String> _prefixCodeById;
   final Map<String, String> _nameById;
   final Map<String, String> _idByName;
   final Map<String, AgentLevel> _levelById;
@@ -257,11 +268,16 @@ class GeoHierarchy {
   /// a state, a district, or an unknown id.
   String? codeForId(String id) => _codeById[id];
 
+  /// The level-tagged display code for [id] — `REG-SOU-01`, `TVM-01`,
+  /// `GP-<name>-G01001`, and so on — or null for an unknown id or one whose
+  /// `prefix_code` hasn't been backfilled. See [GeoSlot.prefixCode].
+  String? prefixCodeForId(String id) => _prefixCodeById[id];
+
   /// The display name for [id], or null when it is not a real slot.
   String? nameForId(String id) => _nameById[id];
 
-  /// The full slot for [id] — its name, level and code — or null when [id]
-  /// is not a real slot.
+  /// The full slot for [id] — its name, level, code and prefix code — or
+  /// null when [id] is not a real slot.
   GeoSlot? slotById(String id) {
     final level = _levelById[id];
     if (level == null) {
@@ -272,6 +288,7 @@ class GeoHierarchy {
       name: _nameById[id] ?? '',
       level: level,
       code: _codeById[id] ?? '',
+      prefixCode: _prefixCodeById[id] ?? '',
     );
   }
 
@@ -370,6 +387,7 @@ class GeoHierarchy {
       name: n.name,
       level: n.level,
       code: n.code,
+      prefixCode: n.prefixCode,
       type: n.type,
     );
 
@@ -440,6 +458,10 @@ class GeoHierarchy {
       codeById: {
         for (final n in nodes)
           if (n.code.isNotEmpty) n.id: n.code,
+      },
+      prefixCodeById: {
+        for (final n in nodes)
+          if (n.prefixCode.isNotEmpty) n.id: n.prefixCode,
       },
       nameById: {for (final n in nodes) n.id: n.name},
       idByName: idByName,

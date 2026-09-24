@@ -18,6 +18,13 @@ class GeoNode {
   /// district).
   final String code;
 
+  /// The level-tagged display code — `REG-SOU-01`, `TVM-01`,
+  /// `GP-<name>-G01001`, and so on (`backend/db/migrations/
+  /// 0062_geo_prefix_codes.sql`'s `prefix_code` column). Separate from
+  /// [code] above, which stays the real government-assigned source code.
+  /// Empty until a slot has been backfilled.
+  final String prefixCode;
+
   /// LSGD tier only — `corporation` / `municipality` / `grama_panchayat`
   /// (`app.lsgd.type`). Empty for every other tier.
   final String type;
@@ -29,6 +36,7 @@ class GeoNode {
     required this.level,
     required this.name,
     this.code = '',
+    this.prefixCode = '',
     this.type = '',
     this.sort = 0,
   });
@@ -69,6 +77,7 @@ class GeoNode {
       level: level,
       name: name,
       code: code,
+      prefixCode: str(row['prefixCode'] ?? row['prefix_code']),
       type: str(row['type']),
       sort: row['sort'] is int ? row['sort'] as int : int.tryParse(str(row['sort'])) ?? 0,
     );
