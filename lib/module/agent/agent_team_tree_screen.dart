@@ -6,7 +6,6 @@ import 'package:flutter/rendering.dart';
 import '../../data/backend/backend_http.dart';
 import '../../theme/app_colors.dart';
 import 'agent_detail_screen.dart';
-import 'agent_directory.dart';
 import 'agent_model.dart';
 import 'agent_registration_screen.dart';
 import 'agent_service.dart';
@@ -295,15 +294,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         // Accordion: only one branch per tier stays open. Opening a card
         // collapses everything that is not one of its own ancestors — its
         // open siblings and their subtrees, and any other branch left open
-        // elsewhere — then opens this card. _ancestorsOf alone only knows
-        // the real parentId chain, which deliberately skips straight past
-        // an empty tier (see AgentService.agentAtSlot's doc) — so an agent
-        // registered under an open region/district "+" seat is invisible to
-        // it, and opening that agent's own chevron would read its own
-        // parent seat as "not an ancestor" and collapse it right out from
-        // under the card being opened. _openGeoSlotsEnclosing covers that:
-        // whichever already-open "+" seats this id's real geo position
-        // sits under also get to stay.
+        // elsewhere — then opens this card.
         final keep = _ancestorsOf(id)..addAll(_openGeoSlotsEnclosing(id));
         _expanded.removeWhere((e) => !keep.contains(e));
         _expanded.add(id);
@@ -313,73 +304,16 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       }
     });
     // Opening a card glides down to the tier it just revealed; closing one
-    // glides back up to its parent, so the chevron pulls the view in the
-    // direction it points. When the tier just opened already has a real,
-    // registered agent somewhere in it — not just open "+" positions — land
-    // on THEM instead of the row's own start: a real person several seats
-    // into a wide row (a district's 17 assemblies, say) is what the tap was
-    // almost certainly trying to reach, and is more useful to land on than
-    // an empty seat that happens to sort first.
-    final preferredAgentId = opening ? _firstRealAgentUnder(id)?.id : null;
-    final computedParent = opening ? null : _parentId(id);
-    final focus = preferredAgentId ?? (opening ? id : (computedParent ?? id));
-    // Falls back to whatever _flowTo itself resolves to when [focus] can't
-    // be found: the tapped tier itself when a preferred real agent's card
-    // isn't there this frame (its GlobalKey not yet attached — the tier it
-    // sits in only just got these extra "irregular report" cards added), or
-    // this tree's own root when closing an agent whose recorded parent
-    // isn't actually part of this tree at all (see _parentId's own doc on
-    // the more-than-one-NATIONAL-row case). Either way, a lookup miss lands
-    // somewhere real instead of leaving the whole tap looking like it did
-    // nothing at all.
-    final fallback = preferredAgentId != null
-        ? id
-        : (!opening && computedParent != null ? widget.root.id : null);
+    // glides back up to its parent.
+    final focus = opening ? id : (_parentId(id) ?? widget.root.id);
     WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _flowTo(focus, zoomIn: opening, fallback: fallback),
+      (_) => _flowTo(focus, zoomIn: opening),
     );
-  }
-
-  /// The first real, registered agent occupying one of [id]'s own named
-  /// slots, in slot order — or null when every seat under [id] is still
-  /// open, or [id] heads no named slots at all.
-  ///
-  /// [id] is either a real agent's own id (its slots come from
-  /// [AgentService.slotsUnder]) or an open `slot/…` position (its geo id is
-  /// the path's own tail — the same convention [_openGeoSlotsEnclosing] and
-  /// [AgentGeo.levelOfId] use).
-  Agent? _firstRealAgentUnder(String id) {
-    final AgentLevel level;
-    final String? geoId;
-    if (id.startsWith('slot/')) {
-      geoId = id.split('/').last;
-      final tierOfSlot = AgentGeo.current.levelOfId(geoId);
-      if (tierOfSlot == null) return null;
-      level = tierOfSlot;
-    } else {
-      final agent = AgentService.instance.byId(id);
-      if (agent == null) return null;
-      level = agent.level;
-      geoId = agent.areaId;
-    }
-    // slotsUnder ignores [level] for every tier but national (see its own
-    // doc) — passing it through here is just what lets national's fixed
-    // six regions resolve without a real geo id of their own.
-    final slots = AgentGeo.current.slotsUnder(level, geoId);
-    for (final slot in slots) {
-      final filled = AgentService.instance.agentAtSlot(slot.id);
-      if (filled != null) return filled;
-    }
-    return null;
   }
 
   /// Every currently-open "+" geo seat (a `slot/…` id already in [_expanded])
   /// [id]'s own real geo position sits under — region, state, district, …
-  /// whatever tiers between them are still vacant. [_ancestorsOf] alone
-  /// cannot see these: a real agent's own `parentId` skips straight past a
-  /// vacant tier (see `AgentService.agentAtSlot`'s doc), so it has no entry
-  /// for the open seat that vacant tier is drawn as, even while that seat's
-  /// card is what visually encloses [id] on screen right now.
+  /// whatever tiers between them are still vacant.
   Set<String> _openGeoSlotsEnclosing(String id) {
     final areaId = AgentService.instance.byId(id)?.areaId;
     if (areaId == null) {
@@ -414,7 +348,7 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   String? _parentId(String id) {
     if (id.startsWith('slot/')) {
       final parts = id.split('/');
-      // slot/<agentId>/<tier>/<i>[/<tier>/<i>...] — drop the last tier+index
+      // slot/<agentId>/<tier>/<slotId>[/<tier>/<slotId>...] — drop the last tier+slotId
       // pair; what remains is the parent slot, or just the real agent id.
       if (parts.length > 4) {
         return parts.sublist(0, parts.length - 2).join('/');
@@ -422,38 +356,12 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       return parts.length > 1 ? parts[1] : null;
     }
     final agent = AgentService.instance.byId(id);
-    final rawParent = agent?.parentId;
-    // A fetched agent with no real recorded parent (a NULL app.agent.parent_id)
-    // is mapped, at the data layer (AgentRepository._toAgent), to the local
-    // seed persona's own id — correct when that seed is genuinely this
-    // tree's root, but a dangling reference to an agent that plays no part
-    // in this tree at all when a *different* real NATIONAL-level row is who
-    // actually signed in (the database can hold more than one — see
-    // decision-log.md). Rather than jumping straight to this tree's root —
-    // several tiers further than a collapse should ever glide in one step —
-    // prefer wherever this agent actually sits GEOGRAPHICALLY: one tier up
-    // from their own area, the same real-agent-or-open-seat id
-    // [_currentIdForGeoNode] would build for it. Only when there is no area
-    // to place them by (a national agent, or one on a free-text place) does
-    // this fall back to the root itself.
-    if (rawParent == AgentDirectory.national.id &&
-        widget.root.id != AgentDirectory.national.id) {
-      final areaId = agent?.areaId;
-      final geoParentId = areaId == null ? null : AgentGeo.current.parentIdOf(areaId);
-      if (geoParentId != null) {
-        return _currentIdForGeoNode(geoParentId);
-      }
-      return id == widget.root.id ? null : widget.root.id;
-    }
-    return rawParent ?? (id == widget.root.id ? null : widget.root.id);
+    return agent?.parentId ?? (id == widget.root.id ? null : widget.root.id);
   }
 
   /// Glides the view so [id]'s card sits high and centred, its tier fanned
-  /// out in the frame below it. Retries once with [fallback] — the tier
-  /// that was actually tapped, when [id] is a preferred-focus substitute for
-  /// it — rather than silently doing nothing at all when [id] itself can't
-  /// be found (no built, mounted card behind its key this frame).
-  void _flowTo(String id, {bool zoomIn = false, String? fallback}) {
+  /// out in the frame below it.
+  void _flowTo(String id, {bool zoomIn = false}) {
     final pillBox =
         _pillKeys[id]?.currentContext?.findRenderObject() as RenderBox?;
     final chartBox = _chartKey.currentContext?.findRenderObject() as RenderBox?;
@@ -461,9 +369,6 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
         chartBox == null ||
         !pillBox.hasSize ||
         _viewportSize.isEmpty) {
-      if (fallback != null && fallback != id) {
-        _flowTo(fallback, zoomIn: zoomIn);
-      }
       return;
     }
 
