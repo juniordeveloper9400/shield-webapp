@@ -108,4 +108,56 @@ void main() {
       expect(find.text('Malappuram'), findsOneWidget);
     },
   );
+
+  testWidgets(
+    "opening a district agent's own chevron does not freeze when a real "
+    'assembly seat below them shares their own district name',
+    (tester) async {
+      // Real Kerala geo data reuses the same place name across tiers — an
+      // assembly constituency inside a district can be named after the
+      // district itself (Idukki district / Idukki assembly, the reported
+      // case).
+      AgentGeo.instance.useHierarchy(
+        GeoHierarchy.fromNodes(const [
+          GeoNode(id: 'south', parentId: null, level: AgentLevel.region, name: 'South'),
+          GeoNode(id: 'kerala', parentId: 'south', level: AgentLevel.state, name: 'Kerala'),
+          GeoNode(id: 'idukki', parentId: 'kerala', level: AgentLevel.district, name: 'Idukki'),
+          GeoNode(id: 'idukki-ac', parentId: 'idukki', level: AgentLevel.assembly, name: 'Idukki'),
+          GeoNode(id: 'devikulam-ac', parentId: 'idukki', level: AgentLevel.assembly, name: 'Devikulam'),
+        ]),
+      );
+      const shabin = Agent(
+        id: 'req-10',
+        name: 'Muhammad Shabin Nd',
+        phone: '9895357102',
+        agentCode: 'SHD-AGT-003',
+        level: AgentLevel.district,
+        active: true,
+        parentId: 'nat-001',
+        area: 'Idukki',
+        areaId: 'idukki',
+        approvalStatus: AgentApprovalStatus.approved,
+      );
+      AgentService.instance.addAgent(shabin);
+      await pumpTree(tester);
+
+      await tester.tap(find.byTooltip('Expand ${national.name}'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Expand Region position'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Expand State position'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Muhammad Shabin Nd'), findsOneWidget);
+
+      // This must fan out the two real assembly seats under Idukki, not
+      // hang — the actual bug: agentAtSlot matched the "Idukki" assembly
+      // seat's name straight back to Shabin's own district-level area name,
+      // placing him as his own child and recursing without end.
+      await tester.tap(find.byTooltip('Expand Muhammad Shabin Nd'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Devikulam'), findsOneWidget);
+    },
+  );
 }

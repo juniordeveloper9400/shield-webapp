@@ -319,6 +319,15 @@ class AgentService extends ChangeNotifier {
             a.level != AgentLevel.national &&
             (a.areaId == slotId ||
              (a.area.isNotEmpty &&
+              // Only name-match a slot at the agent's OWN tier. Real Kerala
+              // geo data reuses the same place name across tiers — a
+              // district and one of its own assembly constituencies can
+              // share a name (Idukki being both) — so comparing bare names
+              // with no level check lets a district agent (areaId set, area
+              // "Idukki") match the assembly slot named "Idukki" too, get
+              // placed as their own child there, and recurse the same way
+              // the national/Kerala case above did.
+              AgentGeo.current.levelOfId(slotId) == a.level &&
               AgentGeo.current.nameForId(slotId)?.trim().toLowerCase() ==
                   a.area.trim().toLowerCase())) &&
             a.approvalStatus != AgentApprovalStatus.rejected,
