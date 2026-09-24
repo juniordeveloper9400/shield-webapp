@@ -6,6 +6,7 @@ import 'package:flutter/rendering.dart';
 import '../../data/backend/backend_http.dart';
 import '../../theme/app_colors.dart';
 import 'agent_detail_screen.dart';
+import 'agent_directory.dart';
 import 'agent_model.dart';
 import 'agent_registration_screen.dart';
 import 'agent_service.dart';
@@ -320,15 +321,22 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // almost certainly trying to reach, and is more useful to land on than
     // an empty seat that happens to sort first.
     final preferredAgentId = opening ? _firstRealAgentUnder(id)?.id : null;
-    final focus = preferredAgentId ?? (opening ? id : (_parentId(id) ?? id));
+    final computedParent = opening ? null : _parentId(id);
+    final focus = preferredAgentId ?? (opening ? id : (computedParent ?? id));
+    // Falls back to whatever _flowTo itself resolves to when [focus] can't
+    // be found: the tapped tier itself when a preferred real agent's card
+    // isn't there this frame (its GlobalKey not yet attached — the tier it
+    // sits in only just got these extra "irregular report" cards added), or
+    // this tree's own root when closing an agent whose recorded parent
+    // isn't actually part of this tree at all (see _parentId's own doc on
+    // the more-than-one-NATIONAL-row case). Either way, a lookup miss lands
+    // somewhere real instead of leaving the whole tap looking like it did
+    // nothing at all.
+    final fallback = preferredAgentId != null
+        ? id
+        : (!opening && computedParent != null ? widget.root.id : null);
     WidgetsBinding.instance.addPostFrameCallback(
-      // [id] itself as a fallback: if the preferred real agent's own card
-      // somehow isn't found (its GlobalKey not yet attached this frame, say
-      // — the tier it sits in only just got these extra "irregular report"
-      // cards added), landing on the tier that was actually tapped is still
-      // a real result, not the silent no-op a lookup miss used to leave the
-      // whole tap looking like.
-      (_) => _flowTo(focus, zoomIn: opening, fallback: preferredAgentId != null ? id : null),
+      (_) => _flowTo(focus, zoomIn: opening, fallback: fallback),
     );
   }
 
@@ -414,7 +422,21 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
       return parts.length > 1 ? parts[1] : null;
     }
     final agent = AgentService.instance.byId(id);
-    return agent?.parentId ?? (id == widget.root.id ? null : widget.root.id);
+    final rawParent = agent?.parentId;
+    // A fetched agent with no real recorded parent (a NULL app.agent.parent_id)
+    // is mapped, at the data layer (AgentRepository._toAgent), to the local
+    // seed persona's own id — correct when that seed is genuinely this
+    // tree's root, but a dangling reference to an agent that plays no part
+    // in this tree at all when a *different* real NATIONAL-level row is who
+    // actually signed in (the database can hold more than one — see
+    // decision-log.md). Redirect it to this tree's own root instead, so
+    // collapsing such an agent glides up to a card that actually exists in
+    // the tree being looked at, rather than silently going nowhere.
+    if (rawParent == AgentDirectory.national.id &&
+        widget.root.id != AgentDirectory.national.id) {
+      return id == widget.root.id ? null : widget.root.id;
+    }
+    return rawParent ?? (id == widget.root.id ? null : widget.root.id);
   }
 
   /// Glides the view so [id]'s card sits high and centred, its tier fanned
