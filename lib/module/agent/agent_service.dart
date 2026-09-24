@@ -305,7 +305,10 @@ class AgentService extends ChangeNotifier {
   Agent? agentAtSlot(String slotId) => _agents
       .where(
         (a) =>
-            a.areaId == slotId &&
+            (a.areaId == slotId ||
+             (a.area.isNotEmpty &&
+              AgentGeo.current.nameForId(slotId)?.trim().toLowerCase() ==
+                  a.area.trim().toLowerCase())) &&
             a.approvalStatus != AgentApprovalStatus.rejected,
       )
       .firstOrNull;

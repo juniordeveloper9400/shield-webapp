@@ -96,6 +96,7 @@ class GeoHierarchy {
     required Map<String, AgentLevel> levelByName,
     required Map<String, String> parentNameByChild,
     required Map<String, AgentLevel> childLevelByParentName,
+    required Map<AgentLevel, Map<String, String>> idByLevelAndName,
     required Map<String, List<GeoSlot>> childrenByParentId,
     required Map<String, String> codeById,
     required Map<String, String> nameById,
@@ -109,6 +110,7 @@ class GeoHierarchy {
        _levelByName = levelByName,
        _parentNameByChild = parentNameByChild,
        _childLevelByParentName = childLevelByParentName,
+       _idByLevelAndName = idByLevelAndName,
        _childrenByParentId = childrenByParentId,
        _codeById = codeById,
        _nameById = nameById,
@@ -135,6 +137,7 @@ class GeoHierarchy {
   final Map<String, AgentLevel> _childLevelByParentName;
 
   // ---- id-keyed — what real navigation and agent-to-slot matching use ----
+  final Map<AgentLevel, Map<String, String>> _idByLevelAndName;
   final Map<String, List<GeoSlot>> _childrenByParentId;
   final Map<String, String> _codeById;
   final Map<String, String> _nameById;
@@ -143,13 +146,40 @@ class GeoHierarchy {
   final Map<String, String> _parentIdByChildId;
   final Map<String, AgentLevel> _childLevelByParentId;
 
+  static String _normalize(String s) => s.trim().toLowerCase();
+
+  String? _resolveId(String idOrName, [AgentLevel? level]) {
+    if (idOrName.isEmpty) return null;
+    if (_levelById.containsKey(idOrName) || _childrenByParentId.containsKey(idOrName)) {
+      return idOrName;
+    }
+    final norm = _normalize(idOrName);
+    if (level != null) {
+      final byLevel = _idByLevelAndName[level]?[norm];
+      if (byLevel != null) return byLevel;
+    }
+    return _idByName[norm];
+  }
+
   /// The tier [id] is a slot of, or null when [id] is not a real slot (a
   /// free-text place has no id at all).
-  AgentLevel? levelOfId(String id) => _levelById[id] ?? _levelByName[id];
+  AgentLevel? levelOfId(String id) {
+    if (id.isEmpty) return null;
+    return _levelById[id] ??
+        _levelByName[id] ??
+        (_idByName[_normalize(id)] != null ? _levelById[_idByName[_normalize(id)]!] : null);
+  }
 
   /// The id of the slot one tier up from [id], or null at a region / for an
   /// unknown id.
-  String? parentIdOf(String id) => _parentIdByChildId[id];
+  String? parentIdOf(String id) {
+    if (id.isEmpty) return null;
+    final direct = _parentIdByChildId[id];
+    if (direct != null) return direct;
+    final resolved = _idByName[_normalize(id)];
+    if (resolved != null) return _parentIdByChildId[resolved];
+    return null;
+  }
 
   /// Whether [id] is [ancestorId] itself, or sits somewhere under it in the
   /// real geo hierarchy — walking [parentIdOf] up from [id], regardless of
@@ -157,10 +187,11 @@ class GeoHierarchy {
   bool isWithin(String id, String ancestorId) {
     if (id.isEmpty || ancestorId.isEmpty) return false;
     if (id == ancestorId) return true;
-    final resolvedAncestorId = _idByName[ancestorId] ?? ancestorId;
-    final resolvedAncestorName = _nameById[ancestorId] ?? ancestorId;
+    final resolvedAncestorId = _resolveId(ancestorId) ?? ancestorId;
+    final resolvedAncestorName =
+        _nameById[resolvedAncestorId] ?? _nameById[ancestorId] ?? ancestorId;
 
-    var current = _idByName[id] ?? id;
+    var current = _resolveId(id) ?? id;
     var guard = 0;
     while (guard++ < 20) {
       if (current == resolvedAncestorId || current == ancestorId) {
@@ -168,11 +199,11 @@ class GeoHierarchy {
       }
       final currentName = _nameById[current];
       if (currentName != null &&
-          (currentName == resolvedAncestorName || currentName == ancestorId)) {
+          (_normalize(currentName) == _normalize(resolvedAncestorName) ||
+           _normalize(currentName) == _normalize(ancestorId))) {
         return true;
       }
-      final parent = parentIdOf(current) ??
-          (_idByName[current] != null ? _parentIdByChildId[_idByName[current]!] : null);
+      final parent = parentIdOf(current);
       if (parent == null) {
         return false;
       }
@@ -186,14 +217,13 @@ class GeoHierarchy {
   /// irregular branch is honoured (a ward sitting directly under an
   /// assembly, skipping the LSGD tier, say). Null when [parentId] has no
   /// children.
-  AgentLevel? childLevelOfId(String parentId) {
+  AgentLevel? childLevelOfId(String parentId, [AgentLevel? level]) {
     if (parentId.isEmpty) return null;
-    final byId = _childLevelByParentId[parentId];
+    final resolved = _resolveId(parentId, level) ?? parentId;
+    final byId = _childLevelByParentId[resolved];
     if (byId != null) return byId;
     final byName = _childLevelByParentName[parentId];
     if (byName != null) return byName;
-    final idFromName = _idByName[parentId];
-    if (idFromName != null) return _childLevelByParentId[idFromName];
     return null;
   }
 
@@ -212,9 +242,9 @@ class GeoHierarchy {
     if (byId != null && byId.isNotEmpty) {
       return byId;
     }
-    final idFromName = _idByName[parentId];
-    if (idFromName != null) {
-      final byMappedId = _childrenByParentId[idFromName];
+    final resolved = _resolveId(parentId, level);
+    if (resolved != null) {
+      final byMappedId = _childrenByParentId[resolved];
       if (byMappedId != null && byMappedId.isNotEmpty) {
         return byMappedId;
       }
@@ -372,6 +402,27 @@ class GeoHierarchy {
         entry.key: [for (final n in (entry.value..sort(order))) n.name],
     };
 
+    final idByLevelAndName = <AgentLevel, Map<String, String>>{};
+    final idByName = <String, String>{};
+    // Populate higher tiers first, so generic lookups without a level find the highest matching tier
+    for (final tier in [
+      AgentLevel.region,
+      AgentLevel.state,
+      AgentLevel.district,
+      AgentLevel.assembly,
+      AgentLevel.lsgd,
+      AgentLevel.ward,
+    ]) {
+      final tierNodes = nodesByLevel[tier] ?? const [];
+      for (final n in tierNodes) {
+        if (n.name.isNotEmpty) {
+          final norm = _normalize(n.name);
+          (idByLevelAndName[n.level] ??= <String, String>{})[norm] = n.id;
+          idByName.putIfAbsent(norm, () => n.id);
+        }
+      }
+    }
+
     return GeoHierarchy._(
       regionNames: [for (final r in regions) r.name],
       regions: [for (final r in regions) toSlot(r)],
@@ -384,13 +435,14 @@ class GeoHierarchy {
       levelByName: {for (final n in nodes) n.name: n.level},
       parentNameByChild: parentNameByChild,
       childLevelByParentName: childLevelByParentName,
+      idByLevelAndName: idByLevelAndName,
       childrenByParentId: childrenByParentId,
       codeById: {
         for (final n in nodes)
           if (n.code.isNotEmpty) n.id: n.code,
       },
       nameById: {for (final n in nodes) n.id: n.name},
-      idByName: {for (final n in nodes) if (n.name.isNotEmpty) n.name: n.id},
+      idByName: idByName,
       levelById: {for (final n in nodes) n.id: n.level},
       parentIdByChildId: parentIdByChildId,
       childLevelByParentId: childLevelByParentId,
