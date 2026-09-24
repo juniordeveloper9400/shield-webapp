@@ -315,17 +315,41 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
   /// [id]'s own real geo position sits under — region, state, district, …
   /// whatever tiers between them are still vacant.
   Set<String> _openGeoSlotsEnclosing(String id) {
-    final areaId = AgentService.instance.byId(id)?.areaId;
-    if (areaId == null) {
+    if (id.startsWith('slot/')) {
+      final parts = id.split('/');
+      final enclosing = <String>{};
+      var p = parts;
+      while (p.length > 4) {
+        p = p.sublist(0, p.length - 2);
+        enclosing.add(p.join('/'));
+      }
+      return enclosing;
+    }
+
+    final agent = AgentService.instance.byId(id);
+    if (agent == null) {
       return const {};
     }
+
+    final geoTargets = <String>{
+      if (agent.areaId != null && agent.areaId!.isNotEmpty) agent.areaId!,
+      if (agent.area.isNotEmpty) agent.area,
+    };
+    if (geoTargets.isEmpty) {
+      return const {};
+    }
+
     return _expanded.where((e) {
       if (!e.startsWith('slot/')) {
         return false;
       }
       final tail = e.split('/').last;
-      return AgentGeo.current.levelOfId(tail) != null &&
-          AgentGeo.current.isWithin(areaId, tail);
+      for (final target in geoTargets) {
+        if (AgentGeo.current.isWithin(target, tail)) {
+          return true;
+        }
+      }
+      return false;
     }).toSet();
   }
 
@@ -798,12 +822,15 @@ class _MindNode extends StatelessWidget {
     // branch is honoured — a ward sitting straight under an assembly, say.
     // Never for the national agent itself, though: it heads no single real
     // slot ([Agent.areaId] is null for it), so there is nothing to look up.
+    final geoKey = (agent.areaId != null && agent.areaId!.isNotEmpty)
+        ? agent.areaId
+        : (agent.area.isNotEmpty ? agent.area : null);
     final childLevel =
         (agent.level == AgentLevel.national ||
-                agent.areaId == null ||
+                geoKey == null ||
                 slots.isEmpty
             ? null
-            : AgentGeo.current.childLevelOfId(agent.areaId!)) ??
+            : AgentGeo.current.childLevelOfId(geoKey)) ??
         agent.level.child;
     final capacity = slots.isNotEmpty
         ? slots.length

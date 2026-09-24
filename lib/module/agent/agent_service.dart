@@ -377,7 +377,12 @@ class AgentService extends ChangeNotifier {
   /// Id-keyed ([GeoSlot], not a bare name) — see the doc on [Agent.areaId]
   /// for why matching on name alone breaks against the real Kerala data.
   List<GeoSlot> slotsUnder(Agent parent) =>
-      AgentGeo.current.slotsUnder(parent.level, parent.areaId);
+      AgentGeo.current.slotsUnder(
+        parent.level,
+        (parent.areaId != null && parent.areaId!.isNotEmpty)
+            ? parent.areaId
+            : (parent.area.isNotEmpty ? parent.area : null),
+      );
 
   /// How many more agents [parent] can take on directly, before every
   /// position under them is filled.
