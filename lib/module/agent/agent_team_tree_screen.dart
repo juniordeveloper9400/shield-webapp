@@ -1262,7 +1262,11 @@ class _MindPill extends StatelessWidget {
           ),
         ),
         if (onToggle != null) ...[
-          const SizedBox(height: 6),
+          // No explicit gap here on purpose — _CaretButton's own enlarged
+          // tap target (see its own doc) already centres the small visible
+          // circle inside extra invisible padding, which supplies the
+          // breathing room this used to add explicitly; stacking both made
+          // the pill-to-caret gap noticeably taller than before.
           _CaretButton(
             expanded: expanded,
             label: toggleLabel,
@@ -1375,7 +1379,11 @@ class _MindPlusPill extends StatelessWidget {
           ),
         ),
         if (onToggle != null) ...[
-          const SizedBox(height: 6),
+          // No explicit gap here on purpose — _CaretButton's own enlarged
+          // tap target (see its own doc) already centres the small visible
+          // circle inside extra invisible padding, which supplies the
+          // breathing room this used to add explicitly; stacking both made
+          // the pill-to-caret gap noticeably taller than before.
           _CaretButton(
             expanded: expanded,
             label: toggleLabel,
@@ -1394,6 +1402,21 @@ class _CaretButton extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
 
+  /// The visible circle — kept small and delicate, matching the rest of the
+  /// mind-map's scale.
+  static const double _visibleSize = 26;
+
+  /// The actual tappable area — well past Material's own 48dp minimum
+  /// target guidance, on top of the visible circle rather than shrunk to
+  /// match it. A tap landing on this card almost always follows a manual
+  /// pan to reach a sibling several seats into a wide row (a district's own
+  /// row of assemblies, say) — exactly the moment `InteractiveViewer`'s own
+  /// pan/scale gesture recognizer is still "warm" and most likely to win a
+  /// tie against a small, freshly-tapped target instead of letting it
+  /// through as a plain tap. A generous hit area is what actually fixes
+  /// that in practice; nothing server- or state-side was ever wrong here.
+  static const double _tapSize = 48;
+
   const _CaretButton({
     required this.expanded,
     required this.label,
@@ -1405,20 +1428,29 @@ class _CaretButton extends StatelessWidget {
     return Tooltip(
       message: expanded ? 'Collapse $label' : 'Expand $label',
       child: Material(
-        color: _caretColor,
-        shape: const CircleBorder(),
+        type: MaterialType.transparency,
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(
-            width: 26,
-            height: 26,
-            child: Icon(
-              expanded
-                  ? Icons.keyboard_arrow_up_rounded
-                  : Icons.keyboard_arrow_down_rounded,
-              size: 20,
-              color: AppColors.white,
+            width: _tapSize,
+            height: _tapSize,
+            child: Center(
+              child: Container(
+                width: _visibleSize,
+                height: _visibleSize,
+                decoration: const BoxDecoration(
+                  color: _caretColor,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  expanded
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  size: 20,
+                  color: AppColors.white,
+                ),
+              ),
             ),
           ),
         ),
