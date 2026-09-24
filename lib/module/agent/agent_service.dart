@@ -305,6 +305,18 @@ class AgentService extends ChangeNotifier {
   Agent? agentAtSlot(String slotId) => _agents
       .where(
         (a) =>
+            // A national agent heads no single real slot ([Agent.areaId] is
+            // null for it, and its [Agent.area] is just descriptive flavor
+            // text — see the doc on that field). Without this guard, a
+            // national agent whose area name happens to equal a real geo
+            // node's name elsewhere in the tree (Kerala being the company's
+            // own home state is exactly this case) name-matches that node
+            // here and gets placed as its own descendant — the national
+            // card then re-expands its own root slot inside itself,
+            // recursing without end. See the identical guard already
+            // applied for this same reason in [slotsUnder] and in
+            // `_MindNode.build()`'s `geoKey` (agent_team_tree_screen.dart).
+            a.level != AgentLevel.national &&
             (a.areaId == slotId ||
              (a.area.isNotEmpty &&
               AgentGeo.current.nameForId(slotId)?.trim().toLowerCase() ==
