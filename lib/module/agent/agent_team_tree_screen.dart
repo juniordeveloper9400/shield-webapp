@@ -429,11 +429,20 @@ class _AgentTeamTreeScreenState extends State<AgentTeamTreeScreen>
     // tree's root, but a dangling reference to an agent that plays no part
     // in this tree at all when a *different* real NATIONAL-level row is who
     // actually signed in (the database can hold more than one — see
-    // decision-log.md). Redirect it to this tree's own root instead, so
-    // collapsing such an agent glides up to a card that actually exists in
-    // the tree being looked at, rather than silently going nowhere.
+    // decision-log.md). Rather than jumping straight to this tree's root —
+    // several tiers further than a collapse should ever glide in one step —
+    // prefer wherever this agent actually sits GEOGRAPHICALLY: one tier up
+    // from their own area, the same real-agent-or-open-seat id
+    // [_currentIdForGeoNode] would build for it. Only when there is no area
+    // to place them by (a national agent, or one on a free-text place) does
+    // this fall back to the root itself.
     if (rawParent == AgentDirectory.national.id &&
         widget.root.id != AgentDirectory.national.id) {
+      final areaId = agent?.areaId;
+      final geoParentId = areaId == null ? null : AgentGeo.current.parentIdOf(areaId);
+      if (geoParentId != null) {
+        return _currentIdForGeoNode(geoParentId);
+      }
       return id == widget.root.id ? null : widget.root.id;
     }
     return rawParent ?? (id == widget.root.id ? null : widget.root.id);

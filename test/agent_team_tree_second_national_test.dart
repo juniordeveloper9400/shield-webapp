@@ -82,17 +82,18 @@ void main() {
       expect(find.text('Muhammad Shabin Nd'), findsOneWidget);
 
       // Open Shabin's own chevron to reveal his assembly, then collapse it
-      // again — the exact "go back" step that was landing nowhere.
+      // again — the exact "go back" step that was landing nowhere (and, in
+      // an earlier version of this fix, overshot all the way up to Muzaa —
+      // several tiers further than a single collapse should ever glide).
       await tap('Expand Muhammad Shabin Nd');
       expect(find.text('SomeAssembly'), findsOneWidget);
       await tap('Collapse Muhammad Shabin Nd');
 
-      // The camera actually moved somewhere real — this tree's own root —
-      // rather than freezing wherever it was (or, per the report, ending up
-      // looking like an entirely different, empty hierarchy).
-      final muzaaTopLeft = tester.getTopLeft(find.text('Muzaa'));
-      expect(muzaaTopLeft.dx, inInclusiveRange(0, 390));
-      expect(muzaaTopLeft.dy, inInclusiveRange(0, 844));
+      // Lands one tier up — Kerala, where Shabin actually sits
+      // geographically — not all the way at the tree's own root.
+      final keralaTopLeft = tester.getTopLeft(find.text('Kerala'));
+      expect(keralaTopLeft.dx, inInclusiveRange(0, 390));
+      expect(keralaTopLeft.dy, inInclusiveRange(0, 844));
     },
   );
 }
