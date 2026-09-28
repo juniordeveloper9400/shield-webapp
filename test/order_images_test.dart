@@ -157,5 +157,50 @@ void main() {
         expect(tester.takeException(), isNull);
       },
     );
+
+    testWidgets(
+      'still renders once backendId arrives after mounting with none, and does not crash',
+      (tester) async {
+        // Reproduces the exact "placed this session, not yet heard back"
+        // moment: mounts with backendId null (PrescriptionUploadedCard's
+        // own _load bails out immediately), then a real refresh lands one —
+        // same as PurchaseService.updateOne does once GET /v1/member/orders
+        // actually confirms the order. Regression test for the card's own
+        // didUpdateWidget: without it, this used to sit on its
+        // icon+placeholder look for good, never re-attempting the fetch.
+        final order = service.record(
+          id: 'RX-BACKENDID-1',
+          placedOn: '20 Sep 2026',
+          itemCount: 1,
+          mrpTotal: 0,
+          paidTotal: 0,
+          kind: OrderKind.prescription,
+        );
+        expect(order.backendId, isNull);
+
+        await pumpTrack(tester, order);
+        expect(find.text('Prescription uploaded'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+
+        service.updateOne(
+          Purchase(
+            id: order.id,
+            placedOn: order.placedOn,
+            itemCount: order.itemCount,
+            mrpTotal: order.mrpTotal,
+            paidTotal: order.paidTotal,
+            status: order.status,
+            kind: order.kind,
+            backendId: 991,
+            fulfillmentType: order.fulfillmentType,
+            paymentStatus: order.paymentStatus,
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Prescription uploaded'), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 }

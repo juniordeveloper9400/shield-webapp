@@ -229,6 +229,23 @@ class _PrescriptionUploadedCardState extends State<PrescriptionUploadedCard> {
     unawaited(_load());
   }
 
+  @override
+  void didUpdateWidget(covariant PrescriptionUploadedCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // `_load` bails out immediately while `backendId` is still null (an
+    // order this session just placed, before the backend has confirmed it
+    // yet — see the class doc above) and `initState` only ever gets one
+    // shot at calling it. `OrderTrackScreen` swaps in a freshly-synced
+    // `Purchase` (with a real `backendId`) once `PurchaseService` hears
+    // back, but without this, this card would just stay on its
+    // icon+placeholder look for the rest of that screen's lifetime instead
+    // of picking up the real scan once it's actually available.
+    if (oldWidget.order.backendId == null && widget.order.backendId != null) {
+      _prescriptions = null;
+      unawaited(_load());
+    }
+  }
+
   Future<void> _load() async {
     final backendId = widget.order.backendId;
     if (backendId == null) {
