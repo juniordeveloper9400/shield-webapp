@@ -44,7 +44,10 @@ class EarningsDetailScreen extends StatelessWidget {
         builder: (context, _) {
           final orders = PurchaseService.instance;
           final earned = MemberEarnings.saved;
-          final purchases = orders.purchases.where((p) => p.status.counts).toList();
+          // Only an order the store actually discounted the bill on — see
+          // Purchase.billDiscount's own doc for why this isn't every order
+          // any more.
+          final purchases = orders.billDiscounted.toList();
           final plans = MemberEarnings.plans;
 
           return ListView(
@@ -322,7 +325,7 @@ class EarningsDetailScreen extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '+${order.savedLabel}',
+                                  '+${order.billDiscountLabel}',
                                   style: const TextStyle(
                                     fontSize: 15,
                                     fontWeight: FontWeight.w800,
@@ -331,7 +334,7 @@ class EarningsDetailScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Bill ${order.mrpLabel}',
+                                  'Bill ${order.billGrossLabel}',
                                   style: const TextStyle(
                                     fontSize: 11.5,
                                     color: AppColors.textMuted,
@@ -340,7 +343,7 @@ class EarningsDetailScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 1),
                                 Text(
-                                  'Paid ${order.paidLabel}',
+                                  'Paid ${order.billPaidLabel}',
                                   style: const TextStyle(
                                     fontSize: 11.5,
                                     fontWeight: FontWeight.w600,
@@ -485,7 +488,7 @@ class EarningsDetailScreen extends StatelessWidget {
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Earnings add up the direct savings on every Sahakar 360 order — printed MRP less the discounted member price you paid — and the 10% bonus Sahakar 360 credits when you activate a Health Pass plan.',
+                        'Earnings add up the discount the store gives on an order\'s bill when it prices it — not every order, only the ones a discount was actually given on — and the 10% bonus Sahakar 360 credits when you activate a Health Pass plan.',
                         style: TextStyle(
                           fontSize: 12,
                           height: 1.4,

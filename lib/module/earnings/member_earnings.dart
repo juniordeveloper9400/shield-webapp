@@ -2,9 +2,11 @@ import '../orders/purchase_service.dart';
 import '../wallet/wallet_service.dart';
 
 /// What "Your earnings" adds up to across both ways Sahakar 360 gives money back:
-/// the discount on every order, and the 10% bonus Sahakar 360 adds when a
-/// privilege plan is activated. One place for the sum, so the home card and
-/// the detail screen can never disagree about what it comes to.
+/// the store's own bill discount on an order (an offer given at billing
+/// time, not the checkout-time printed price — see [PurchaseService.
+/// billDiscounted]), and the 10% bonus Sahakar 360 adds when a privilege plan
+/// is activated. One place for the sum, so the home card and the detail
+/// screen can never disagree about what it comes to.
 ///
 /// A privilege plan does not discount a printed price the way an order
 /// does — the member pays the card's full load and Sahakar 360 adds 10% on top —
@@ -15,14 +17,15 @@ import '../wallet/wallet_service.dart';
 class MemberEarnings {
   const MemberEarnings._();
 
-  /// What everything would be worth at full value: printed price on every
-  /// order, and the credited value — load plus bonus — of every privilege
-  /// plan.
-  static int get totalPrice => PurchaseService.instance.mrpTotal + _planCredited;
+  /// What everything would be worth at full value: each discounted bill's
+  /// own gross subtotal, and the credited value — load plus bonus — of
+  /// every privilege plan. An order with no bill discount contributes
+  /// nothing here — there is no earnings event to show for it.
+  static int get totalPrice => PurchaseService.instance.billGrossTotal + _planCredited;
 
-  /// What actually left the member's pocket: the discounted order price, and
-  /// a plan's own load. The bonus was never paid — it was added.
-  static int get paid => PurchaseService.instance.paidTotal + _planPaid;
+  /// What actually left the member's pocket: those bills' own net amount,
+  /// and a plan's own load. The bonus was never paid — it was added.
+  static int get paid => PurchaseService.instance.billPaidTotal + _planPaid;
 
   /// The one figure "Your earnings" is: order discounts plus plan bonuses.
   /// Worked out as [totalPrice] less [paid] rather than added up from the two
