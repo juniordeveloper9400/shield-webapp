@@ -5,11 +5,12 @@ import 'package:flutter/services.dart';
 // (and anywhere else that reaches these straight off `AccountScreen`)
 // already uses — see `legal_links.dart`'s own doc for why the links
 // themselves live there instead, shared with the sign-in screen's note.
+// The actual Privacy Policy / Terms & Conditions taps now live on
+// `SettingsScreen`, not here, but this re-export stays put regardless.
 export '../../widgets/legal_links.dart';
 
 import '../../theme/app_colors.dart';
 import '../../money.dart';
-import '../../widgets/legal_links.dart';
 import '../agent/agent_portal_screen.dart';
 import '../agent/agent_service.dart';
 import '../agent/become_agent_screen.dart';
@@ -28,6 +29,8 @@ import '../registration/registration_flow.dart';
 import '../registration/registration_service.dart';
 import '../wallet/wallet_screen.dart';
 import '../wallet/wallet_service.dart';
+import 'account_menu.dart';
+import 'settings_screen.dart';
 
 /// Profile summary plus the account menu.
 class AccountScreen extends StatelessWidget {
@@ -78,9 +81,9 @@ class AccountScreen extends StatelessWidget {
           // Only for a signed-in investor number — everyone else never sees
           // this group at all.
           if (investor != null) ...[
-            _MenuGroup(
+            AccountMenuGroup(
               items: [
-                _MenuItem(
+                AccountMenuItem(
                   icon: Icons.trending_up_rounded,
                   label: 'Portfolio',
                   trailing: investor.investorCode,
@@ -96,9 +99,9 @@ class AccountScreen extends StatelessWidget {
           ],
           const _AgentMenuGroup(),
           const SizedBox(height: 14),
-          _MenuGroup(
+          AccountMenuGroup(
             items: [
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.badge_outlined,
                 label: 'Registration details',
                 onTap: () => RegistrationFlow.show(
@@ -106,7 +109,7 @@ class AccountScreen extends StatelessWidget {
                   isEditing: RegistrationService.instance.isRegistered,
                 ),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.account_balance_wallet_outlined,
                 label: 'My Wallet',
                 trailing: '₹${formatRupees(WalletService.instance.balance)}',
@@ -114,21 +117,21 @@ class AccountScreen extends StatelessWidget {
                   context,
                 ).push(MaterialPageRoute(builder: (_) => const WalletScreen())),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.shopping_cart_outlined,
                 label: 'My Cart',
                 onTap: () => Navigator.of(
                   context,
                 ).push(MaterialPageRoute(builder: (_) => const CartScreen())),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.location_on_outlined,
                 label: 'Manage addresses',
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const AddressFormScreen()),
                 ),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.groups_outlined,
                 label: 'Manage patients',
                 onTap: () => Navigator.of(context).push(
@@ -137,17 +140,17 @@ class AccountScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.description_outlined,
                 label: 'My Prescriptions',
                 onTap: () {},
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.biotech_outlined,
                 label: 'My Lab Bookings',
                 onTap: () => MyLabBookingsScreen.open(context),
               ),
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.receipt_long_outlined,
                 label: 'Bills',
                 onTap: () => Navigator.of(
@@ -162,41 +165,31 @@ class AccountScreen extends StatelessWidget {
           // admin converts while this tab is open loses it in place.
           ListenableBuilder(
             listenable: ReferEarnAccess.changes,
-            builder: (context, _) => _MenuGroup(
+            builder: (context, _) => AccountMenuGroup(
               items: [
                 if (ReferEarnAccess.isOffered)
-                  _MenuItem(
+                  AccountMenuItem(
                     icon: Icons.card_giftcard_rounded,
                     label: 'Refer & Earn',
                     onTap: () => ReferEarnScreen.open(context),
                   ),
-                _MenuItem(
-                  icon: Icons.headset_mic_outlined,
-                  label: 'Help & Support',
-                  onTap: () {},
-                ),
-                _MenuItem(
-                  icon: Icons.privacy_tip_outlined,
-                  label: 'Privacy Policy',
-                  onTap: () => _openPrivacyPolicy(context),
-                ),
-                _MenuItem(
-                  icon: Icons.description_outlined,
-                  label: 'Terms & Conditions',
-                  onTap: () => _openTerms(context),
-                ),
-                _MenuItem(
+                // Help & Support, Privacy Policy, Terms & Conditions and
+                // Delete Account all live on Settings now — none of them
+                // are things a member reaches for as often as what's above.
+                AccountMenuItem(
                   icon: Icons.settings_outlined,
                   label: 'Settings',
-                  onTap: () {},
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const SettingsScreen()),
+                  ),
                 ),
               ],
             ),
           ),
           const SizedBox(height: 14),
-          _MenuGroup(
+          AccountMenuGroup(
             items: [
-              _MenuItem(
+              AccountMenuItem(
                 icon: Icons.logout_rounded,
                 label: 'Log out',
                 isDestructive: true,
@@ -206,55 +199,10 @@ class AccountScreen extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          _MenuGroup(
-            items: [
-              _MenuItem(
-                icon: Icons.delete_forever_rounded,
-                label: 'Delete Account',
-                isDestructive: true,
-                // A second, harder confirm than log out — this one has no
-                // way back at all.
-                onTap: () => _confirmDeleteAccount(context),
-              ),
-            ],
-          ),
         ],
       ),
     );
   }
-}
-
-Future<void> _openPrivacyPolicy(BuildContext context) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final opened = await openPrivacyPolicy();
-  if (opened) {
-    return;
-  }
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      const SnackBar(
-        content: Text('Could not open the Privacy Policy.'),
-        backgroundColor: AppColors.textDark,
-      ),
-    );
-}
-
-Future<void> _openTerms(BuildContext context) async {
-  final messenger = ScaffoldMessenger.of(context);
-  final opened = await openTerms();
-  if (opened) {
-    return;
-  }
-  messenger
-    ..hideCurrentSnackBar()
-    ..showSnackBar(
-      const SnackBar(
-        content: Text('Could not open the Terms & Conditions.'),
-        backgroundColor: AppColors.textDark,
-      ),
-    );
 }
 
 /// Asks for a yes/no before ending the session. Returning early on "Cancel"
@@ -288,119 +236,6 @@ Future<void> _confirmLogOut(BuildContext context) async {
   }
 }
 
-/// Opens the delete-account dialog. The gate swaps back to the login screen
-/// once [AuthService.deleteAccount] clears [AuthService.currentUser], the
-/// same way [_confirmLogOut] leaves it to happen — nothing here navigates by
-/// hand.
-Future<void> _confirmDeleteAccount(BuildContext context) async {
-  await showDialog<void>(
-    context: context,
-    barrierDismissible: false,
-    builder: (_) => const _DeleteAccountDialog(),
-  );
-}
-
-/// Asks a member to type DELETE before their account is actually removed —
-/// a plain Yes/No is too easy to tap through on an action with no undo at
-/// all, unlike [_confirmLogOut]'s.
-class _DeleteAccountDialog extends StatefulWidget {
-  const _DeleteAccountDialog();
-
-  @override
-  State<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
-}
-
-class _DeleteAccountDialogState extends State<_DeleteAccountDialog> {
-  final _typed = TextEditingController();
-  bool _deleting = false;
-
-  static const _confirmWord = 'DELETE';
-
-  bool get _canConfirm =>
-      _typed.text.trim().toUpperCase() == _confirmWord && !_deleting;
-
-  @override
-  void dispose() {
-    _typed.dispose();
-    super.dispose();
-  }
-
-  Future<void> _confirm() async {
-    if (!_canConfirm) {
-      return;
-    }
-    setState(() => _deleting = true);
-    await AuthService.instance.deleteAccount();
-    if (!mounted) {
-      return;
-    }
-    // Closed either way: on success this leaves currentUser already null, so
-    // the gate underneath swaps to the login screen the same way it does
-    // after a plain log out; on a no-op (nobody was signed in) there is
-    // simply nothing left to confirm.
-    Navigator.of(context).pop();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Delete your account?'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'This permanently removes your profile, saved addresses and '
-            'patients from Sahakar 360. It cannot be undone, and you will need '
-            'to sign up again — with a fresh account — to use Sahakar 360 on '
-            'this number.',
-          ),
-          const SizedBox(height: 14),
-          Text(
-            'Type $_confirmWord to confirm.',
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _typed,
-            enabled: !_deleting,
-            autofocus: true,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              hintText: _confirmWord,
-              isDense: true,
-            ),
-            onChanged: (_) => setState(() {}),
-            onSubmitted: (_) => _confirm(),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _deleting
-              ? null
-              : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
-        ),
-        TextButton(
-          onPressed: _canConfirm ? _confirm : null,
-          style: TextButton.styleFrom(
-            foregroundColor: const Color(0xFFB4322F),
-          ),
-          child: _deleting
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Delete Account'),
-        ),
-      ],
-    );
-  }
-}
-
 /// The Agent Portal / "Become a Sahakar 360 Agent" row.
 ///
 /// An approved agent gets straight through to their portal; a plain member —
@@ -423,10 +258,10 @@ class _AgentMenuGroup extends StatelessWidget {
         final agent = AgentService.instance.agentForPhone(
           AuthService.instance.currentUser.value?.phone,
         );
-        return _MenuGroup(
+        return AccountMenuGroup(
           items: [
             agent != null
-                ? _MenuItem(
+                ? AccountMenuItem(
                     icon: Icons.badge_rounded,
                     label: 'Agent Portal',
                     trailing: agent.agentCode,
@@ -436,7 +271,7 @@ class _AgentMenuGroup extends StatelessWidget {
                       ),
                     ),
                   )
-                : _MenuItem(
+                : AccountMenuItem(
                     icon: Icons.how_to_reg_outlined,
                     label: 'Become a Sahakar 360 Agent',
                     onTap: () => BecomeAgentScreen.open(context),
@@ -722,93 +557,3 @@ class _RegisterBanner extends StatelessWidget {
   }
 }
 
-class _MenuGroup extends StatelessWidget {
-  final List<_MenuItem> items;
-
-  const _MenuGroup({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      child: Column(
-        children: [
-          for (var i = 0; i < items.length; i++) ...[
-            items[i],
-            if (i != items.length - 1)
-              const Divider(height: 1, indent: 54, color: AppColors.border),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-class _MenuItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String? trailing;
-  final bool isDestructive;
-  final VoidCallback onTap;
-
-  const _MenuItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.trailing,
-    this.isDestructive = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = isDestructive ? const Color(0xFFB4322F) : AppColors.textDark;
-
-    return InkWell(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
-        child: Row(
-          children: [
-            Icon(
-              icon,
-              size: 22,
-              color: isDestructive ? color : AppColors.brandBlue,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Text(
-                label,
-                style: TextStyle(
-                  fontSize: 15.5,
-                  fontWeight: FontWeight.w600,
-                  color: color,
-                ),
-              ),
-            ),
-            if (trailing != null)
-              Text(
-                trailing!,
-                style: const TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.brandGreenDark,
-                ),
-              ),
-            if (!isDestructive) ...[
-              const SizedBox(width: 6),
-              const Icon(
-                Icons.chevron_right_rounded,
-                size: 22,
-                color: AppColors.textMuted,
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}

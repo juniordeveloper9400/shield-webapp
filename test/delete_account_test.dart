@@ -59,6 +59,14 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  /// Opens the account menu, then taps through to Settings — where Delete
+  /// Account, Privacy Policy and Terms & Conditions all actually live now.
+  Future<void> pumpToSettings(WidgetTester tester) async {
+    await pump(tester, const AccountScreen());
+    await tester.tap(find.text('Settings'));
+    await tester.pumpAndSettle();
+  }
+
   setUp(() {
     AuthService.instance.reset();
     AgentService.instance.reset();
@@ -117,12 +125,20 @@ void main() {
   });
 
   group('the account menu', () {
-    testWidgets('offers Delete Account, below Log out', (tester) async {
+    testWidgets('offers Settings, not Delete Account directly', (tester) async {
       AuthService.instance.signInAs();
 
       await pump(tester, const AccountScreen());
 
       expect(find.text('Log out'), findsOneWidget);
+      expect(find.text('Settings'), findsOneWidget);
+      expect(find.text('Delete Account'), findsNothing);
+    });
+
+    testWidgets('Settings offers Delete Account', (tester) async {
+      AuthService.instance.signInAs();
+      await pumpToSettings(tester);
+
       expect(find.text('Delete Account'), findsOneWidget);
     });
 
@@ -130,7 +146,7 @@ void main() {
       tester,
     ) async {
       AuthService.instance.signInAs();
-      await pump(tester, const AccountScreen());
+      await pumpToSettings(tester);
 
       await tester.tap(find.text('Delete Account'));
       await tester.pumpAndSettle();
@@ -152,7 +168,7 @@ void main() {
       tester,
     ) async {
       AuthService.instance.signInAs();
-      await pump(tester, const AccountScreen());
+      await pumpToSettings(tester);
 
       await tester.tap(find.text('Delete Account'));
       await tester.pumpAndSettle();
@@ -167,7 +183,7 @@ void main() {
         'login', (tester) async {
       AuthService.instance.useGateway(_FakeAuthGateway());
       AuthService.instance.signInAs();
-      await pump(tester, const AccountScreen());
+      await pumpToSettings(tester);
 
       await tester.tap(find.text('Delete Account'));
       await tester.pumpAndSettle();
@@ -189,7 +205,7 @@ void main() {
       privacyPolicyOpener = recorder.call;
       addTearDown(() => privacyPolicyOpener = original);
 
-      await pump(tester, const AccountScreen());
+      await pumpToSettings(tester);
       await tester.tap(find.text('Privacy Policy'));
       await tester.pumpAndSettle();
 
@@ -205,7 +221,7 @@ void main() {
       termsOpener = recorder.call;
       addTearDown(() => termsOpener = original);
 
-      await pump(tester, const AccountScreen());
+      await pumpToSettings(tester);
       await tester.tap(find.text('Terms & Conditions'));
       await tester.pumpAndSettle();
 
