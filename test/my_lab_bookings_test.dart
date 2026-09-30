@@ -267,15 +267,17 @@ void main() {
     setUp(() => AuthService.instance.reset());
     tearDown(() => AuthService.instance.reset());
 
-    testWidgets('offers My Lab Bookings and opens it', (tester) async {
+    // Lab bookings & reports live only in the Lab tab now ("My Lab
+    // Bookings & Reports" — see lab_bookings_banner_test.dart) — no longer
+    // duplicated here under Account. Matches the same change in the root
+    // app.
+    testWidgets('does not offer My Lab Bookings — that lives in the Lab tab now', (
+      tester,
+    ) async {
       AuthService.instance.signInAs();
       await pump(tester, const AccountScreen());
 
-      await tester.tap(find.text('My Lab Bookings'));
-      await tester.pump();
-      await tester.pump(const Duration(milliseconds: 400));
-
-      expect(find.byType(MyLabBookingsScreen), findsOneWidget);
+      expect(find.text('My Lab Bookings'), findsNothing);
     });
   });
 }
