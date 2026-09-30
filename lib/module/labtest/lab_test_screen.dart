@@ -6,6 +6,7 @@ import '../../widgets/app_image.dart';
 import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
 import 'lab_package.dart';
+import 'my_lab_bookings_screen.dart';
 import 'package_card.dart';
 import 'profile_tile.dart';
 import 'top_packages_screen.dart';
@@ -122,6 +123,11 @@ class _LabTestScreenState extends State<LabTestScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: _MyBookingsBanner(),
+            ),
+            const SizedBox(height: 18),
             if (showPackages) ...[
               _SectionHeading(
                 title: 'Top Packages',
@@ -518,6 +524,75 @@ class _SectionHeading extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A member's way into their own lab reports straight from the Lab tab —
+/// previously reachable only from Account → My Lab Bookings, several taps
+/// away from the section it's actually about. Opens the exact same
+/// [MyLabBookingsScreen] that entry does, so there is one list of bookings
+/// and reports, not two.
+class _MyBookingsBanner extends StatelessWidget {
+  const _MyBookingsBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => MyLabBookingsScreen.open(context),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.panelBlue,
+                  borderRadius: BorderRadius.circular(9),
+                ),
+                child: const Icon(
+                  Icons.biotech_outlined,
+                  size: 21,
+                  color: AppColors.brandBlue,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      'My Lab Bookings & Reports',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    SizedBox(height: 2),
+                    Text(
+                      'Track a booked test and open its report once ready',
+                      style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
+            ],
+          ),
+        ),
       ),
     );
   }
