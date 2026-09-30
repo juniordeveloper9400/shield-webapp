@@ -1,28 +1,30 @@
 import 'package:flutter/material.dart';
 
+import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/success_tick.dart';
-import 'order_track_screen.dart';
-import 'purchase_service.dart';
+import 'my_lab_bookings_screen.dart';
 
-/// The "your order is in" screen, shown once a checkout has filed an order.
+/// The "your lab test is booked" screen, shown once [LabCheckoutScreen] has
+/// filed the basket — the same role [OrderPlacedScreen] plays for a medicine
+/// order, with the same [SuccessTick] confirmation, but pointed at My Lab
+/// Bookings instead of order tracking since that is where a placed booking
+/// actually lives.
 ///
-/// It replaces the checkout in the stack rather than sitting on top of it —
-/// the checkout is finished, and a back gesture from here should land on the
-/// (now empty) cart, not on a payment form for an order already placed. From
-/// here a member either tracks the order or heads back to the shop.
-class OrderPlacedScreen extends StatelessWidget {
-  final Purchase order;
+/// Replaces the checkout in the stack rather than sitting on top of it — a
+/// back gesture from here should land on the (now empty) cart, not on a
+/// checkout for a booking already placed.
+class LabBookingPlacedScreen extends StatelessWidget {
+  final int bookingCount;
+  final int patientCount;
+  final int payable;
 
-  const OrderPlacedScreen({super.key, required this.order});
-
-  String get _body => switch (order.kind) {
-    OrderKind.prescription =>
-      'The pharmacist reads your prescription, prices it, and messages you '
-          'before anything is charged.',
-    OrderKind.standard =>
-      'We are getting your order ready. Track it any time from My Orders.',
-  };
+  const LabBookingPlacedScreen({
+    super.key,
+    required this.bookingCount,
+    required this.patientCount,
+    required this.payable,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +39,7 @@ class OrderPlacedScreen extends StatelessWidget {
               const SuccessTick(),
               const SizedBox(height: 24),
               const Text(
-                'Order placed',
+                'Lab test booked',
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
@@ -46,7 +48,9 @@ class OrderPlacedScreen extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'Order ${order.id}',
+                '$bookingCount ${bookingCount == 1 ? 'test' : 'tests'} · '
+                '$patientCount ${patientCount == 1 ? 'patient' : 'patients'} '
+                '· ₹${formatRupees(payable)}',
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -54,10 +58,11 @@ class OrderPlacedScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 10),
-              Text(
-                _body,
+              const Text(
+                'The lab will contact you to confirm your sample collection. '
+                'Track it any time from My Lab Bookings.',
                 textAlign: TextAlign.center,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 13.5,
                   height: 1.45,
                   color: AppColors.textMuted,
@@ -70,7 +75,7 @@ class OrderPlacedScreen extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: () => Navigator.of(context).pushReplacement(
                     MaterialPageRoute(
-                      builder: (_) => OrderTrackScreen(order: order),
+                      builder: (_) => const MyLabBookingsScreen(),
                     ),
                   ),
                   style: FilledButton.styleFrom(
@@ -79,9 +84,9 @@ class OrderPlacedScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  icon: const Icon(Icons.local_shipping_outlined, size: 20),
+                  icon: const Icon(Icons.science_outlined, size: 20),
                   label: const Text(
-                    'Track order',
+                    'View my bookings',
                     style: TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
                   ),
                 ),

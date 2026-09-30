@@ -148,10 +148,14 @@ class LabCartService extends ChangeNotifier {
     notifyListeners();
   }
 
-  @visibleForTesting
-  void reset() {
+  /// Empties the basket once its bookings have actually been placed — the
+  /// same moment the commerce cart empties itself after "Place order".
+  void clear() {
     _bookings.clear();
     _chosenStore = null;
     notifyListeners();
   }
+
+  @visibleForTesting
+  void reset() => clear();
 }
