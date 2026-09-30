@@ -28,7 +28,13 @@ class LabTestScreen extends StatefulWidget {
   /// Opens the Top Packages sub-tab.
   final VoidCallback? onSeeAllPackages;
 
-  const LabTestScreen({super.key, this.onSeeAllPackages});
+  /// Opens the Lab Bookings sub-tab — the bottom bar's own destination for
+  /// this, now that it has one (see [HealthSubTab.myBookings]). Null falls
+  /// back to [_MyBookingsBanner]'s own push of [MyLabBookingsScreen], the
+  /// same screen either way — see that class's own doc.
+  final VoidCallback? onOpenBookings;
+
+  const LabTestScreen({super.key, this.onSeeAllPackages, this.onOpenBookings});
 
   @override
   State<LabTestScreen> createState() => _LabTestScreenState();
@@ -123,9 +129,9 @@ class _LabTestScreenState extends State<LabTestScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 16),
-              child: _MyBookingsBanner(),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: _MyBookingsBanner(onTap: widget.onOpenBookings),
             ),
             const SizedBox(height: 18),
             if (showPackages) ...[
@@ -531,11 +537,16 @@ class _SectionHeading extends StatelessWidget {
 
 /// A member's way into their own lab reports straight from the Lab tab —
 /// previously reachable only from Account → My Lab Bookings, several taps
-/// away from the section it's actually about. Opens the exact same
-/// [MyLabBookingsScreen] that entry does, so there is one list of bookings
-/// and reports, not two.
+/// away from the section it's actually about. Lab Bookings has its own
+/// bottom-bar tab now ([HealthSubTab.myBookings]) — [onTap], when given,
+/// switches to that instead of pushing a second, separate screen over it;
+/// null (this widget used on its own, outside [LabTestScreen]) falls back
+/// to pushing [MyLabBookingsScreen] directly, the exact same screen either
+/// way, so there is one list of bookings and reports, not two.
 class _MyBookingsBanner extends StatelessWidget {
-  const _MyBookingsBanner();
+  final VoidCallback? onTap;
+
+  const _MyBookingsBanner({this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -543,7 +554,7 @@ class _MyBookingsBanner extends StatelessWidget {
       color: AppColors.white,
       borderRadius: BorderRadius.circular(12),
       child: InkWell(
-        onTap: () => MyLabBookingsScreen.open(context),
+        onTap: onTap ?? () => MyLabBookingsScreen.open(context),
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(

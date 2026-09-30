@@ -4,15 +4,20 @@ import '../../theme/app_colors.dart';
 import '../../widgets/bottom_nav.dart';
 import '../dietitian/dietitian_screen.dart';
 import '../labtest/lab_test_screen.dart';
+import '../labtest/my_lab_bookings_screen.dart';
 import '../labtest/top_packages_screen.dart';
 
 /// Sub-destinations inside the health section.
 ///
 /// Labs and the dietitian are one errand — you book a test, then you talk to
 /// someone about what it said — so they share a section rather than competing
-/// for two slots in a five-tab bar.
+/// for two slots in a five-tab bar. [myBookings] sits right beside
+/// [labsTests] rather than competing for a sixth slot of its own, for the
+/// same reason — booking a test and checking on the one you already booked
+/// are the same errand, one tap apart, not two separate destinations.
 enum HealthSubTab {
   labsTests(label: 'Labs Tests', icon: Icons.colorize_rounded),
+  myBookings(label: 'Lab Bookings', icon: Icons.assignment_turned_in_rounded),
   topPackages(label: 'Top Packages', icon: Icons.grid_view_rounded),
   dietitian(label: 'Dietitian', icon: Icons.restaurant_menu_rounded);
 
@@ -42,7 +47,9 @@ class HealthSection extends StatelessWidget {
       children: [
         LabTestScreen(
           onSeeAllPackages: () => onSelectSubTab(HealthSubTab.topPackages),
+          onOpenBookings: () => onSelectSubTab(HealthSubTab.myBookings),
         ),
+        const MyLabBookingsScreen(),
         TopPackagesScreen(onBack: () => onSelectSubTab(HealthSubTab.labsTests)),
         const DietitianScreen(),
       ],
