@@ -6,7 +6,6 @@ import '../../widgets/app_image.dart';
 import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
 import 'lab_package.dart';
-import 'my_lab_bookings_screen.dart';
 import 'package_card.dart';
 import 'profile_tile.dart';
 import 'top_packages_screen.dart';
@@ -28,13 +27,7 @@ class LabTestScreen extends StatefulWidget {
   /// Opens the Top Packages sub-tab.
   final VoidCallback? onSeeAllPackages;
 
-  /// Opens the Lab Bookings sub-tab — the bottom bar's own destination for
-  /// this, now that it has one (see [HealthSubTab.myBookings]). Null falls
-  /// back to [_MyBookingsBanner]'s own push of [MyLabBookingsScreen], the
-  /// same screen either way — see that class's own doc.
-  final VoidCallback? onOpenBookings;
-
-  const LabTestScreen({super.key, this.onSeeAllPackages, this.onOpenBookings});
+  const LabTestScreen({super.key, this.onSeeAllPackages});
 
   @override
   State<LabTestScreen> createState() => _LabTestScreenState();
@@ -129,11 +122,6 @@ class _LabTestScreenState extends State<LabTestScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: _MyBookingsBanner(onTap: widget.onOpenBookings),
-            ),
-            const SizedBox(height: 18),
             if (showPackages) ...[
               _SectionHeading(
                 title: 'Top Packages',
@@ -530,80 +518,6 @@ class _SectionHeading extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-/// A member's way into their own lab reports straight from the Lab tab —
-/// previously reachable only from Account → My Lab Bookings, several taps
-/// away from the section it's actually about. Lab Bookings has its own
-/// bottom-bar tab now ([HealthSubTab.myBookings]) — [onTap], when given,
-/// switches to that instead of pushing a second, separate screen over it;
-/// null (this widget used on its own, outside [LabTestScreen]) falls back
-/// to pushing [MyLabBookingsScreen] directly, the exact same screen either
-/// way, so there is one list of bookings and reports, not two.
-class _MyBookingsBanner extends StatelessWidget {
-  final VoidCallback? onTap;
-
-  const _MyBookingsBanner({this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: AppColors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap ?? () => MyLabBookingsScreen.open(context),
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: AppColors.border),
-          ),
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.panelBlue,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: const Icon(
-                  Icons.biotech_outlined,
-                  size: 21,
-                  color: AppColors.brandBlue,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'My Lab Bookings & Reports',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    SizedBox(height: 2),
-                    Text(
-                      'Track a booked test and open its report once ready',
-                      style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-            ],
-          ),
-        ),
       ),
     );
   }

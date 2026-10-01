@@ -47,7 +47,6 @@ class HealthSection extends StatelessWidget {
       children: [
         LabTestScreen(
           onSeeAllPackages: () => onSelectSubTab(HealthSubTab.topPackages),
-          onOpenBookings: () => onSelectSubTab(HealthSubTab.myBookings),
         ),
         const MyLabBookingsScreen(),
         TopPackagesScreen(onBack: () => onSelectSubTab(HealthSubTab.labsTests)),
