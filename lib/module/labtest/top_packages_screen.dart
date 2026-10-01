@@ -51,7 +51,7 @@ class _TopPackagesScreenState extends State<TopPackagesScreen> {
         ? null
         : category == null
         ? all.where((p) => !p.isProfile).toList()
-        : all.where((p) => p.categoryId == category.id).toList();
+        : all.where((p) => p.isUnderCategory(category.id)).toList();
     return Scaffold(
       backgroundColor: AppColors.pageTint,
       appBar: AppBar(

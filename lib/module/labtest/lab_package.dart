@@ -46,6 +46,17 @@ class LabPackage {
   /// package carries no category.
   final String categoryId;
 
+  /// Any further tiles this also shows under, on top of [categoryId]
+  /// (`app.lab_package_extra_category`, migration 0067) — a test genuinely
+  /// relevant to more than one concern (FSH/LH/SHBG under both Men health
+  /// and women health, say) without picking a side. Usually empty.
+  final List<String> extraCategoryIds;
+
+  /// Whether this package belongs under [category] — its primary tile or
+  /// any of its [extraCategoryIds].
+  bool isUnderCategory(String category) =>
+      categoryId == category || extraCategoryIds.contains(category);
+
   /// True for the one-test listing the console keeps for a test or group test
   /// switched on with "Show in the app" (`app.lab_package.source_test_id`,
   /// migration 0056) — a profile / test in "Top Profiles and Tests" — and false
@@ -99,6 +110,7 @@ class LabPackage {
     this.slug = '',
     required this.name,
     this.categoryId = '',
+    this.extraCategoryIds = const [],
     this.isProfile = false,
     required this.testCount,
     required this.profileCount,

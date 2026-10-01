@@ -58,6 +58,7 @@ class CareRepository {
             categoryId: row['categoryId'] == null
                 ? ''
                 : row['categoryId'].toString(),
+            extraCategoryIds: _stringList(row['extraCategoryIds']),
             isProfile: row['sourceTestId'] != null,
             testCount: _int(row['testCount']),
             profileCount: _int(row['profileCount']),

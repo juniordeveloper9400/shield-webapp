@@ -120,6 +120,37 @@ void main() {
       expect(find.text('Diabetes Check'), findsOneWidget);
       expect(find.text('Liver Panel'), findsNothing);
     });
+
+    testWidgets(
+      'a package with an extra category (migration 0067) shows under both tiles',
+      (tester) async {
+        const sharedPackage = LabPackage(
+          id: '20',
+          name: 'FSH',
+          categoryId: '1', // primary: Diabetes
+          extraCategoryIds: ['2'], // also shows under Liver Health
+          testCount: 1,
+          profileCount: 1,
+          price: '400',
+          mrp: '400',
+        );
+        CareRepository.labPackagesOverride = () async => [sharedPackage];
+        CareRepository.labCategoriesOverride = () async => [_diabetes, _liver];
+
+        await pump(tester, const LabTestScreen());
+
+        await tester.tap(find.text('Diabetes'));
+        await tester.pumpAndSettle();
+        expect(find.text('FSH'), findsOneWidget);
+
+        await tester.pageBack();
+        await tester.pumpAndSettle();
+
+        await tester.tap(find.text('Liver Health'));
+        await tester.pumpAndSettle();
+        expect(find.text('FSH'), findsOneWidget);
+      },
+    );
   });
 
   group('the filtered package list', () {
