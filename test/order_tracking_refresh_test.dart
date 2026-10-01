@@ -42,7 +42,7 @@ void main() {
       await tester.pumpAndSettle();
       // Only the four member stages are ever shown — no Processing /
       // Out for delivery / Delivered.
-      for (final title in ['Placed', 'Store contact', 'Billed', 'Complete']) {
+      for (final title in ['Pending', 'Processed', 'Billing', 'Completed']) {
         expect(find.text(title), findsWidgets);
       }
       expect(find.text('Processing'), findsNothing);
@@ -66,7 +66,7 @@ void main() {
         ),
       );
       await tester.pumpAndSettle();
-      expect(find.text('Billed'), findsWidgets);
+      expect(find.text('Billing'), findsWidgets);
 
       service.updateOne(order(OrderStatus.cancelled));
       await tester.pumpAndSettle();

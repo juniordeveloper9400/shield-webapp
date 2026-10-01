@@ -198,7 +198,7 @@ void main() {
       expect(find.text('Order status'), findsNothing);
     });
 
-    testWidgets('an order just placed reads Placed even before its link arrives', (
+    testWidgets('an order just placed reads Pending even before its link arrives', (
       tester,
     ) async {
       ordered();
@@ -206,7 +206,7 @@ void main() {
       await pump(tester);
 
       expect(find.text('Order status'), findsOneWidget);
-      expect(chip(tester), 'Placed');
+      expect(chip(tester), 'Pending');
       expect(find.textContaining('The pharmacist will call you soon'), findsOneWidget);
       // No order code yet, and nothing to open.
       expect(find.text('Track order'), findsNothing);
@@ -214,14 +214,14 @@ void main() {
 
     testWidgets('follows the order through every stage', (tester) async {
       final cases = <(LinkedOrder, String, String)>[
-        (_link(), 'Placed', 'We have your order'),
+        (_link(), 'Pending', 'We have your order'),
         (
           _link(contacted: DateTime(2026, 9, 20)),
-          'Store contact',
+          'Processed',
           'The pharmacist has contacted you',
         ),
-        (_link(billed: true), 'Billed', 'Your bill is ready'),
-        (_link(status: 'DELIVERED', billed: true), 'Complete', 'Your order is complete'),
+        (_link(billed: true), 'Billing', 'Your bill is ready'),
+        (_link(status: 'DELIVERED', billed: true), 'Completed', 'Your order is complete'),
         (_link(status: 'CANCELLED'), 'Cancelled', 'This order was cancelled'),
       ];
 
@@ -242,18 +242,18 @@ void main() {
       ordered(link: _link(contacted: DateTime(2026, 9, 20)));
       await pump(tester);
 
-      // The chip says Store contact once; the track repeats it as a step label.
-      for (final label in ['Placed', 'Store contact', 'Billed', 'Complete']) {
+      // The chip says Processed once; the track repeats it as a step label.
+      for (final label in ['Pending', 'Processed', 'Billing', 'Completed']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
-      expect(find.text('Billed'), findsOneWidget);
+      expect(find.text('Billing'), findsOneWidget);
 
       book.reset();
       ordered(link: _link(status: 'CANCELLED'));
       await pump(tester);
 
-      expect(find.text('Billed'), findsNothing);
-      expect(find.text('Complete'), findsNothing);
+      expect(find.text('Billing'), findsNothing);
+      expect(find.text('Completed'), findsNothing);
     });
 
     testWidgets('prefers the loaded order book over what the prescription reported', (
@@ -274,7 +274,7 @@ void main() {
 
       await pump(tester);
 
-      expect(chip(tester), 'Complete');
+      expect(chip(tester), 'Completed');
       expect(find.text('Track order'), findsOneWidget);
     });
 

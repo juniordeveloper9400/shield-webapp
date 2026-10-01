@@ -34,18 +34,22 @@ enum OrderStatus {
 /// The four stages a member sees an order move through — and the only status
 /// they see. Derived by [Purchase.stage] from what the store has actually done
 /// (the raw [OrderStatus] keeps driving delivery and cancellation behind the
-/// scenes), so a stage can only advance when the store really did the step:
+/// scenes), so a stage can only advance when the store really did the step.
+/// Labelled Pending / Processed / Billing / Completed — the exact words the
+/// admin console's own order and prescription lifecycle status already use
+/// (see shieldweb's orderLifecycle.ts), so the same order never reads as two
+/// different things depending on who is looking at it:
 ///
-///  * [placed] — the order exists.
-///  * [storeContact] — staff used Call / WhatsApp on the member in the admin
-///    console (`app."order".store_contacted_at`).
-///  * [billed] — the store has sent a bill for it.
-///  * [complete] — the store completed the order.
+///  * [placed] (label "Pending") — the order exists.
+///  * [storeContact] (label "Processed") — staff used Call / WhatsApp on the
+///    member in the admin console (`app."order".store_contacted_at`).
+///  * [billed] (label "Billing") — the store has sent a bill for it.
+///  * [complete] (label "Completed") — the store completed the order.
 enum OrderStage {
-  placed('Placed', Color(0xFFFDF3E0), Color(0xFFB4761A)),
-  storeContact('Store contact', AppColors.offerTint, AppColors.brandBlue),
-  billed('Billed', Color(0xFFEDE7F6), Color(0xFF5E35B1)),
-  complete('Complete', AppColors.greenTint, AppColors.brandGreenDark),
+  placed('Pending', Color(0xFFFDF3E0), Color(0xFFB4761A)),
+  storeContact('Processed', AppColors.offerTint, AppColors.brandBlue),
+  billed('Billing', Color(0xFFEDE7F6), Color(0xFF5E35B1)),
+  complete('Completed', AppColors.greenTint, AppColors.brandGreenDark),
   cancelled('Cancelled', Color(0xFFFBEBEB), Color(0xFFB4322F));
 
   final String label;

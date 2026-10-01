@@ -15,8 +15,9 @@ class TrackStep {
 }
 
 /// The tracker for one [Purchase]: the four stages it moves through
-/// (Placed → Store contact → Billed → Complete), where it is now, and the
-/// line printed above them.
+/// (Pending → Processed → Billing → Completed — see [OrderStage]'s own doc
+/// for why these match the admin console's wording), where it is now, and
+/// the line printed above them.
 ///
 /// Everything here is derived from the order — [Purchase.stage] reads whether
 /// the store has contacted the member, sent a bill, or completed it. Nothing
@@ -48,10 +49,10 @@ class OrderTrack {
   }
 
   static const List<String> _stageTitles = [
-    'Placed',
-    'Store contact',
-    'Billed',
-    'Complete',
+    'Pending',
+    'Processed',
+    'Billing',
+    'Completed',
   ];
 
   /// The graph, newest stage last.

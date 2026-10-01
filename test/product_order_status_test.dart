@@ -30,18 +30,18 @@ void main() {
   test('every order shows exactly the four member stages', () {
     final track = OrderTrack(order(OrderStatus.processing));
     expect(track.steps.map((s) => s.title), [
-      'Placed',
-      'Store contact',
-      'Billed',
-      'Complete',
+      'Pending',
+      'Processed',
+      'Billing',
+      'Completed',
     ]);
   });
 
-  test('a new order stays at Placed whatever it cost or was paid', () {
+  test('a new order stays at Pending whatever it cost or was paid', () {
     for (final paid in [0, 100]) {
       final track = OrderTrack(order(OrderStatus.processing, paid: paid));
       expect(track.stage, OrderStage.placed);
-      expect(current(track), 'Placed');
+      expect(current(track), 'Pending');
       expect(track.deliveryWindow, isNull);
       expect(track.steps.skip(1).every((s) => s.detail == null), isTrue);
       expect(
@@ -51,18 +51,18 @@ void main() {
     }
   });
 
-  test('the store contacting the member moves the order to Store contact', () {
+  test('the store contacting the member moves the order to Processed', () {
     final track = OrderTrack(
       order(OrderStatus.processing, contactedAt: DateTime(2026, 9, 20, 10)),
     );
     expect(track.stage, OrderStage.storeContact);
-    expect(current(track), 'Store contact');
+    expect(current(track), 'Processed');
     expect(track.steps.first.state, TrackState.done);
     expect(track.steps[1].detail, '20 Sep');
     expect(track.steps[2].state, TrackState.upcoming);
   });
 
-  test('a bill moves the order to Billed, with or without a contact stamp', () {
+  test('a bill moves the order to Billing, with or without a contact stamp', () {
     for (final contacted in [null, DateTime(2026, 9, 20)]) {
       final track = OrderTrack(
         order(
@@ -73,7 +73,7 @@ void main() {
         ),
       );
       expect(track.stage, OrderStage.billed);
-      expect(current(track), 'Billed');
+      expect(current(track), 'Billing');
       // Everything before it reads as done, never stuck on a skipped stage.
       expect(
         track.steps.take(2).every((s) => s.state == TrackState.done),
