@@ -201,6 +201,12 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
   void _applyCard(RemotePrescriptionCard card, {String? recordId}) {
     final id = recordId ??
         _book.records.firstWhere((r) => r.remoteId == card.uuid).id;
+    // A script uploaded in an earlier session (or on another device) has no
+    // locally-encoded image yet — this is the only way its card ever gets
+    // one, since `attachImage` after a fresh upload races ahead of this.
+    if (card.image != null) {
+      _book.attachImage(id, card.image!);
+    }
     _book.applyIntakeCard(
       id,
       doctor: card.doctor,

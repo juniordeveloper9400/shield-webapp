@@ -33,6 +33,14 @@ class RemotePrescriptionCard {
   /// that was only uploaded. What the card's order-tracking status reads.
   final LinkedOrder? order;
 
+  /// The first page of the member's own uploaded scan (a `data:` URI), or
+  /// null when this prescription carries no photo — a script phoned in, not
+  /// an error case. `GET /v1/member/prescriptions/:id` can return up to
+  /// three pages (`app.prescription_image`); only the first is kept here,
+  /// the same single-thumbnail idea `OrderPrescription.image` already uses
+  /// for the Track Order card.
+  final String? image;
+
   RemotePrescriptionCard({
     required this.code,
     required this.uuid,
@@ -46,6 +54,7 @@ class RemotePrescriptionCard {
     this.recurringFrom,
     this.recurringUntil,
     this.order,
+    this.image,
   });
 
   /// The pharmacist has entered the lines — the app card can expand.
@@ -382,6 +391,11 @@ class PrescriptionRepository {
           ),
         )
         .toList();
+    final images = (row['images'] as List<dynamic>? ?? const [])
+        .cast<Map<String, dynamic>>()
+        .map((img) => (img['image'] as String?)?.trim())
+        .where((img) => (img ?? '').isNotEmpty)
+        .toList();
     return RemotePrescriptionCard(
       code: (row['code'] ?? '').toString(),
       uuid: row['id']?.toString(),
@@ -395,6 +409,7 @@ class PrescriptionRepository {
       recurringFrom: DateTime.tryParse((row['recurringFrom'] ?? '').toString()),
       recurringUntil: DateTime.tryParse((row['recurringUntil'] ?? '').toString()),
       order: LinkedOrder.fromJson(row['order']),
+      image: images.isEmpty ? null : images.first,
     );
   }
 

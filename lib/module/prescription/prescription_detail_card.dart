@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
 import 'prescription_copy.dart';
+import 'prescription_image_view.dart';
 import 'prescription_order_status.dart';
 import 'prescription_record.dart';
 
@@ -226,75 +228,138 @@ class _Header extends StatelessWidget {
     required this.copy,
   });
 
+  bool get _hasImage => (record.image ?? '').isNotEmpty;
+
+  void _openImage(BuildContext context) {
+    if (!_hasImage) {
+      return;
+    }
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => PrescriptionImageView(
+          dataUri: record.image,
+          name: record.fileName.isEmpty ? copy.noFileAttached : record.fileName,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return Material(
       color: ready ? AppColors.greenTint : AppColors.pageTint,
-      padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
-      child: Row(
-        children: [
-          Icon(
-            Icons.description_outlined,
-            size: 20,
-            color: ready ? AppColors.brandGreenDark : AppColors.brandBlue,
-          ),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  record.fileName.isEmpty
-                      ? copy.noFileAttached
-                      : record.fileName,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.textDark,
-                  ),
+      child: InkWell(
+        onTap: _hasImage ? () => _openImage(context) : null,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 11, 12, 11),
+          child: Row(
+            children: [
+              _Thumbnail(record: record, ready: ready),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      record.fileName.isEmpty
+                          ? copy.noFileAttached
+                          : record.fileName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    if (record.supplyLabel.isNotEmpty) ...[
+                      const SizedBox(height: 1),
+                      Text(
+                        record.supplyLabel,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
-                if (record.supplyLabel.isNotEmpty) ...[
-                  const SizedBox(height: 1),
-                  Text(
-                    record.supplyLabel,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textMuted,
+              ),
+              if (_hasImage) ...[
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.visibility_outlined,
+                  size: 18,
+                  color: ready ? AppColors.brandGreenDark : AppColors.brandBlue,
+                ),
+              ],
+              const SizedBox(width: 8),
+              _StatusChip(status: record.status, copy: copy),
+              if (record.ordered) ...[
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(
+                      color: ready ? AppColors.brandGreenDeep : AppColors.border,
                     ),
                   ),
-                ],
+                  child: Text(
+                    record.number,
+                    style: TextStyle(
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.4,
+                      color:
+                          ready ? AppColors.brandGreenDark : AppColors.textMuted,
+                    ),
+                  ),
+                ),
               ],
-            ),
+            ],
           ),
-          const SizedBox(width: 8),
-          _StatusChip(status: record.status, copy: copy),
-          if (record.ordered) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(
-                  color: ready ? AppColors.brandGreenDeep : AppColors.border,
-                ),
-              ),
-              child: Text(
-                record.number,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.4,
-                  color: ready ? AppColors.brandGreenDark : AppColors.textMuted,
-                ),
-              ),
-            ),
-          ],
-        ],
+        ),
+      ),
+    );
+  }
+}
+
+/// A small preview of the uploaded script when one is on file, so the card
+/// reads as "here is your prescription" rather than just a file name — the
+/// plain document icon stands in only for the no-photo case.
+class _Thumbnail extends StatelessWidget {
+  final PrescriptionRecord record;
+  final bool ready;
+
+  const _Thumbnail({required this.record, required this.ready});
+
+  @override
+  Widget build(BuildContext context) {
+    final image = record.image;
+    if (image == null || image.isEmpty) {
+      return Icon(
+        Icons.description_outlined,
+        size: 20,
+        color: ready ? AppColors.brandGreenDark : AppColors.brandBlue,
+      );
+    }
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(8),
+      child: AppImage(
+        image: image,
+        width: 36,
+        height: 36,
+        fit: BoxFit.cover,
+        fallbackIcon: Icons.description_outlined,
+        iconSize: 20,
+        iconColor: ready ? AppColors.brandGreenDark : AppColors.brandBlue,
       ),
     );
   }

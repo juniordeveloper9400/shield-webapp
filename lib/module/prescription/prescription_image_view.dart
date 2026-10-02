@@ -3,15 +3,18 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
+import '../../widgets/app_image.dart';
 
-/// A full-screen look at the prescription image the member has just picked,
-/// before it is filed.
+/// A full-screen look at a prescription image, either [bytes] just picked and
+/// not yet filed, or [dataUri] read back from a record already on file
+/// ([PrescriptionRecord.image]) — exactly one of the two is given.
 ///
 /// The upload card can show a name and a size and a thumbnail, but none of
 /// those answer "is this page readable" — so the card opens this, where the
 /// picture fills the screen and pinch-zoom brings the small print up close.
 class PrescriptionImageView extends StatelessWidget {
-  final Uint8List bytes;
+  final Uint8List? bytes;
+  final String? dataUri;
 
   /// The file's name, shown in the bar so the member knows which upload they
   /// are looking at when more than one has been added.
@@ -19,9 +22,13 @@ class PrescriptionImageView extends StatelessWidget {
 
   const PrescriptionImageView({
     super.key,
-    required this.bytes,
+    this.bytes,
+    this.dataUri,
     required this.name,
-  });
+  }) : assert(
+         (bytes == null) != (dataUri == null),
+         'Provide exactly one of bytes or dataUri',
+       );
 
   @override
   Widget build(BuildContext context) {
@@ -46,18 +53,35 @@ class PrescriptionImageView extends StatelessWidget {
       body: Center(
         child: InteractiveViewer(
           maxScale: 5,
-          child: Image.memory(
-            bytes,
-            fit: BoxFit.contain,
-            errorBuilder: (_, _, _) => const Padding(
-              padding: EdgeInsets.all(24),
-              child: Text(
-                'This image could not be shown.',
-                style: TextStyle(color: AppColors.white, fontSize: 14),
-              ),
-            ),
-          ),
+          child: bytes != null
+              ? Image.memory(
+                  bytes!,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, _, _) => const _UnreadableImage(),
+                )
+              : AppImage(
+                  image: dataUri,
+                  fit: BoxFit.contain,
+                  fallbackIcon: Icons.broken_image_outlined,
+                  iconSize: 48,
+                  iconColor: AppColors.white,
+                ),
         ),
+      ),
+    );
+  }
+}
+
+class _UnreadableImage extends StatelessWidget {
+  const _UnreadableImage();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.all(24),
+      child: Text(
+        'This image could not be shown.',
+        style: TextStyle(color: AppColors.white, fontSize: 14),
       ),
     );
   }

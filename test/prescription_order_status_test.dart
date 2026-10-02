@@ -148,6 +148,27 @@ void main() {
       expect(none.order, isNull);
     });
 
+    test('the card carries the first page of a multi-image upload, if any', () {
+      final withImages = PrescriptionRepository.cardFromRow({
+        'id': 46,
+        'status': 'AWAITING_REVIEW',
+        'medicines': [],
+        'images': [
+          {'id': 1, 'image': 'data:image/png;base64,first'},
+          {'id': 2, 'image': 'data:image/png;base64,second'},
+        ],
+      });
+      expect(withImages.image, 'data:image/png;base64,first');
+
+      final withoutImages = PrescriptionRepository.cardFromRow({
+        'id': 47,
+        'status': 'AWAITING_REVIEW',
+        'medicines': [],
+        'images': [],
+      });
+      expect(withoutImages.image, isNull);
+    });
+
     test('a refresh folds the order onto the record, and a later one moves it on', () {
       final record = book.add(patient: _patient, fileName: 's.jpg');
 

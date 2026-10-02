@@ -286,6 +286,13 @@ class PrescriptionFormController extends ChangeNotifier {
     }
     debugSteps.add('sending images=${encodedImages.length}');
     book.setImageDebugNote(record.id, debugSteps.join(' | '));
+    if (encodedImages.isNotEmpty) {
+      // Available the moment it is ready, independent of the server round
+      // trip below — so the member can open their own upload again from the
+      // card without waiting on (or depending on) the network. Same fix the
+      // root app's (single-image) upload already has.
+      book.attachImage(record.id, encodedImages.first);
+    }
     try {
       // The backend requires an existing patient id — resolve/create one
       // first (the old direct-Neon upload did this inline as part of the

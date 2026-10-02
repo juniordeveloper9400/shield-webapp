@@ -153,4 +153,62 @@ void main() {
       },
     );
   });
+
+  group('the uploaded scan', () {
+    testWidgets(
+      'a script with its image on file shows a thumbnail and opens it full-screen',
+      (tester) async {
+        // Same 1×1 PNG fixture the root app's identical test uses — stands
+        // in for what came back attached to an already-filed record, either
+        // this session's own upload (PrescriptionFormController._persist) or
+        // a synced remote copy (fetchForMember's images).
+        const dataUri =
+            'data:image/png;base64,'
+            'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk'
+            '+P+/HgAFhAJ/wlseKgAAAABJRU5ErkJggg==';
+        final record = book.add(patient: _patient, fileName: 'script.jpg');
+        book.attachImage(record.id, dataUri);
+
+        await pump(tester);
+
+        // The plain document icon is gone — a real thumbnail stands in its
+        // place, with the "tap to view" affordance beside the file name.
+        expect(find.byIcon(Icons.description_outlined), findsNothing);
+        expect(find.byIcon(Icons.visibility_outlined), findsOneWidget);
+        expect(find.byType(Image), findsWidgets);
+
+        await tester.tap(find.text('script.jpg'));
+        await tester.pumpAndSettle();
+
+        // Full-screen, pinch-zoomable, titled by the file.
+        expect(find.byType(InteractiveViewer), findsOneWidget);
+        expect(find.text('script.jpg'), findsWidgets);
+      },
+    );
+
+    testWidgets(
+      'a script with no image on file falls back to the plain icon, not tappable',
+      (tester) async {
+        book.add(patient: _patient, fileName: 'script.jpg');
+        await pump(tester);
+
+        expect(find.byIcon(Icons.description_outlined), findsOneWidget);
+        expect(find.byIcon(Icons.visibility_outlined), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'attaching an image a second time does not replace the first',
+      (tester) async {
+        const first = 'data:image/png;base64,first';
+        const second = 'data:image/png;base64,second';
+        final record = book.add(patient: _patient, fileName: 'script.jpg');
+
+        book.attachImage(record.id, first);
+        book.attachImage(record.id, second);
+
+        expect(record.image, first);
+      },
+    );
+  });
 }

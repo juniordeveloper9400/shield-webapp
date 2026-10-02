@@ -236,6 +236,15 @@ class PrescriptionRecord {
   /// bug is closed.
   String? imageDebugNote;
 
+  /// The script itself, as a `data:` URI — the first picked page when more
+  /// than one was attached, same single-thumbnail idea the root app's own
+  /// (single-image) prescription upload uses. Set the moment the picked
+  /// photo finishes encoding, independent of the backend round trip — see
+  /// [PrescriptionFormController]'s own upload path — and again once a
+  /// refresh reads it back from `GET /v1/member/prescriptions/:id` for a
+  /// script uploaded in an earlier session or on another device.
+  String? image;
+
   PrescriptionRecord({
     required this.id,
     required this.patient,
@@ -251,6 +260,7 @@ class PrescriptionRecord {
     this.remoteId,
     this.address,
     this.imageDebugNote,
+    this.image,
   }) : medicines = medicines ?? <PrescriptionMedicine>[];
 
   /// "RX-0004" — the prescription's number, as it is quoted at the counter
@@ -411,6 +421,19 @@ class PrescriptionBook extends ChangeNotifier {
       return;
     }
     _records[index].imageDebugNote = note;
+    notifyListeners();
+  }
+
+  /// Pins the script's own image onto the record — see
+  /// [PrescriptionRecord.image]'s own doc. A no-op once the record already
+  /// carries one, so a later, empty-handed refresh never blanks out an
+  /// image set right after upload.
+  void attachImage(String id, String image) {
+    final index = indexOf(id);
+    if (index == -1 || (_records[index].image ?? '').isNotEmpty) {
+      return;
+    }
+    _records[index].image = image;
     notifyListeners();
   }
 
