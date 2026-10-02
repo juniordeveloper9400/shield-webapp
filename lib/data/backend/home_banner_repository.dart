@@ -40,8 +40,11 @@ class HomeBannerModel {
   }
 }
 
-/// Reads the home-screen hero banner from `backend/api`'s public catalogue
-/// route, maintained from the admin console (`shieldweb`).
+/// Reads a placement's own swipeable banner strip from `backend/api`'s
+/// public catalogue route, maintained from the admin console (`shieldweb`).
+/// `'home'` (the default, sent with no query param so an old backend that
+/// predates migration 0069 keeps working) is the original hero carousel;
+/// `'lab'` is the Lab section's own.
 ///
 /// Read-only and best-effort like the other backend repositories: an
 /// unconfigured backend or a network failure returns an empty list rather
@@ -54,17 +57,20 @@ class HomeBannerRepository {
 
   bool get isAvailable => BackendHttp.isConfigured;
 
-  /// Every banner the admin has switched on, in display order. Rows with no
-  /// image (should not happen — the console requires one) are dropped rather
-  /// than shown as a blank slide.
-  Future<List<HomeBannerModel>> listActive() async {
+  /// Every banner the admin has switched on for [placement], in display
+  /// order. Rows with no image (should not happen — the console requires
+  /// one) are dropped rather than shown as a blank slide.
+  Future<List<HomeBannerModel>> listActive({String placement = 'home'}) async {
     if (!BackendHttp.isConfigured) {
       return const [];
     }
     try {
+      final path = placement == 'home'
+          ? '/v1/public/catalogue/banners'
+          : '/v1/public/catalogue/banners?placement=$placement';
       final rows = await BackendHttp.instance.request(
         'GET',
-        '/v1/public/catalogue/banners',
+        path,
         auth: false,
       ) as List<dynamic>;
       return rows

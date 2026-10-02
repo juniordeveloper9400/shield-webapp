@@ -7,20 +7,35 @@ import '../../data/backend/home_banner_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 
-/// Top hero promotional banner displayed immediately below the search bar.
+/// Top hero promotional banner displayed immediately below a section's own
+/// search bar — the home screen's own strip by default, or another
+/// placement's (migration 0069) when [placement] is given, e.g. the Lab
+/// section's `const HomeHeroBanner(placement: 'lab', showBundledDefault:
+/// false)`.
 ///
-/// Reads `app.home_banner` (maintained from the admin console) and shows
-/// whatever the admin has switched on, one slide at a time in a swipeable
-/// carousel when there is more than one. Falls back to the bundled default
-/// banner when nothing is configured yet, the database is unreachable, or a
-/// slide's image fails to decode — the strip never comes up blank.
+/// Reads `app.home_banner` filtered to [placement] (maintained from the admin
+/// console) and shows whatever the admin has switched on there, one slide at
+/// a time in a swipeable carousel when there is more than one. When nothing
+/// is configured yet, the database is unreachable, or a slide's image fails
+/// to decode: falls back to the bundled default banner if [showBundledDefault]
+/// is true (the home screen's own setting — that strip must never look
+/// broken), or simply renders nothing if it's false (every other placement —
+/// a promotion-shaped empty space reads worse than no space at all before
+/// staff have configured one).
 ///
 /// More than one slide auto-advances on [_autoScrollInterval], the same as a
 /// member swiping — [_page] (kept in sync with a manual swipe via
 /// `onPageChanged`) is always where the next tick advances from, so an
 /// admin-driven auto-scroll and a member's own swipe never fight each other.
 class HomeHeroBanner extends StatefulWidget {
-  const HomeHeroBanner({super.key});
+  const HomeHeroBanner({
+    super.key,
+    this.placement = 'home',
+    this.showBundledDefault = true,
+  });
+
+  final String placement;
+  final bool showBundledDefault;
 
   static const String assetPath = 'assets/banners/hero_banner.jpg';
 
@@ -39,7 +54,7 @@ class _HomeHeroBannerState extends State<HomeHeroBanner> {
   @override
   void initState() {
     super.initState();
-    _future = HomeBannerRepository.instance.listActive();
+    _future = HomeBannerRepository.instance.listActive(placement: widget.placement);
     _future.then((banners) {
       if (mounted) {
         _startAutoScroll(banners.length);
@@ -89,6 +104,83 @@ class _HomeHeroBannerState extends State<HomeHeroBanner> {
 
   @override
   Widget build(BuildContext context) {
+    return FutureBuilder<List<HomeBannerModel>>(
+      future: _future,
+      builder: (context, snapshot) {
+        final banners = snapshot.data ?? const [];
+        // A placement with no bundled fallback (everything but the home
+        // screen) simply isn't there yet — a promo-shaped empty box before
+        // staff have configured one reads worse than no space at all.
+        if (banners.isEmpty && !widget.showBundledDefault) {
+          return const SizedBox.shrink();
+        }
+        return _BannerFrame(child: _buildSlides(banners));
+      },
+    );
+  }
+
+  Widget _buildSlides(List<HomeBannerModel> banners) {
+    if (banners.isEmpty) {
+      return _DefaultBanner();
+    }
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        PageView.builder(
+          controller: _controller,
+          itemCount: banners.length,
+          onPageChanged: (index) => setState(() => _page = index),
+          itemBuilder: (context, index) {
+            final banner = banners[index];
+            return GestureDetector(
+              onTap: banner.target.isEmpty
+                  ? null
+                  : () => _openTarget(banner.target),
+              child: _BannerSlide(banner: banner),
+            );
+          },
+        ),
+        if (banners.length > 1)
+          Positioned(
+            bottom: 10,
+            left: 0,
+            right: 0,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < banners.length; i++)
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    margin: const EdgeInsets.symmetric(horizontal: 3),
+                    width: i == _page ? 16 : 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                      color: AppColors.white.withValues(
+                        alpha: i == _page ? 0.95 : 0.55,
+                      ),
+                      borderRadius: BorderRadius.circular(3),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// The card frame every slide (or [_DefaultBanner]) sits inside: rounded
+/// corners, drop shadow, 16:9. Pulled out from [_HomeHeroBannerState.build]
+/// so that frame is only ever built around something worth framing — an
+/// empty, placement-with-no-fallback strip skips it entirely instead of
+/// shadowing a blank box.
+class _BannerFrame extends StatelessWidget {
+  final Widget child;
+
+  const _BannerFrame({required this.child});
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 14),
       child: Container(
@@ -104,61 +196,7 @@ class _HomeHeroBannerState extends State<HomeHeroBanner> {
         ),
         child: ClipRRect(
           borderRadius: BorderRadius.circular(16),
-          child: AspectRatio(
-            aspectRatio: 16 / 9,
-            child: FutureBuilder<List<HomeBannerModel>>(
-              future: _future,
-              builder: (context, snapshot) {
-                final banners = snapshot.data ?? const [];
-                if (banners.isEmpty) {
-                  return _DefaultBanner();
-                }
-                return Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    PageView.builder(
-                      controller: _controller,
-                      itemCount: banners.length,
-                      onPageChanged: (index) => setState(() => _page = index),
-                      itemBuilder: (context, index) {
-                        final banner = banners[index];
-                        return GestureDetector(
-                          onTap: banner.target.isEmpty
-                              ? null
-                              : () => _openTarget(banner.target),
-                          child: _BannerSlide(banner: banner),
-                        );
-                      },
-                    ),
-                    if (banners.length > 1)
-                      Positioned(
-                        bottom: 10,
-                        left: 0,
-                        right: 0,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            for (var i = 0; i < banners.length; i++)
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                margin: const EdgeInsets.symmetric(horizontal: 3),
-                                width: i == _page ? 16 : 6,
-                                height: 6,
-                                decoration: BoxDecoration(
-                                  color: AppColors.white.withValues(
-                                    alpha: i == _page ? 0.95 : 0.55,
-                                  ),
-                                  borderRadius: BorderRadius.circular(3),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-              },
-            ),
-          ),
+          child: AspectRatio(aspectRatio: 16 / 9, child: child),
         ),
       ),
     );

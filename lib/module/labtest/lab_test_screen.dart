@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../data/backend/care_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
+import '../home/home_hero_banner.dart';
 import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
 import 'lab_cart_service.dart';
@@ -134,6 +135,11 @@ class _LabTestScreenState extends State<LabTestScreen> {
                 ],
               ),
             ),
+            // The Lab section's own promotional strip (migration 0069) —
+            // staff-managed from shieldweb's Banners → Lab tab, the identical
+            // kind of carousel as the home screen's. Collapses to nothing
+            // until staff add one — no bundled fallback here, unlike Home.
+            const HomeHeroBanner(placement: 'lab', showBundledDefault: false),
             const SizedBox(height: 14),
             if (mostCommon.isNotEmpty) ...[
               _MostCommonTestsBanner(tests: mostCommon, images: categoryImages),
