@@ -187,6 +187,14 @@ class Purchase {
   /// bill; [stage] handles both).
   final DateTime? storeContactedAt;
 
+  /// When staff saved/submitted the order's review in the admin console —
+  /// `reviewedAt` on each `GET /v1/member/orders` row. The admin console's
+  /// own order list counts this alone as "Processed" too (shieldweb's
+  /// `orderLifecycle.ts`); [stage] reads it alongside [storeContactedAt] so
+  /// this screen can never show "Pending" for an order the console already
+  /// calls "Processed".
+  final DateTime? reviewedAt;
+
   const Purchase({
     required this.id,
     required this.placedOn,
@@ -205,20 +213,22 @@ class Purchase {
     this.billInvoice,
     this.billedAt,
     this.storeContactedAt,
+    this.reviewedAt,
   });
 
   /// The furthest stage the order has reached — see [OrderStage].
   ///
   /// Cancelled and delivered come straight from the order's status. Below
   /// that, a bill row (`billStatus` is only ever non-null once the store has
-  /// sent one) means [OrderStage.billed], and a contact stamp — or an order
-  /// already out for delivery, which the store obviously handled — means
-  /// [OrderStage.storeContact]. Reading the *furthest* signal means an order
-  /// billed without anyone pressing Call still shows as billed, never stuck.
+  /// sent one) means [OrderStage.billed], and a contact stamp or review save
+  /// — or an order already out for delivery, which the store obviously
+  /// handled — means [OrderStage.storeContact]. Reading the *furthest* signal
+  /// means an order billed without anyone pressing Call still shows as
+  /// billed, never stuck.
   OrderStage get stage => OrderStage.derive(
     status: status,
     billed: billStatus != null,
-    contacted: storeContactedAt != null,
+    contacted: storeContactedAt != null || reviewedAt != null,
   );
 
   /// `₹450` — what the store billed, or null before a bill has a price.
@@ -256,6 +266,7 @@ class Purchase {
     billInvoice: billInvoice ?? this.billInvoice,
     billedAt: billedAt ?? this.billedAt,
     storeContactedAt: storeContactedAt,
+    reviewedAt: reviewedAt,
   );
 
   /// Whether the store has actually sent an invoice picture for this order —
@@ -344,6 +355,7 @@ class Purchase {
       // Null while the store hasn't contacted the member (or the backend
       // predates migration 0045) — DateTime.tryParse('') is null too.
       storeContactedAt: DateTime.tryParse(str(row['storeContactedAt']))?.toLocal(),
+      reviewedAt: DateTime.tryParse(str(row['reviewedAt']))?.toLocal(),
     );
   }
 }
@@ -383,6 +395,12 @@ class LinkedOrder {
   final String code;
   final OrderStatus status;
   final DateTime? storeContactedAt;
+
+  /// When staff saved/submitted the order's review — the `reviewedAt` on
+  /// this prescription's linked-order block. Null until then; [stage] reads
+  /// it alongside [storeContactedAt] so this card can never show "Pending"
+  /// for an order the admin console already calls "Processed".
+  final DateTime? reviewedAt;
   final bool billed;
 
   const LinkedOrder({
@@ -390,6 +408,7 @@ class LinkedOrder {
     required this.code,
     required this.status,
     this.storeContactedAt,
+    this.reviewedAt,
     this.billed = false,
   });
 
@@ -409,6 +428,7 @@ class LinkedOrder {
       storeContactedAt: DateTime.tryParse(
         (raw['storeContactedAt'] ?? '').toString(),
       ),
+      reviewedAt: DateTime.tryParse((raw['reviewedAt'] ?? '').toString()),
       billed: raw['billed'] == true,
     );
   }
@@ -416,7 +436,7 @@ class LinkedOrder {
   OrderStage get stage => OrderStage.derive(
     status: status,
     billed: billed,
-    contacted: storeContactedAt != null,
+    contacted: storeContactedAt != null || reviewedAt != null,
   );
 
   @override
@@ -426,10 +446,12 @@ class LinkedOrder {
       other.code == code &&
       other.status == status &&
       other.storeContactedAt == storeContactedAt &&
+      other.reviewedAt == reviewedAt &&
       other.billed == billed;
 
   @override
-  int get hashCode => Object.hash(id, code, status, storeContactedAt, billed);
+  int get hashCode =>
+      Object.hash(id, code, status, storeContactedAt, reviewedAt, billed);
 }
 
 /// The order book, and the earnings that come out of it.
