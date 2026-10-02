@@ -62,6 +62,13 @@ class LabPackage {
   /// migration 0056) — a profile / test in "Top Profiles and Tests" — and false
   /// for a real package.
   final bool isProfile;
+
+  /// The Test Master's "Most Common Test" switch (`app.lab_package.
+  /// is_most_common`, migration 0068) — what the Lab section's "Most Common
+  /// Tests" banner reads, staff-curated rather than guessed from sort order.
+  /// Only ever true alongside [isProfile]; meaningless on a real package,
+  /// which the banner never lists.
+  final bool isMostCommon;
   final int testCount;
   final int profileCount;
   final String rating;
@@ -112,6 +119,7 @@ class LabPackage {
     this.categoryId = '',
     this.extraCategoryIds = const [],
     this.isProfile = false,
+    this.isMostCommon = false,
     required this.testCount,
     required this.profileCount,
     this.rating = '',

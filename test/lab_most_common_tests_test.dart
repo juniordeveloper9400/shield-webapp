@@ -12,20 +12,22 @@ LabPackage _profile(
   String price = '309',
   String mrp = '500',
   int tests = 2,
+  bool mostCommon = true,
 }) => LabPackage(
   id: '$n',
   name: name ?? 'Profile $n',
   isProfile: true,
+  isMostCommon: mostCommon,
   testCount: tests,
   profileCount: 1,
   price: price,
   mrp: mrp,
 );
 
-/// "Most Common Tests": the banner strip of single tests sitting right under
-/// the search bar, above the package cards — the same single-test data
-/// "Top Profiles and Tests" lists further down, just the first few of them
-/// shown as a quick-add shelf.
+/// "Most Common Tests": the banner strip of single tests staff have flagged
+/// "Most Common Test" on the Test Master (`LabPackage.isMostCommon`), sitting
+/// right under the search bar, above the package cards — a curated shelf, not
+/// a guess off the lab's sort order.
 void main() {
   setUp(LabCartService.instance.reset);
   tearDown(() {
@@ -46,8 +48,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('shows up to six single tests as a banner strip above the '
-      'package cards', (tester) async {
+  testWidgets('shows only the single tests flagged Most Common, up to six', (
+    tester,
+  ) async {
     CareRepository.labCategoriesOverride = () async => const [];
     CareRepository.labPackagesOverride = () async => [
       for (var i = 1; i <= 8; i++) _profile(i, name: 'Test number $i'),
@@ -64,7 +67,8 @@ void main() {
 
     expect(find.text('Most Common Tests'), findsOneWidget);
     // The first five lead "Top Profiles and Tests" too, so they're on both
-    // shelves; the sixth is banner-only, and the rest are left to "View all".
+    // shelves; the sixth is banner-only (the cap), and the rest are left to
+    // "View all" — even though all eight are flagged Most Common.
     expect(find.text('Test number 1'), findsNWidgets(2));
     expect(find.text('Test number 5'), findsNWidgets(2));
     expect(find.text('Test number 6'), findsOneWidget);
@@ -72,7 +76,21 @@ void main() {
     expect(find.text('Test number 8'), findsNothing);
   });
 
-  testWidgets('with no single tests on offer, the banner does not render', (
+  testWidgets('a profile not flagged Most Common stays off the banner, but '
+      'still lists under Top Profiles and Tests', (tester) async {
+    CareRepository.labCategoriesOverride = () async => const [];
+    CareRepository.labPackagesOverride = () async => [
+      _profile(1, name: 'HbA1c', mostCommon: false),
+    ];
+
+    await pump(tester, const LabTestScreen());
+
+    expect(find.text('Most Common Tests'), findsNothing);
+    expect(find.text('Top Profiles and Tests'), findsOneWidget);
+    expect(find.text('HbA1c'), findsOneWidget);
+  });
+
+  testWidgets('with nothing flagged Most Common, the banner does not render', (
     tester,
   ) async {
     CareRepository.labCategoriesOverride = () async => const [];

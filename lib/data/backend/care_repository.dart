@@ -60,6 +60,7 @@ class CareRepository {
                 : row['categoryId'].toString(),
             extraCategoryIds: _stringList(row['extraCategoryIds']),
             isProfile: row['sourceTestId'] != null,
+            isMostCommon: row['isMostCommon'] == true,
             testCount: _int(row['testCount']),
             profileCount: _int(row['profileCount']),
             rating: _str(row['rating']),

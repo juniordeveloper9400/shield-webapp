@@ -24,11 +24,10 @@ const int _topPackageCount = 5;
 /// all N tests ›" opens the rest.
 const int _topProfileCount = 5;
 
-/// How many single tests the "Most Common Tests" banner strip shows. Reads
-/// off the same admin `sort` order as [_topPackageCount] — the schema has no
-/// separate "most booked" flag, so the first few in the lab's own ordering
-/// are what "most common" means here, same precedent as the Top Packages
-/// strip above.
+/// How many of the staff-flagged "Most Common Test" single tests the banner
+/// strip shows at most — a cap for the horizontal layout, not a selection
+/// rule. Which tests appear is entirely staff-curated (`LabPackage.
+/// isMostCommon`, the Test Master's own switch), not guessed from sort order.
 const int _mostCommonCount = 6;
 
 /// Lab landing: sample-collection location, search, the Top Packages strip,
@@ -105,6 +104,10 @@ class _LabTestScreenState extends State<LabTestScreen> {
     final topPackages = packages == null
         ? const <LabPackage>[]
         : packages.take(_topPackageCount).toList();
+    final mostCommon = [
+      for (final p in profiles)
+        if (p.isMostCommon) p,
+    ].take(_mostCommonCount).toList();
     // With only single tests on offer there are no packages to lead with, and
     // an empty "Top Packages" card above them would read as a broken screen.
     final showPackages =
@@ -132,11 +135,8 @@ class _LabTestScreenState extends State<LabTestScreen> {
               ),
             ),
             const SizedBox(height: 14),
-            if (profiles.isNotEmpty) ...[
-              _MostCommonTestsBanner(
-                tests: profiles.take(_mostCommonCount).toList(),
-                images: categoryImages,
-              ),
+            if (mostCommon.isNotEmpty) ...[
+              _MostCommonTestsBanner(tests: mostCommon, images: categoryImages),
               const SizedBox(height: 18),
             ],
             if (showPackages) ...[
@@ -259,13 +259,16 @@ class _LabTestScreenState extends State<LabTestScreen> {
   }
 }
 
-/// "Most Common Tests" — a colourful horizontal banner strip of the lab's
-/// own most frequently booked single tests, sitting right under the search
-/// bar so a member can add one without scrolling past the package cards
-/// first. Each card books straight from the strip, through the same "select
-/// number of patients" sheet [LabProfileTile]'s own "+" uses, so a test
-/// picked up here and the identical row further down in "Top Profiles and
-/// Tests" always agree on what's in the basket.
+/// "Most Common Tests" — a colourful horizontal banner strip of the single
+/// tests staff have flagged "Most Common Test" on the Test Master
+/// (`LabPackage.isMostCommon`), sitting right under the search bar so a
+/// member can add one without scrolling past the package cards first.
+/// Nothing shows here until staff actually flag something — this is a
+/// curated shelf, not a guess off sort order. Each card books straight from
+/// the strip, through the same "select number of patients" sheet
+/// [LabProfileTile]'s own "+" uses, so a test picked up here and the
+/// identical row further down in "Top Profiles and Tests" always agree on
+/// what's in the basket.
 class _MostCommonTestsBanner extends StatelessWidget {
   final List<LabPackage> tests;
   final Map<String, String> images;
