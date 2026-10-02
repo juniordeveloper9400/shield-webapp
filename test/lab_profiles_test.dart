@@ -75,12 +75,17 @@ void main() {
     await pump(tester, const LabTestScreen());
 
     expect(find.text('Top Profiles and Tests'), findsOneWidget);
-    expect(find.text('HbA1c'), findsOneWidget);
-    expect(find.text('₹309'), findsOneWidget);
-    expect(find.text('₹500'), findsOneWidget);
+    // Six or fewer single tests also lead the "Most Common Tests" banner
+    // above, so a test this small a catalog shows up in both shelves.
+    expect(find.text('Most Common Tests'), findsOneWidget);
+    expect(find.text('HbA1c'), findsNWidgets(2));
+    expect(find.text('₹309'), findsNWidgets(2));
+    expect(find.text('₹500'), findsNWidgets(2));
+    // The discount badge and test-count line are only on the full list row —
+    // the banner card keeps to name and price.
     expect(find.text('38.20% OFF'), findsOneWidget);
     expect(find.text('· 2 tests'), findsOneWidget);
-    expect(find.text('Liver Function Test'), findsOneWidget);
+    expect(find.text('Liver Function Test'), findsNWidgets(2));
     expect(find.text('· 12 tests'), findsOneWidget);
     // Five or fewer: nothing more to open.
     expect(find.byKey(const ValueKey('view-all-profiles')), findsNothing);
@@ -172,7 +177,9 @@ void main() {
     expect(LabCartService.instance.bookings.first.package.name, 'HbA1c');
     expect(LabCartService.instance.bookings.first.patients, 2);
     expect(LabCartService.instance.subtotal, 618);
-    expect(find.byIcon(Icons.check_rounded), findsOneWidget);
+    // Both the list row's own button and the matching card in "Most Common
+    // Tests" above read the same basket, so both now show the tick.
+    expect(find.byIcon(Icons.check_rounded), findsNWidgets(2));
   });
 
   testWidgets('a test wears the icon of its category', (tester) async {
@@ -187,8 +194,9 @@ void main() {
     await pump(tester, const LabTestScreen());
 
     // No uploaded image on the category: the plain lab icon stands in — one
-    // for the category tile and one for the test row.
-    expect(find.byIcon(Icons.science_outlined), findsNWidgets(2));
+    // for the category tile, one for the "Most Common Tests" banner card, and
+    // one for the test row.
+    expect(find.byIcon(Icons.science_outlined), findsNWidgets(3));
   });
 
   testWidgets('All Packages leaves single tests out; a category shows both', (

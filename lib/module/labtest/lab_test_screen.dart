@@ -5,8 +5,11 @@ import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../location/location_sheet.dart';
 import 'lab_cart_badge.dart';
+import 'lab_cart_service.dart';
 import 'lab_package.dart';
+import 'lab_package_screen.dart';
 import 'package_card.dart';
+import 'patient_count_sheet.dart';
 import 'profile_tile.dart';
 import 'top_packages_screen.dart';
 import 'top_profiles_screen.dart';
@@ -20,6 +23,13 @@ const int _topPackageCount = 5;
 /// How many single tests the "Top Profiles and Tests" card lists before "View
 /// all N tests ›" opens the rest.
 const int _topProfileCount = 5;
+
+/// How many single tests the "Most Common Tests" banner strip shows. Reads
+/// off the same admin `sort` order as [_topPackageCount] — the schema has no
+/// separate "most booked" flag, so the first few in the lab's own ordering
+/// are what "most common" means here, same precedent as the Top Packages
+/// strip above.
+const int _mostCommonCount = 6;
 
 /// Lab landing: sample-collection location, search, the Top Packages strip,
 /// booking shortcuts, and the running coupon.
@@ -122,6 +132,13 @@ class _LabTestScreenState extends State<LabTestScreen> {
               ),
             ),
             const SizedBox(height: 14),
+            if (profiles.isNotEmpty) ...[
+              _MostCommonTestsBanner(
+                tests: profiles.take(_mostCommonCount).toList(),
+                images: categoryImages,
+              ),
+              const SizedBox(height: 18),
+            ],
             if (showPackages) ...[
               _SectionHeading(
                 title: 'Top Packages',
@@ -236,6 +253,245 @@ class _LabTestScreenState extends State<LabTestScreen> {
               child: _CouponBanner(),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// "Most Common Tests" — a colourful horizontal banner strip of the lab's
+/// own most frequently booked single tests, sitting right under the search
+/// bar so a member can add one without scrolling past the package cards
+/// first. Each card books straight from the strip, through the same "select
+/// number of patients" sheet [LabProfileTile]'s own "+" uses, so a test
+/// picked up here and the identical row further down in "Top Profiles and
+/// Tests" always agree on what's in the basket.
+class _MostCommonTestsBanner extends StatelessWidget {
+  final List<LabPackage> tests;
+  final Map<String, String> images;
+
+  const _MostCommonTestsBanner({required this.tests, required this.images});
+
+  /// One tint per card, cycling through the app's category pastels so
+  /// neighbouring cards in the strip are told apart at a glance — the same
+  /// palette the Home "Health Articles" strip cycles through.
+  static const List<Color> _tints = [
+    AppColors.panelBlue,
+    AppColors.panelGreen,
+    AppColors.panelCream,
+    AppColors.panelPink,
+    AppColors.panelSlate,
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    if (tests.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 2),
+          child: Text(
+            'Most Common Tests',
+            style: TextStyle(
+              fontSize: 19,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
+          ),
+        ),
+        const Padding(
+          padding: EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: Text(
+            'Frequently booked, ready to add',
+            style: TextStyle(fontSize: 13.5, color: AppColors.textMuted),
+          ),
+        ),
+        SizedBox(
+          height: 178,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            itemCount: tests.length,
+            separatorBuilder: (_, _) => const SizedBox(width: 12),
+            itemBuilder: (context, index) => _MostCommonTestCard(
+              test: tests[index],
+              image: images[tests[index].categoryId] ?? '',
+              tint: _tints[index % _tints.length],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// One card of [_MostCommonTestsBanner]: a tinted banner header carrying the
+/// test's category icon, its name and price, and a "+" that books it — the
+/// same add flow as [LabProfileTile], just reached from a different shelf.
+class _MostCommonTestCard extends StatelessWidget {
+  final LabPackage test;
+  final String image;
+  final Color tint;
+
+  const _MostCommonTestCard({
+    required this.test,
+    required this.image,
+    required this.tint,
+  });
+
+  Future<void> _add(BuildContext context) async {
+    final cart = LabCartService.instance;
+    final chosen = await PatientCountSheet.show(
+      context,
+      test,
+      initial: cart.patientsFor(test),
+    );
+    if (chosen != null) {
+      cart.book(test, patients: chosen);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasSaving = test.mrpValue > test.priceValue && test.priceValue >= 0;
+
+    return SizedBox(
+      width: 160,
+      child: Material(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: () => Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => LabPackageScreen(package: test)),
+          ),
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: AppColors.border),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  height: 64,
+                  width: double.infinity,
+                  color: tint,
+                  alignment: Alignment.center,
+                  child: AppImage(
+                    image: image,
+                    fallbackIcon: Icons.science_outlined,
+                    iconSize: 28,
+                    iconColor: AppColors.brandBlue,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            test.name,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              height: 1.2,
+                              fontWeight: FontWeight.w700,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '₹${test.price}',
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 14.5,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.textDark,
+                                    ),
+                                  ),
+                                  if (hasSaving)
+                                    Text(
+                                      '₹${test.mrp}',
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.textMuted,
+                                        decoration: TextDecoration.lineThrough,
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ),
+                            ListenableBuilder(
+                              listenable: LabCartService.instance,
+                              builder: (context, _) {
+                                final inBasket =
+                                    LabCartService.instance.patientsFor(test) !=
+                                    null;
+                                return Semantics(
+                                  button: true,
+                                  label: inBasket
+                                      ? 'Change patients for ${test.name}'
+                                      : 'Add ${test.name}',
+                                  child: InkWell(
+                                    key: ValueKey('add-common-${test.id}'),
+                                    onTap: () => _add(context),
+                                    borderRadius: BorderRadius.circular(9),
+                                    child: Container(
+                                      width: 30,
+                                      height: 30,
+                                      decoration: BoxDecoration(
+                                        color: inBasket
+                                            ? AppColors.greenTint
+                                            : AppColors.offerTint,
+                                        borderRadius: BorderRadius.circular(9),
+                                        border: Border.all(
+                                          color: inBasket
+                                              ? AppColors.brandGreenDark
+                                              : AppColors.brandBlue,
+                                        ),
+                                      ),
+                                      child: Icon(
+                                        inBasket
+                                            ? Icons.check_rounded
+                                            : Icons.add_rounded,
+                                        color: inBasket
+                                            ? AppColors.brandGreenDark
+                                            : AppColors.brandBlue,
+                                        size: 18,
+                                      ),
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
