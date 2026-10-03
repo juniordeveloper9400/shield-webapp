@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/module/patients/patient_book.dart';
+import 'package:shield/module/prescription/prescription_copy.dart';
 import 'package:shield/module/prescription/prescription_form_sheet.dart';
 import 'package:shield/module/prescription/prescription_record.dart';
 import 'package:shield/module/prescription/upload_prescription_screen.dart';
@@ -208,6 +209,26 @@ void main() {
         book.attachImage(record.id, second);
 
         expect(record.image, first);
+      },
+    );
+  });
+
+  group('the delivery-details card', () {
+    testWidgets(
+      'is gone from the list — the address is asked for at checkout instead',
+      (tester) async {
+        book.add(patient: _patient, fileName: 'script.jpg');
+        await pump(tester);
+
+        // copy.deliveryDetails itself is not a safe marker here — the
+        // per-record "where does this one ship" row on PrescriptionDetailCard
+        // uses the same title for an unrelated, still-live feature. The
+        // intro line and the two actions were unique to the removed
+        // standalone card.
+        const copy = PrescriptionCopy.english;
+        expect(find.text(copy.deliveryDetailsIntro), findsNothing);
+        expect(find.text(copy.addDeliveryAddress), findsNothing);
+        expect(find.text(copy.changeAddress), findsNothing);
       },
     );
   });
