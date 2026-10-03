@@ -195,6 +195,13 @@ class Purchase {
   /// calls "Processed".
   final DateTime? reviewedAt;
 
+  /// "Convert to bill →" in the admin console — `convertedToBillAt` on each
+  /// `GET /v1/member/orders` row. Null until then. This, not whether a
+  /// priced [billStatus] row exists yet (pricing is its own later step), is
+  /// what the console counts as reaching "Billing" (`orderLifecycle.ts`),
+  /// and what [stage] reads for the same reason.
+  final DateTime? convertedToBillAt;
+
   const Purchase({
     required this.id,
     required this.placedOn,
@@ -214,20 +221,22 @@ class Purchase {
     this.billedAt,
     this.storeContactedAt,
     this.reviewedAt,
+    this.convertedToBillAt,
   });
 
   /// The furthest stage the order has reached — see [OrderStage].
   ///
   /// Cancelled and delivered come straight from the order's status. Below
-  /// that, a bill row (`billStatus` is only ever non-null once the store has
-  /// sent one) means [OrderStage.billed], and a contact stamp or review save
-  /// — or an order already out for delivery, which the store obviously
-  /// handled — means [OrderStage.storeContact]. Reading the *furthest* signal
-  /// means an order billed without anyone pressing Call still shows as
-  /// billed, never stuck.
+  /// that, "Convert to bill →" having been clicked means [OrderStage.billed]
+  /// — the same milestone the console itself counts, not whether a priced
+  /// bill has actually been sent yet — and a contact stamp or review save —
+  /// or an order already out for delivery, which the store obviously
+  /// handled — means [OrderStage.storeContact]. Reading the *furthest*
+  /// signal means an order billed without anyone pressing Call still shows
+  /// as billed, never stuck.
   OrderStage get stage => OrderStage.derive(
     status: status,
-    billed: billStatus != null,
+    billed: convertedToBillAt != null,
     contacted: storeContactedAt != null || reviewedAt != null,
   );
 
@@ -267,6 +276,7 @@ class Purchase {
     billedAt: billedAt ?? this.billedAt,
     storeContactedAt: storeContactedAt,
     reviewedAt: reviewedAt,
+    convertedToBillAt: convertedToBillAt,
   );
 
   /// Whether the store has actually sent an invoice picture for this order —
@@ -356,6 +366,7 @@ class Purchase {
       // predates migration 0045) — DateTime.tryParse('') is null too.
       storeContactedAt: DateTime.tryParse(str(row['storeContactedAt']))?.toLocal(),
       reviewedAt: DateTime.tryParse(str(row['reviewedAt']))?.toLocal(),
+      convertedToBillAt: DateTime.tryParse(str(row['convertedToBillAt']))?.toLocal(),
     );
   }
 }

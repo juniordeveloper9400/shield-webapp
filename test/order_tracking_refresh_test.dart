@@ -15,6 +15,7 @@ void main() {
       Purchase order(
         OrderStatus status, {
         DateTime? contactedAt,
+        DateTime? convertedToBillAt,
         OrderPaymentStatus? billStatus,
         int? billAmount,
       }) => Purchase(
@@ -25,6 +26,7 @@ void main() {
         paidTotal: 0,
         status: status,
         storeContactedAt: contactedAt,
+        convertedToBillAt: convertedToBillAt,
         billStatus: billStatus,
         billAmount: billAmount,
       );
@@ -56,11 +58,12 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('20 Sep'), findsOneWidget);
 
-      // The store sends a bill.
+      // Staff convert the order to a bill.
       service.updateOne(
         order(
           OrderStatus.processing,
           contactedAt: DateTime(2026, 9, 20),
+          convertedToBillAt: DateTime(2026, 9, 21),
           billStatus: OrderPaymentStatus.pending,
           billAmount: 100,
         ),

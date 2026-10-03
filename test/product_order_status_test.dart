@@ -8,6 +8,7 @@ void main() {
     OrderStatus status, {
     int paid = 0,
     DateTime? contactedAt,
+    DateTime? convertedToBillAt,
     OrderPaymentStatus? billStatus,
     int? billAmount,
     OrderKind kind = OrderKind.standard,
@@ -20,6 +21,7 @@ void main() {
     status: status,
     kind: kind,
     storeContactedAt: contactedAt,
+    convertedToBillAt: convertedToBillAt,
     billStatus: billStatus,
     billAmount: billAmount,
   );
@@ -68,6 +70,9 @@ void main() {
         order(
           OrderStatus.processing,
           contactedAt: contacted,
+          // "Convert to bill →" is what actually reaches Billing — a priced
+          // bill can (and usually does) land later, as its own step.
+          convertedToBillAt: DateTime(2026, 9, 20),
           billStatus: OrderPaymentStatus.pending,
           billAmount: 450,
         ),
@@ -84,6 +89,7 @@ void main() {
     final paid = OrderTrack(
       order(
         OrderStatus.processing,
+        convertedToBillAt: DateTime(2026, 9, 20),
         billStatus: OrderPaymentStatus.paid,
         billAmount: 450,
       ),
@@ -91,10 +97,21 @@ void main() {
     expect(paid.subhead, '₹450 · Paid');
   });
 
+  test('converting to a bill reaches Billing before any bill is actually '
+      'priced or sent', () {
+    final track = OrderTrack(
+      order(OrderStatus.processing, convertedToBillAt: DateTime(2026, 9, 20)),
+    );
+    expect(track.stage, OrderStage.billed);
+    expect(current(track), 'Billing');
+    expect(track.subhead, 'Order ADMIN-STATUS-1');
+  });
+
   test('completing the order clears every stage', () {
     final track = OrderTrack(
       order(
         OrderStatus.delivered,
+        convertedToBillAt: DateTime(2026, 9, 20),
         billStatus: OrderPaymentStatus.paid,
         billAmount: 450,
       ),
@@ -113,6 +130,7 @@ void main() {
       OrderTrack(
         order(
           OrderStatus.outForDelivery,
+          convertedToBillAt: DateTime(2026, 9, 20),
           billStatus: OrderPaymentStatus.pending,
           billAmount: 100,
         ),
@@ -126,6 +144,7 @@ void main() {
       order(
         OrderStatus.cancelled,
         contactedAt: DateTime(2026, 9, 20),
+        convertedToBillAt: DateTime(2026, 9, 20),
         billStatus: OrderPaymentStatus.pending,
         billAmount: 100,
       ),
@@ -181,6 +200,16 @@ void main() {
       expect(Purchase.fromRow(row()).stage, OrderStage.placed);
       final missing = row()..remove('storeContactedAt');
       expect(Purchase.fromRow(missing).stage, OrderStage.placed);
+    });
+
+    test('reads convertedToBillAt from the orders list row', () {
+      final billed = Purchase.fromRow({
+        ...row(),
+        'convertedToBillAt': '2026-09-20T10:15:00.000Z',
+      });
+      expect(billed.convertedToBillAt, isNotNull);
+      expect(billed.stage, OrderStage.billed);
+      expect(Purchase.fromRow(row()).convertedToBillAt, isNull);
     });
 
     test('shows the exact time the order was placed, in the device time zone', () {

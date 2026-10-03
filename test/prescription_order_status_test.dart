@@ -82,14 +82,14 @@ void main() {
     });
 
     test('Track order and a prescription card agree about the same order', () {
-      const purchase = Purchase(
+      final purchase = Purchase(
         id: 'RX-1',
         placedOn: 'x',
         itemCount: 1,
         mrpTotal: 0,
         paidTotal: 0,
         status: OrderStatus.processing,
-        billStatus: OrderPaymentStatus.pending,
+        convertedToBillAt: DateTime(2026, 9, 20),
       );
 
       expect(purchase.stage, OrderStage.billed);
