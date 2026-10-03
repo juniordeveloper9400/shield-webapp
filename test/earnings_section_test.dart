@@ -370,34 +370,58 @@ void main() {
   });
 
   group('the orders screen reads the same book', () {
-    testWidgets('lists every order, with what each one saved', (tester) async {
-      tester.view.physicalSize = const Size(400, 1400);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    testWidgets(
+      'lists every order, with no "Saved" badge — seedSampleOrders carries '
+      'no bill discount, only an mrpTotal/paidTotal gap',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
 
-      await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
-      await tester.pumpAndSettle();
+        await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+        await tester.pumpAndSettle();
 
-      for (final order in PurchaseService.instance.purchases) {
-        expect(find.text(order.id), findsOneWidget, reason: order.id);
-      }
+        for (final order in PurchaseService.instance.purchases) {
+          expect(find.text(order.id), findsOneWidget, reason: order.id);
+        }
 
-      final counted = PurchaseService.instance.purchases.where(
-        (order) => order.status.counts,
-      );
-      for (final order in counted) {
-        expect(
-          find.text('Saved ${order.savedLabel}'),
-          findsOneWidget,
-          reason: order.id,
+        // None of these orders has actually been discounted at billing
+        // time, so the badge — gated on Purchase.billDiscount, never the
+        // checkout-time mrpTotal/paidTotal gap — shows on none of them.
+        expect(find.textContaining('Saved ₹'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'shows "Saved" only for an order the store actually billed with a '
+      'discount, reading the real figure, not the printed-price gap',
+      (tester) async {
+        tester.view.physicalSize = const Size(400, 1400);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        // mrpTotal 1686 / paidTotal 1248 would gap ₹438 on its own — give it
+        // a different, real bill discount instead, so a test that passed by
+        // coincidence (the two figures matching) can't hide this not
+        // actually reading billDiscount.
+        final discounted = _billedOrder(
+          id: 'SHD-100482',
+          billAmount: 1248,
+          billDiscount: 300,
         );
-      }
+        PurchaseService.instance.updateOne(discounted);
 
-      final cancelled = PurchaseService.instance.purchases.firstWhere(
-        (order) => order.status == OrderStatus.cancelled,
-      );
-      expect(find.text('Saved ${cancelled.savedLabel}'), findsNothing);
-    });
+        await tester.pumpWidget(const MaterialApp(home: OrdersScreen()));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Saved ${discounted.billDiscountLabel}'), findsOneWidget);
+        expect(find.text('Saved ₹438'), findsNothing);
+
+        // Every other order (including the cancelled one) still carries no
+        // bill discount, so still no badge for any of them.
+        expect(find.textContaining('Saved ₹'), findsOneWidget);
+      },
+    );
   });
 }
 

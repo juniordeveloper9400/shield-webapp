@@ -197,9 +197,12 @@ class _OrderCard extends StatelessWidget {
               color: _priced ? AppColors.textDark : AppColors.textMuted,
             ),
           ),
-          if (order.status.counts && order.saved > 0)
+          // A real discount the store gave at billing time — never the
+          // checkout-time MRP-vs-paid gap, which is a catalog price, not
+          // something billing ever actually granted. See Purchase.billDiscount.
+          if (order.status.counts && order.billDiscount > 0)
             Text(
-              'Saved ${order.savedLabel}',
+              'Saved ${order.billDiscountLabel}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
