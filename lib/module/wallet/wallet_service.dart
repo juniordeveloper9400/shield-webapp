@@ -561,7 +561,41 @@ class WalletService extends ChangeNotifier {
     return total;
   }
 
-  int get monthlyRedeemable => monthlyRedeemableOn(DateTime.now());
+  /// "Redeemable" on the wallet card: everything released so far, carry-
+  /// forward from earlier months included, less whatever plan spending
+  /// happened *before* the month [asOf] falls in (that month's own spending
+  /// is [redeemedThisMonth], shown — and subtracted — separately, right next
+  /// to it). Not [monthlyRedeemableOn] — that answers a narrower question
+  /// (which cards have come round to release a *fresh* twelfth today) and
+  /// stays exactly as it was for the card-pooling-by-due-date rule it exists
+  /// for; this is the number that actually belongs under the "Monthly
+  /// allowance + carry-forward" heading, so a member is never shown ₹0
+  /// redeemable while a real, unused balance from an earlier month is
+  /// sitting right there.
+  ///
+  /// Floored at zero the same way [availableAllowanceOn] is: an allowance
+  /// already spent past, in an earlier month, does not go negative here
+  /// either. Deliberately *not* also capped at [balance] — unlike
+  /// [monthlyBalance] (what is actually left to spend *right now*), this is
+  /// the size of the allowance pool itself, which a part-spent balance does
+  /// not shrink.
+  int redeemableAllowanceOn(DateTime asOf) {
+    final releasedAllTime = _cards.fold<int>(
+      0,
+      (sum, card) => sum + card.releasedBy(asOf),
+    );
+    final monthStart = DateTime(asOf.year, asOf.month);
+    final spentBeforeThisMonth = planDebitsThrough(
+      _entries.reversed.map(
+        (e) => (kind: e.kind, amount: e.amount, occurredOn: e.occurredOn),
+      ),
+      monthStart.subtract(const Duration(days: 1)),
+    );
+    final redeemable = releasedAllTime - spentBeforeThisMonth;
+    return redeemable < 0 ? 0 : redeemable;
+  }
+
+  int get monthlyRedeemable => redeemableAllowanceOn(DateTime.now());
 
   /// The cards drawable right now, and the ones still waiting on their day.
   List<WalletCard> activeCardsOn(DateTime asOf) => [
