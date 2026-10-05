@@ -5,7 +5,6 @@ import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'data/backend/backend_http.dart';
-import 'data/neon/neon_http.dart';
 import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/agent/agent_geo.dart';
@@ -109,20 +108,11 @@ Future<void> main() async {
   // this exists instead of relying solely on the repo's GitHub Actions cron.
   BackendHttp.instance.keepWarm();
 
-  // One line at launch — via dart:developer so it survives a release build —
-  // saying whether the Neon write-through is live. A build started without
-  // --dart-define-from-file=.env leaves every member write a silent no-op, and
-  // that used to look like data that just never saved.
-  if (!NeonHttp.isConfigured) {
-    NeonHttp.log('DATABASE_URL not set at build time — sign-in / registration '
-        'will not be saved. Build with --dart-define-from-file=.env');
-  } else {
-    NeonHttp.instance.ping().then(
-          (_) => NeonHttp.log('connected — sign-in / registration will save'),
-          onError: (Object e) =>
-              NeonHttp.log('endpoint unreachable — writes will be dropped',
-                  error: e),
-        );
+  // The app talks to backend/api only. Log whether it is configured, so a
+  // build started without BACKEND_API_BASE_URL is obvious in the logs.
+  if (!BackendHttp.isConfigured) {
+    BackendHttp.log('BACKEND_API_BASE_URL not set at build time — sign-in, '
+        'registration and the member account will not reach the server.');
   }
 
   runApp(const ShieldApp());

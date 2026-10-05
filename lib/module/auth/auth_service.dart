@@ -4,7 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 
 import '../../data/backend/backend_session.dart';
-import '../../data/neon/member_repository.dart';
+import '../../data/backend/member_repository.dart';
 import '../location/address_book.dart';
 import '../persona/persona_service.dart';
 import '../registration/registration_service.dart';
