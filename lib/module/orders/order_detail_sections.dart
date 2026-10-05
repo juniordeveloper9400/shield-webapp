@@ -594,9 +594,10 @@ class CancelOrderCard extends StatelessWidget {
         ],
       ),
     );
-    if ((yes ?? false) && context.mounted) {
-      _toast(context, 'Cancellation request submitted for ${order.id}');
-    }
+    if (!(yes ?? false) || !context.mounted) return;
+    final error = await PurchaseService.instance.cancelOrder(order);
+    if (!context.mounted) return;
+    _toast(context, error ?? 'Order ${order.id} was cancelled');
   }
 
   @override
@@ -632,6 +633,36 @@ class CancelOrderCard extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Shown in place of [CancelOrderCard] once the store has started on an order:
+/// the member can no longer cancel it here, the store can.
+class CancelLockedCard extends StatelessWidget {
+  const CancelLockedCard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const _PlainCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.lock_outline_rounded, size: 18, color: AppColors.textMuted),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'The store has started on this order, so it can no longer be '
+              'cancelled here. To change or cancel it, please contact the store.',
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.35,
+                color: AppColors.textMuted,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

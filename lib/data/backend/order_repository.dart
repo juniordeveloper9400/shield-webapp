@@ -144,6 +144,29 @@ class OrderRepository {
 
   bool get isAvailable => BackendHttp.isConfigured;
 
+  /// What the member is told when the store has already started on an order.
+  static const String lockedMessage =
+      'The store has already started on this order, so it can no longer be '
+      'cancelled from the app. Please contact the store.';
+
+  /// Cancels the caller's own order (`POST /v1/member/orders/:id/cancel`).
+  /// Null on success, else the reason — a 409 `ORDER_LOCKED` means the store
+  /// has touched it since this screen last loaded.
+  Future<String?> cancelOrder(int backendId) async {
+    try {
+      await BackendHttp.instance.request(
+        'POST',
+        '/v1/member/orders/$backendId/cancel',
+      );
+      return null;
+    } on BackendHttpException catch (error) {
+      if (error.isConflict) return error.message;
+      return 'Could not cancel this order. Check your connection and try again.';
+    } catch (_) {
+      return 'Could not cancel this order. Check your connection and try again.';
+    }
+  }
+
   /// `code` (`'wallet'`/`'cash'`) → the backend's numeric `payment_method.id`
   /// — resolved once against the public catalogue and cached, the same
   /// pattern `WalletRepository._tierIdCache` uses for membership tiers. The

@@ -240,6 +240,16 @@ class Purchase {
     contacted: storeContactedAt != null || reviewedAt != null,
   );
 
+  /// Whether the member may still cancel this order from the app: the store
+  /// has not touched it (no review, contact, bill or price), nothing has been
+  /// paid and it is still processing. After that the store cancels it from the
+  /// admin console. The backend enforces the same rule (`ORDER_LOCKED`).
+  bool get canMemberCancel =>
+      stage == OrderStage.placed &&
+      status == OrderStatus.processing &&
+      paymentStatus != OrderPaymentStatus.paid &&
+      billAmount == null;
+
   /// `₹450` — what the store billed, or null before a bill has a price.
   String? get billLabel =>
       billAmount == null ? null : '₹${formatRupees(billAmount!)}';
@@ -257,13 +267,14 @@ class Purchase {
     String? billImage,
     BillInvoice? billInvoice,
     DateTime? billedAt,
+    OrderStatus? status,
   }) => Purchase(
     id: id,
     placedOn: placedOn,
     itemCount: itemCount,
     mrpTotal: mrpTotal,
     paidTotal: paidTotal,
-    status: status,
+    status: status ?? this.status,
     kind: kind,
     backendId: backendId,
     fulfillmentType: fulfillmentType,
@@ -449,6 +460,13 @@ class LinkedOrder {
     billed: billed,
     contacted: storeContactedAt != null || reviewedAt != null,
   );
+
+  /// Whether the prescription this order came from may still be deleted by the
+  /// member: the store has not touched the order, or it was cancelled. Once it
+  /// has been reviewed, contacted, billed or completed only the store can
+  /// remove it. The backend enforces the same rule (`ORDER_LOCKED`).
+  bool get allowsMemberDelete =>
+      status == OrderStatus.cancelled || stage == OrderStage.placed;
 
   @override
   bool operator ==(Object other) =>
@@ -734,6 +752,27 @@ class PurchaseService extends ChangeNotifier {
   /// debit has gone through, so the screen it was tapped from reflects the
   /// payment without waiting on the next [refresh]. A no-op when [updated]
   /// is not (by id) an order already on file.
+  /// Cancels [order] on the member's behalf. Null on success, else the reason
+  /// (the backend's own when the store has already started on it). On success
+  /// the order flips to cancelled locally and the list is refreshed.
+  Future<String?> cancelOrder(Purchase order) async {
+    final backendId = order.backendId;
+    if (backendId == null) {
+      return 'This order has not synced yet — pull to refresh and try again.';
+    }
+    if (!order.canMemberCancel) {
+      return OrderRepository.lockedMessage;
+    }
+    final error = await OrderRepository.instance.cancelOrder(backendId);
+    if (error != null) {
+      unawaited(refresh());
+      return error;
+    }
+    updateOne(order.copyWith(status: OrderStatus.cancelled));
+    unawaited(refresh());
+    return null;
+  }
+
   void updateOne(Purchase updated) {
     final index = _purchases.indexWhere((p) => p.id == updated.id);
     if (index == -1) {

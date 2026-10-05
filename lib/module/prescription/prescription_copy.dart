@@ -146,6 +146,9 @@ class PrescriptionCopy {
   };
 
   final String delete;
+
+  /// Shown instead of Delete once the store has started on the order.
+  final String deleteLockedNote;
   final String reorder;
   final String prescriptionRemoved;
   final String deleteFailedMessage;
@@ -245,6 +248,7 @@ class PrescriptionCopy {
     required this.statusRead,
     required this.statusOrdered,
     required this.delete,
+    required this.deleteLockedNote,
     required this.reorder,
     required this.prescriptionRemoved,
     required this.deleteFailedMessage,
@@ -390,6 +394,8 @@ class PrescriptionCopy {
     statusRead: 'Read',
     statusOrdered: 'Ordered',
     delete: 'Delete',
+    deleteLockedNote:
+        'The store has started on this order — it can no longer be deleted here.',
     reorder: 'Reorder',
     prescriptionRemoved: 'Prescription removed',
     deleteFailedMessage:
@@ -542,6 +548,8 @@ class PrescriptionCopy {
     statusRead: 'വായിച്ചു',
     statusOrdered: 'ഓർഡർ ചെയ്തു',
     delete: 'ഇല്ലാതാക്കുക',
+    deleteLockedNote:
+        'സ്റ്റോർ ഈ ഓർഡർ ആരംഭിച്ചു — ഇനി ഇത് ഇവിടെ ഇല്ലാതാക്കാൻ കഴിയില്ല.',
     reorder: 'വീണ്ടും ഓർഡർ ചെയ്യുക',
     prescriptionRemoved: 'കുറിപ്പടി നീക്കി',
     deleteFailedMessage: 'ഇത് ഇല്ലാതാക്കാനായില്ല — കണക്ഷൻ പരിശോധിച്ച് വീണ്ടും ശ്രമിക്കുക.',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../location/address_book.dart';
+import '../orders/purchase_service.dart';
 import '../location/address_selection_screen.dart';
 import 'prescription_copy.dart';
 import 'prescription_image_view.dart';
@@ -205,11 +206,27 @@ class _PrescriptionDetailCardState extends State<PrescriptionDetailCard> {
               ],
             ),
           ),
-          _CardFooter(
-            deleteLabel: copy.delete,
-            onDelete: widget.onDelete,
-            reorderLabel: copy.reorder,
-            onReorder: record.ordered ? widget.onReorder : null,
+          ListenableBuilder(
+            listenable: PurchaseService.instance,
+            builder: (context, _) {
+              // Deletable until the store starts on the order it was placed
+              // into; the backend refuses it after that too (ORDER_LOCKED).
+              final purchase = PurchaseService.instance.purchaseFor(
+                record.order,
+              );
+              final canDelete = purchase != null
+                  ? purchase.status == OrderStatus.cancelled ||
+                        purchase.canMemberCancel
+                  : (record.order?.allowsMemberDelete ?? true);
+              return _CardFooter(
+                canDelete: canDelete,
+                lockedNote: copy.deleteLockedNote,
+                deleteLabel: copy.delete,
+                onDelete: widget.onDelete,
+                reorderLabel: copy.reorder,
+                onReorder: record.ordered ? widget.onReorder : null,
+              );
+            },
           ),
         ],
       ),
@@ -800,12 +817,16 @@ class _IntakeLegend extends StatelessWidget {
 /// has actually been placed for this script — a way to place another one
 /// without uploading it again.
 class _CardFooter extends StatelessWidget {
+  final bool canDelete;
+  final String lockedNote;
   final String deleteLabel;
   final VoidCallback onDelete;
   final String reorderLabel;
   final VoidCallback? onReorder;
 
   const _CardFooter({
+    required this.canDelete,
+    required this.lockedNote,
     required this.deleteLabel,
     required this.onDelete,
     required this.reorderLabel,
@@ -822,24 +843,51 @@ class _CardFooter extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(6, 4, 8, 4),
       child: Row(
         children: [
-          TextButton.icon(
-            onPressed: onDelete,
-            icon: const Icon(Icons.delete_outline_rounded, size: 18),
-            label: Text(
-              deleteLabel,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            style: TextButton.styleFrom(
-              foregroundColor: AppColors.danger,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              textStyle: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
+          if (canDelete)
+            TextButton.icon(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline_rounded, size: 18),
+              label: Text(
+                deleteLabel,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              style: TextButton.styleFrom(
+                foregroundColor: AppColors.danger,
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                textStyle: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            )
+          else
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.lock_outline_rounded,
+                      size: 16,
+                      color: AppColors.textMuted,
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        lockedNote,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          height: 1.3,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
-          const Spacer(),
+          if (canDelete) const Spacer(),
           if (onReorder != null)
             TextButton.icon(
               onPressed: onReorder,

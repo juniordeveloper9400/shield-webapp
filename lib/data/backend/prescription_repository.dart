@@ -236,6 +236,10 @@ class PrescriptionRepository {
   /// — an id that looked fine locally but the backend rejected for a
   /// specific, discoverable reason — actually get diagnosed instead of
   /// staying a guess.
+  /// Marks a [softDelete] refusal because the store has already started on the
+  /// order — the rest of the string is the message to show the member.
+  static const String lockedPrefix = 'LOCKED:';
+
   Future<String?> softDelete(String id) async {
     if (!BackendHttp.isConfigured) {
       if (NeonHttp.isConfigured) {
@@ -263,6 +267,12 @@ class PrescriptionRepository {
     try {
       await BackendHttp.instance.request('DELETE', '/v1/member/prescriptions/$id');
       return null;
+    } on BackendHttpException catch (error) {
+      // 409 ORDER_LOCKED: the store has started on the order this script was
+      // placed into, so only the store can remove it now.
+      if (error.isConflict) return '$lockedPrefix${error.message}';
+      BackendHttp.log('PrescriptionRepository.softDelete failed', error: error);
+      return error.toString();
     } catch (error) {
       BackendHttp.log('PrescriptionRepository.softDelete failed', error: error);
       return error.toString();

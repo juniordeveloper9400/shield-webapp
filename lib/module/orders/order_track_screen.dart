@@ -154,9 +154,13 @@ class _OrderTrackScreenState extends State<OrderTrackScreen>
                   // bare gap floating above DeliverToCard.
                   OrderItemsCard(order: order),
                 DeliverToCard(order: order),
-                if (order.status == OrderStatus.processing) ...[
+                if (order.canMemberCancel) ...[
                   const SizedBox(height: 14),
                   CancelOrderCard(order: order),
+                ] else if (order.status == OrderStatus.processing ||
+                    order.status == OrderStatus.outForDelivery) ...[
+                  const SizedBox(height: 14),
+                  const CancelLockedCard(),
                 ],
                 const SizedBox(height: 14),
                 const NeedHelpCard(),

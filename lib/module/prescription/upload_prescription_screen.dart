@@ -341,7 +341,12 @@ class _UploadPrescriptionScreenState extends State<UploadPrescriptionScreen> {
           final isNotFound = error.contains('404') || error.contains('Not Found');
           if (!isNotFound) {
             _deletedRemoteIds.remove(remoteId);
-            _say('${_copy.deleteFailedMessage} ($error)');
+            if (error.startsWith(PrescriptionRepository.lockedPrefix)) {
+              _say(error.substring(PrescriptionRepository.lockedPrefix.length));
+              unawaited(PurchaseService.instance.refresh());
+            } else {
+              _say('${_copy.deleteFailedMessage} ($error)');
+            }
             return;
           }
         }
