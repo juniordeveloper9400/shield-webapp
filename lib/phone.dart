@@ -50,3 +50,54 @@ class Dialer {
       );
   }
 }
+
+/// Opens a WhatsApp chat with a number, so a member can message the order desk
+/// the way they would call it.
+///
+/// Behind the same kind of seam [Dialer] uses, so a test can see which chat
+/// would open without WhatsApp installed. Reset with [resetForTest] afterwards.
+class WhatsApp {
+  const WhatsApp._();
+
+  @visibleForTesting
+  static Future<bool> Function(Uri uri) opener =
+      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  @visibleForTesting
+  static void resetForTest() => opener =
+      (uri) => launchUrl(uri, mode: LaunchMode.externalApplication);
+
+  /// `https://wa.me/<digits>` — wa.me wants the full international number with
+  /// nothing but digits. A ten-digit Indian number written without its country
+  /// code gets `91` in front.
+  static Uri uriFor(String number) {
+    var digits = number.replaceAll(RegExp(r'[^0-9]'), '');
+    if (digits.length == 10) {
+      digits = '91$digits';
+    }
+    return Uri.parse('https://wa.me/$digits');
+  }
+
+  /// Opens the chat. A failure says so rather than doing nothing.
+  static Future<void> open(BuildContext context, String number) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var opened = false;
+    try {
+      opened = await opener(uriFor(number));
+    } catch (_) {
+      opened = false;
+    }
+    if (opened) {
+      return;
+    }
+
+    messenger
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text('Could not open WhatsApp. Message $number to order.'),
+          backgroundColor: AppColors.textDark,
+        ),
+      );
+  }
+}

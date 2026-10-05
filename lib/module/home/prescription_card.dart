@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../data/backend/contact_repository.dart';
 import '../../phone.dart';
 import '../../theme/app_colors.dart';
 import '../prescription/upload_prescription_screen.dart';
+import '../wallet/wallet_service.dart';
+import '../whatsapp/whatsapp_chooser.dart';
 
 /// Single home card carrying both the prescription upload action and the
 /// call-to-order number. Tapping anywhere opens the upload flow.
@@ -17,6 +20,40 @@ class PrescriptionCard extends StatelessWidget {
   static const String orderCopy =
       'You may place your order through our nearest store, or call us to '
       'order on ';
+
+  /// Who a member can message: each store their active plans were bought at,
+  /// with its own number. With none, the admin desk (or the order line if that
+  /// is not set yet). Two or more opens the chooser, with names and numbers.
+  Future<List<WhatsAppOption>> _whatsAppOptions() async {
+    final options = <WhatsAppOption>[];
+    final seen = <String>{};
+    for (final card in WalletService.instance.cards) {
+      final store = card.store;
+      if (store == null || store.phone.trim().isEmpty || !seen.add(store.id)) {
+        continue;
+      }
+      options.add(WhatsAppOption(name: store.name, number: store.phone));
+    }
+    if (options.isEmpty) {
+      final admin = await ContactRepository.instance.adminWhatsapp();
+      options.add(
+        WhatsAppOption(name: 'Sahakar 360 desk', number: admin ?? orderPhone),
+      );
+    }
+    return options;
+  }
+
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final options = await _whatsAppOptions();
+    if (!context.mounted) {
+      return;
+    }
+    await openWhatsAppChooser(
+      context,
+      title: 'Message on WhatsApp',
+      options: options,
+    );
+  }
 
   void _openUpload(BuildContext context) {
     UploadPrescriptionScreen.open(context);
@@ -136,6 +173,12 @@ class PrescriptionCard extends StatelessWidget {
                         // already the button; a second target would only make
                         // the edges of the chip behave differently.
                         const IgnorePointer(child: _CallChip()),
+                        const SizedBox(width: 8),
+                        // Its own tap target, so it opens WhatsApp rather than
+                        // the card's call row it sits inside.
+                        _WhatsAppChip(
+                          onTap: () => _openWhatsApp(context),
+                        ),
                       ],
                     ),
                   ),
@@ -178,6 +221,40 @@ class _UploadChip extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// The WhatsApp counterpart to [_CallChip]: same size and shape, green, with
+/// its own tap target. Material has no WhatsApp mark, so a chat bubble stands
+/// in for it, labelled for screen readers.
+class _WhatsAppChip extends StatelessWidget {
+  final VoidCallback onTap;
+
+  const _WhatsAppChip({required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: 'Message on WhatsApp to order',
+      child: Material(
+        color: AppColors.brandGreenDeep,
+        borderRadius: BorderRadius.circular(10),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(10),
+          child: const SizedBox(
+            width: 46,
+            height: 42,
+            child: Icon(
+              Icons.chat_rounded,
+              size: 21,
+              color: AppColors.white,
+            ),
+          ),
+        ),
       ),
     );
   }
