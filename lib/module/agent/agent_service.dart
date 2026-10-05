@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/backend/agent_customer_repository.dart';
 import '../../data/backend/agent_repository.dart';
+import '../../data/backend/backend_http.dart';
 import '../../money.dart';
 import '../auth/auth_service.dart';
 import '../wallet/wallet_service.dart';
@@ -71,11 +72,6 @@ class AgentService extends ChangeNotifier {
 
   /// Requests raised in this session, keyed by agent id, oldest first.
   final Map<String, List<WithdrawalRequest>> _requests = {};
-
-  /// Earnings each agent has moved into their Sahakar 360 wallet, keyed by agent
-  /// id. Counts against [withdrawableFor] the same way a paid-out request
-  /// would — the money has left the commission pot either way.
-  final Map<String, int> _movedToWallet = {};
 
   /// Every customer any agent has sold a plan to.
   final List<AgentCustomer> _customers = [...AgentCustomerDirectory.seed];
@@ -770,23 +766,20 @@ class AgentService extends ChangeNotifier {
   /// The total of [agent]'s requests still awaiting payout — held back from
   /// [withdrawableFor] so an amount cannot be asked for twice.
   int pendingFor(Agent agent) => (_requests[agent.id] ?? const [])
-      .where((request) => request.status == WithdrawalStatus.pending)
+      .where((request) => request.isInFlight)
       .fold(0, (sum, request) => sum + request.amount);
 
   int earnedFor(Agent agent) =>
       (agentForPhone(agent.phone) ?? agent).displayEarned;
 
-  /// What [agent] has taken out of the commission pot: paid out on the seed
-  /// data, plus anything moved into the wallet from the portal this session.
-  /// Zero while the agent is still awaiting approval, same as [earnedFor] —
+  /// What [agent] has taken out of the commission pot: paid out, plus
+  /// everything moved into the wallet — both are recorded server-side in
+  /// `app.agent.redeemed`. Zero while the agent is still awaiting approval, same as [earnedFor] —
   /// there is nothing to have taken out of a pot that reads zero.
   int redeemedFor(Agent agent) {
     agent = agentForPhone(agent.phone) ?? agent;
-    return agent.isApproved ? agent.redeemed + movedToWalletFor(agent) : 0;
+    return agent.isApproved ? agent.redeemed : 0;
   }
-
-  /// Commission [agent] has moved into their Sahakar 360 wallet this session.
-  int movedToWalletFor(Agent agent) => _movedToWallet[agent.id] ?? 0;
 
   /// What [agent] could ask to withdraw right now: earned, less what has been
   /// taken out ([redeemedFor]), less what is already in flight. Never negative.
@@ -794,6 +787,18 @@ class AgentService extends ChangeNotifier {
       (earnedFor(agent) - redeemedFor(agent) - pendingFor(agent))
           .clamp(0, earnedFor(agent))
           .toInt();
+
+  /// What [agent] may move into their wallet right now. Unlike
+  /// [withdrawableFor] there is no minimum — any available commission can go
+  /// in — but it is still zero for an agent who is not approved and active, or
+  /// before their pending requests have loaded (so a request already holding
+  /// part of the balance is never overlooked).
+  int walletMovableFor(Agent agent) {
+    final current = agentForPhone(agent.phone) ?? agent;
+    if (!current.active || !current.isApproved) return 0;
+    if (!_withdrawalsLoaded.contains(agent.phone)) return 0;
+    return availableEarningsFor(agent);
+  }
 
   int withdrawableFor(Agent agent) {
     final current = agentForPhone(agent.phone) ?? agent;
@@ -840,6 +845,11 @@ class AgentService extends ChangeNotifier {
     try {
       await AgentRepository.instance.requestWithdrawal(amount);
       _requests[agent.id] = await AgentRepository.instance.fetchWithdrawals();
+    } on BackendHttpException catch (error) {
+      // The server's own refusal (minimum, balance, missing bank account…).
+      return error.isForbidden
+          ? error.message
+          : 'Could not confirm the request. Refresh before trying again.';
     } catch (_) {
       return 'Could not confirm the request. Refresh before trying again.';
     }
@@ -850,20 +860,36 @@ class AgentService extends ChangeNotifier {
   /// Moves [amount] of [agent]'s withdrawable commission into the Sahakar 360
   /// wallet, where it can be spent in the app straight away. Returns null on
   /// success, or the reason it was refused.
-  String? moveEarningsToWallet(Agent agent, int amount) {
+  ///
+  /// The move is made by the backend in one atomic step (agent `redeemed` up,
+  /// wallet balance and ledger line up). Nothing is applied locally first: the
+  /// roster and wallet are re-read afterwards so what the agent sees is what
+  /// was actually saved, and survives a restart.
+  Future<String?> moveEarningsToWallet(Agent agent, int amount) async {
     if (amount <= 0) {
       return 'Enter an amount to add';
     }
-    if (amount > availableEarningsFor(agent)) {
-      return 'Amount exceeds your withdrawable balance';
+    if (amount > walletMovableFor(agent)) {
+      return 'Amount exceeds your available earnings';
     }
 
-    _movedToWallet[agent.id] = movedToWalletFor(agent) + amount;
-    WalletService.instance.creditEarnings(
-      amount: amount,
-      label: 'Agent commission · ${agent.agentCode}',
-    );
-    notifyListeners();
+    try {
+      await AgentRepository.instance.moveEarningsToWallet(amount);
+    } on BackendHttpException catch (error) {
+      return error.isForbidden
+          ? error.message
+          : 'Could not add to your wallet. Please try again.';
+    } catch (_) {
+      return 'Could not add to your wallet. Please try again.';
+    }
+
+    // The money has moved; a failed refresh only means the screen catches up on
+    // the next poll, never that the transfer needs repeating.
+    await refreshWithdrawals(agent);
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone != null) {
+      unawaited(WalletService.instance.refreshFromDatabase(phone));
+    }
     return null;
   }
 
@@ -949,7 +975,6 @@ class AgentService extends ChangeNotifier {
     _customerLoader = null;
     _withdrawalsLoaded.clear();
     _requests.clear();
-    _movedToWallet.clear();
     _agents
       ..clear()
       ..addAll(AgentDirectory.seed);

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import '../../module/agent/agent_directory.dart';
 import '../../module/agent/agent_model.dart';
 import 'backend_http.dart';
@@ -70,6 +72,31 @@ class AgentRepository {
     );
   }
 
+  /// Moves [amount] of the caller's available earnings into their Sahakar 360
+  /// wallet (`POST /v1/agent/wallet-transfers`). One atomic server-side step;
+  /// the key makes a retried tap move the money once. Throws
+  /// [BackendHttpException] with the server's reason when it is refused.
+  Future<void> moveEarningsToWallet(int amount) async {
+    await BackendHttp.instance.request(
+      'POST',
+      '/v1/agent/wallet-transfers',
+      body: {'amount': amount},
+      headers: {'Idempotency-Key': _newIdempotencyKey()},
+    );
+  }
+
+  static String _newIdempotencyKey() {
+    final random = Random.secure();
+    final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+    bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+    bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
+    String hex(int start, int end) => bytes
+        .sublist(start, end)
+        .map((b) => b.toRadixString(16).padLeft(2, '0'))
+        .join();
+    return '${hex(0, 4)}-${hex(4, 6)}-${hex(6, 8)}-${hex(8, 10)}-${hex(10, 16)}';
+  }
+
   Future<List<WithdrawalRequest>> fetchWithdrawals() async {
     final rows =
         await BackendHttp.instance.request('GET', '/v1/agent/withdrawals')
@@ -79,11 +106,17 @@ class AgentRepository {
       return WithdrawalRequest(
         amount: num.parse(row['amount'].toString()).toInt(),
         requestedOn: DateTime.parse(row['requestedOn'].toString()),
+        // `app.withdrawal_status` has no APPROVED value: an approved request is
+        // still PENDING with `approvedAt` set (see migration 0059).
         status: switch (row['status']) {
           'PAID' => WithdrawalStatus.paid,
           'REJECTED' => WithdrawalStatus.rejected,
-          _ => WithdrawalStatus.pending,
+          _ =>
+            row['approvedAt'] != null
+                ? WithdrawalStatus.approved
+                : WithdrawalStatus.pending,
         },
+        note: (row['note'] ?? '').toString(),
       );
     }).toList();
   }

@@ -348,6 +348,10 @@ class Agent {
 /// seeded history can show a settled and a bounced one.
 enum WithdrawalStatus {
   pending('Pending'),
+
+  /// Verified by an admin (after an OTP check with the agent) and waiting
+  /// only for the bank transfer. The amount stays reserved, like [pending].
+  approved('Approved'),
   paid('Paid'),
   rejected('Rejected');
 
@@ -363,9 +367,17 @@ class WithdrawalRequest {
   final DateTime requestedOn;
   final WithdrawalStatus status;
 
+  /// The reviewer's note — the reason, when [status] is rejected.
+  final String note;
+
   const WithdrawalRequest({
     required this.amount,
     required this.requestedOn,
     this.status = WithdrawalStatus.pending,
+    this.note = '',
   });
+
+  /// Still holds back [amount] from what the agent can withdraw.
+  bool get isInFlight =>
+      status == WithdrawalStatus.pending || status == WithdrawalStatus.approved;
 }

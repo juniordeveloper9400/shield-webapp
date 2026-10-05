@@ -112,12 +112,12 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
 
   Future<void> _openAddToWallet() async {
     final messenger = ScaffoldMessenger.of(context);
-    final withdrawable = AgentService.instance.withdrawableFor(widget.agent);
+    final movable = AgentService.instance.walletMovableFor(widget.agent);
     final added = await _openAmountSheet(
       _AmountSheet(
         title: 'Add cash to wallet',
         subtitle:
-            'Available ₹${formatRupees(withdrawable)} · moves into your Sahakar 360 '
+            'Available ₹${formatRupees(movable)} · moves into your Sahakar 360 '
             'wallet straight away',
         actionLabel: 'Add to wallet',
         emptyError: 'Enter an amount to add',
@@ -144,6 +144,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
         final withdrawable = AgentService.instance.withdrawableFor(
           widget.agent,
         );
+        final movable = AgentService.instance.walletMovableFor(widget.agent);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -215,7 +216,7 @@ class _AgentEarningsCardState extends State<AgentEarningsCard>
                 const SizedBox(width: 10),
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: withdrawable > 0 ? _openAddToWallet : null,
+                    onPressed: movable > 0 ? _openAddToWallet : null,
                     style: OutlinedButton.styleFrom(
                       foregroundColor: AppColors.brandBlue,
                       disabledForegroundColor: AppColors.textMuted,
@@ -430,6 +431,7 @@ class _RequestRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final colour = switch (request.status) {
       WithdrawalStatus.pending => AppColors.planWaiting,
+      WithdrawalStatus.approved => AppColors.planWaiting,
       WithdrawalStatus.paid => AppColors.planActive,
       WithdrawalStatus.rejected => AppColors.dangerLine,
     };
@@ -456,6 +458,19 @@ class _RequestRow extends StatelessWidget {
                   'Raised ${formatDate(request.requestedOn)}',
                   style: _ink(11, FontWeight.w500, color: _muted),
                 ),
+                if (request.status == WithdrawalStatus.approved)
+                  Text(
+                    'Verified · awaiting bank transfer',
+                    style: _ink(10.5, FontWeight.w500, color: _muted),
+                  ),
+                if (request.status == WithdrawalStatus.rejected &&
+                    request.note.isNotEmpty)
+                  Text(
+                    request.note,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: _ink(10.5, FontWeight.w500, color: _muted),
+                  ),
               ],
             ),
           ),
