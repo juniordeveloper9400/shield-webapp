@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 
 import '../../theme/app_colors.dart';
+import '../refer/invite_link.dart';
 import 'agent_direct_sale.dart';
 import 'agent_earnings_card.dart';
 import 'agent_model.dart';
@@ -336,10 +337,14 @@ class _AgentInviteButton extends StatelessWidget {
           await SharePlus.instance.share(
             ShareParams(
               subject: 'My Sahakar 360 agent code',
+              // The install link carries the agent code as its referrer, so the
+              // friend's registration form fills it in automatically on first
+              // launch (see InstallReferrer / registration_screen.dart). The
+              // code is still spelled out, in case they install some other way.
               text:
-                  "I'm a Sahakar 360 agent — ${agent.name}. Enter my agent code "
-                  '${agent.agentCode} when you check out on the Sahakar 360 app '
-                  'so your order is placed through me.',
+                  "I'm a Sahakar 360 agent — ${agent.name}. Install the Sahakar 360 "
+                  'app with this link and your agent code ${agent.agentCode} is '
+                  'filled in for you: ${inviteLinkFor(agent.agentCode)}',
             ),
           );
         } on Exception {

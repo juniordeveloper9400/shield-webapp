@@ -44,6 +44,15 @@ void main() {
       final referrer = link.queryParameters['referrer'];
       expect(inviteCodeFrom(referrer), 'SAHAKAR-8580');
     });
+
+    test('an agent code round-trips through the install link like a member code', () {
+      // The agent portal's Invite button shares this link, so an agent's
+      // printed SHD-… code must survive the trip to the registration form.
+      const agentCode = 'SHD-KER-01-8580';
+      final link = inviteLinkFor(agentCode);
+      expect(link.queryParameters['referrer'], agentCode);
+      expect(inviteCodeFrom(link.queryParameters['referrer']), agentCode);
+    });
   });
 
   group('InstallReferrer', () {
