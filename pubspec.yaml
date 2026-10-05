@@ -54,6 +54,7 @@ dependencies:
   # Also used by tool/whiten_product_backgrounds.dart.
   image: ^4.5.4
   sentry_flutter: ^8.14.2
+  android_play_install_referrer: ^0.4.0
 
 dev_dependencies:
   flutter_test:

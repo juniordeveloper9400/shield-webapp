@@ -7,6 +7,7 @@ import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../privilege/privilege_tier.dart';
+import 'invite_link.dart';
 import 'journey_map.dart';
 import 'referral_level.dart';
 import 'referral_service.dart';
@@ -743,7 +744,8 @@ class _InviteButton extends StatelessWidget {
                     subject: 'Join me on Sahakar 360',
                     text:
                         'Join me on Sahakar 360! Save up to 51% on medicines and unlock Health Pass membership. '
-                        'Use my invite code $code when you sign up.',
+                        'Use my invite code $code when you sign up.\n'
+                        '${inviteLinkFor(code)}',
                   ),
                 );
               } on Exception {

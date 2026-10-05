@@ -10,6 +10,7 @@ import '../../theme/app_colors.dart';
 import '../../widgets/age_badge.dart';
 import '../../widgets/labelled_field.dart';
 import '../auth/auth_service.dart';
+import '../refer/invite_link.dart';
 import 'registration_celebration.dart';
 import 'registration_service.dart';
 import 'store_map_picker.dart';
@@ -111,12 +112,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
       return;
     }
     final phone = AuthService.instance.currentUser.value?.phone;
-    if (phone == null || phone.isEmpty) {
-      return;
+    if (phone != null && phone.isNotEmpty) {
+      final code = await ReferralRepository.instance.usedCodeFor(phone);
+      if (code != null) {
+        if (mounted && _referralCode.text.isEmpty) {
+          setState(() => _referralCode.text = code);
+        }
+        return;
+      }
     }
-    final code = await ReferralRepository.instance.usedCodeFor(phone);
-    if (code != null && mounted && _referralCode.text.isEmpty) {
-      setState(() => _referralCode.text = code);
+    // A member who came in through a friend's invite link already has that
+    // friend's code here — read off the install (Play's referrer) or the link
+    // they opened on the web. Only for a first registration: editing an
+    // existing profile is not the moment to attach a referrer.
+    if (!widget.isEditing) {
+      final invited = await InstallReferrer.instance.code();
+      if (invited != null && mounted && _referralCode.text.isEmpty) {
+        setState(() => _referralCode.text = invited);
+      }
     }
   }
 
@@ -262,6 +275,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     // own doc.
     final referralCode = _referralCode.text.trim();
     if (referralCode.isNotEmpty) {
+      // Used now — don't offer the install's invite code again on a later visit.
+      unawaited(InstallReferrer.instance.forget());
       unawaited(ReferralRepository.instance.applyCode(referralCode));
     }
 
