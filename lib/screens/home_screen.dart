@@ -116,7 +116,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             if (PersonaService.instance.error != null) {
                               return ListTile(
                                 title: const Text('Account details unavailable'),
-                                subtitle: const Text('Retry to load your member, agent or investor card.'),
+                                subtitle: Text(
+                                  PersonaService.instance.error ??
+                                      'Retry to load your member, agent or investor card.',
+                                ),
                                 trailing: TextButton(
                                   onPressed: () => PersonaService.instance.reload(user.phone),
                                   child: const Text('Retry'),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon, FontAwesomeIcons;
 
 import '../../phone.dart';
 import '../../theme/app_colors.dart';
@@ -58,7 +59,7 @@ Future<void> openWhatsAppChooser(
                 contentPadding: EdgeInsets.zero,
                 leading: const CircleAvatar(
                   backgroundColor: AppColors.brandGreenDeep,
-                  child: Icon(Icons.chat_rounded, color: AppColors.white, size: 20),
+                  child: FaIcon(FontAwesomeIcons.whatsapp, color: AppColors.white, size: 22),
                 ),
                 title: Text(
                   option.name,

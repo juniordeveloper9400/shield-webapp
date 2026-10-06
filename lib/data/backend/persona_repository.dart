@@ -1,4 +1,5 @@
 import 'backend_http.dart';
+import 'backend_session.dart';
 
 /// The signed-in member's own agent row plus every descendant, as returned
 /// by `GET /v1/agent/team` (`agent.service.ts`'s `getTeamForMember`).
@@ -111,7 +112,14 @@ class PersonaRepository {
   /// signature (call sites already pass it) but is unused — the backend
   /// resolves identity from the session, not a client-supplied phone.
   Future<PersonaSnapshot> loadFor(String phone) async {
-    if (!BackendHttp.isConfigured || !BackendHttp.instance.isSignedIn) {
+    if (!BackendHttp.isConfigured) {
+      throw StateError('Backend session is not ready for the role lookup');
+    }
+    // The access token lives in memory only: after a restart, or once it has
+    // been dropped, it must be re-minted from the stored refresh token before
+    // the role can be read — asking without one just fails.
+    if (!BackendHttp.instance.isSignedIn &&
+        !await BackendSession.instance.restore()) {
       throw StateError('Backend session is not ready for the role lookup');
     }
     try {

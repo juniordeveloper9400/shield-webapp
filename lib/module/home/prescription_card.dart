@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon, FontAwesomeIcons;
 
 import '../../data/backend/contact_repository.dart';
 import '../../phone.dart';
@@ -227,8 +228,8 @@ class _UploadChip extends StatelessWidget {
 }
 
 /// The WhatsApp counterpart to [_CallChip]: same size and shape, green, with
-/// its own tap target. Material has no WhatsApp mark, so a chat bubble stands
-/// in for it, labelled for screen readers.
+/// its own tap target, with the real WhatsApp mark (Material has none, so it
+/// comes from Font Awesome), labelled for screen readers.
 class _WhatsAppChip extends StatelessWidget {
   final VoidCallback onTap;
 
@@ -248,10 +249,12 @@ class _WhatsAppChip extends StatelessWidget {
           child: const SizedBox(
             width: 46,
             height: 42,
-            child: Icon(
-              Icons.chat_rounded,
-              size: 21,
-              color: AppColors.white,
+            child: Center(
+              child: FaIcon(
+                FontAwesomeIcons.whatsapp,
+                size: 24,
+                color: AppColors.white,
+              ),
             ),
           ),
         ),

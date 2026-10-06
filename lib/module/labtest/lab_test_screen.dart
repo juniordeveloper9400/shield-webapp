@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon, FontAwesomeIcons;
 
 import '../../data/backend/care_repository.dart';
 import '../../theme/app_colors.dart';
@@ -809,7 +810,7 @@ class _BookingShortcuts extends StatelessWidget {
           const SizedBox(width: 12),
           Expanded(
             child: _ShortcutTile(
-              icon: Icons.chat_bubble_outline_rounded,
+              iconWidget: FaIcon(FontAwesomeIcons.whatsapp, size: 21, color: AppColors.brandGreenDeep),
               tint: AppColors.greenTint,
               iconColour: AppColors.brandGreenDeep,
               top: 'Book via',
@@ -823,14 +824,18 @@ class _BookingShortcuts extends StatelessWidget {
 }
 
 class _ShortcutTile extends StatelessWidget {
-  final IconData icon;
+  final IconData? icon;
+
+  /// Replaces [icon] for a mark Material does not have (WhatsApp).
+  final Widget? iconWidget;
   final Color tint;
   final Color iconColour;
   final String top;
   final String bottom;
 
   const _ShortcutTile({
-    required this.icon,
+    this.icon,
+    this.iconWidget,
     required this.tint,
     required this.iconColour,
     required this.top,
@@ -860,7 +865,7 @@ class _ShortcutTile extends StatelessWidget {
                   color: tint,
                   borderRadius: BorderRadius.circular(9),
                 ),
-                child: Icon(icon, size: 21, color: iconColour),
+                child: iconWidget ?? Icon(icon, size: 21, color: iconColour),
               ),
               const SizedBox(width: 10),
               Expanded(

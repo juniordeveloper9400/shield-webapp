@@ -46,4 +46,35 @@ void main() {
     expect(service.isResolved, isTrue);
     expect(service.isConverted, isFalse);
   });
+
+  testWidgets('a failed first lookup retries by itself and the agent card appears',
+      (tester) async {
+    var calls = 0;
+    service.debugSetLoader((_) async {
+      calls++;
+      if (calls == 1) throw TimeoutException('cold backend');
+      return agent;
+    });
+    await service.reload('9000000002');
+    expect(service.isResolved, isFalse);
+    expect(service.error, contains('Could not reach the server'));
+
+    await tester.pump(const Duration(seconds: 4));
+    expect(calls, 2);
+    expect(service.isAgent, isTrue);
+    expect(service.error, isNull);
+  });
+
+  testWidgets('a lost session is not retried blindly and says to sign in again',
+      (tester) async {
+    var calls = 0;
+    service.debugSetLoader((_) async {
+      calls++;
+      throw StateError('no session');
+    });
+    await service.reload('9000000002');
+    await tester.pump(const Duration(minutes: 2));
+    expect(calls, 1);
+    expect(service.error, contains('sign in again'));
+  });
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/backend_http.dart';
 import '../../data/backend/persona_repository.dart';
 import '../agent/agent_directory.dart';
 import '../agent/agent_model.dart';
@@ -50,7 +51,53 @@ class PersonaService extends ChangeNotifier {
   int _generation = 0;
   bool _retryQueued = false;
   String? _error;
+
+  /// Why the last lookup failed, in words for the member — null when it did
+  /// not. See [_describeFailure].
   String? get error => _error;
+
+  /// A failed first lookup is retried on its own — a cold backend or a brief
+  /// network drop usually clears within seconds, and waiting for the member to
+  /// find Retry (or for the 60 s poll) left the Agent Portal missing.
+  static const List<Duration> _autoRetryDelays = [
+    Duration(seconds: 3),
+    Duration(seconds: 8),
+    Duration(seconds: 20),
+    Duration(seconds: 45),
+  ];
+  Timer? _autoRetryTimer;
+  int _autoRetries = 0;
+
+  void _cancelAutoRetry() {
+    _autoRetryTimer?.cancel();
+    _autoRetryTimer = null;
+  }
+
+  void _scheduleAutoRetry() {
+    _cancelAutoRetry();
+    if (_resolvedFor != null || _autoRetries >= _autoRetryDelays.length) return;
+    final phone = _phone;
+    if (phone == null) return;
+    _autoRetryTimer = Timer(_autoRetryDelays[_autoRetries++], () {
+      _autoRetryTimer = null;
+      if (_phone == phone && _resolvedFor == null) unawaited(reload(phone));
+    });
+  }
+
+  /// What went wrong, as the member should read it. A signed-out backend
+  /// session cannot heal by retrying — they need to sign in again.
+  static String _describeFailure(Object error) {
+    if (error is StateError) {
+      return 'Your session has expired. Please sign out and sign in again.';
+    }
+    if (error is BackendHttpException) {
+      if (error.statusCode == 401) {
+        return 'Your session has expired. Please sign out and sign in again.';
+      }
+      return 'The server had a problem (${error.statusCode}). Retrying…';
+    }
+    return 'Could not reach the server. Retrying…';
+  }
   Future<PersonaSnapshot> Function(String)? _testLoader;
 
   @visibleForTesting
@@ -164,13 +211,17 @@ class PersonaService extends ChangeNotifier {
       if (_phone == clean && generation == _generation) {
         _resolvedFor = clean;
         _lastResolvedAt = DateTime.now();
+        _autoRetries = 0;
+        _cancelAutoRetry();
         _apply(snap);
       }
-    } catch (_) {
+    } catch (error) {
       if (_phone == clean && generation == _generation) {
-        _error = 'Could not load your account role. Please retry.';
+        _error = _describeFailure(error);
         // Retain a confirmed agent/investor role during network failures.
         notifyListeners();
+        // A session that is gone will not come back by asking again.
+        if (error is! StateError) _scheduleAutoRetry();
       }
     } finally {
       _loading = false;
@@ -190,6 +241,8 @@ class PersonaService extends ChangeNotifier {
     _generation++;
     _retryQueued = false;
     _error = null;
+    _cancelAutoRetry();
+    _autoRetries = 0;
     _phone = null;
     _resolvedFor = null;
     _lastResolvedAt = null;
@@ -259,6 +312,8 @@ class PersonaService extends ChangeNotifier {
     _retryQueued = false;
     _error = null;
     _testLoader = null;
+    _cancelAutoRetry();
+    _autoRetries = 0;
     _phone = null;
     _resolvedFor = null;
     _lastResolvedAt = null;
