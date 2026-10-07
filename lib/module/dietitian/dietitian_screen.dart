@@ -19,7 +19,6 @@ class DietitianScreen extends StatefulWidget {
 }
 
 class _DietitianScreenState extends State<DietitianScreen> {
-  String _query = '';
   List<Dietitian>? _dietitians;
 
   @override
@@ -51,10 +50,7 @@ class _DietitianScreenState extends State<DietitianScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final dietitians = _dietitians;
-    final results = dietitians == null
-        ? null
-        : DietitianDirectory.search(dietitians, _query);
+    final results = _dietitians;
 
     return Scaffold(
       backgroundColor: AppColors.pageTint,
@@ -91,15 +87,11 @@ class _DietitianScreenState extends State<DietitianScreen> {
           const SizedBox(height: 16),
           const _ServicesSection(),
           const SizedBox(height: 16),
-          _SearchField(onChanged: (value) => setState(() => _query = value)),
-          const SizedBox(height: 16),
           if (results == null)
             const Padding(
               padding: EdgeInsets.symmetric(vertical: 24),
               child: Center(child: CircularProgressIndicator()),
             )
-          else if (results.isEmpty)
-            _NoMatches(hasQuery: _query.trim().isNotEmpty)
           else
             for (final dietitian in results) ...[
               _DietitianCard(dietitian: dietitian),
@@ -169,39 +161,6 @@ class _ServicePanel {
 
   final String asset;
   final String label;
-}
-
-class _SearchField extends StatelessWidget {
-  final ValueChanged<String> onChanged;
-
-  const _SearchField({required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    return TextField(
-      onChanged: onChanged,
-      decoration: InputDecoration(
-        hintText: 'Search by name or condition',
-        hintStyle: const TextStyle(color: AppColors.textMuted, fontSize: 15),
-        prefixIcon: const Icon(
-          Icons.search_rounded,
-          color: AppColors.brandBlue,
-          size: 22,
-        ),
-        filled: true,
-        fillColor: AppColors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 14),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.searchBorder),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.brandBlue, width: 1.6),
-        ),
-      ),
-    );
-  }
 }
 
 class _DietitianCard extends StatelessWidget {
@@ -378,55 +337,3 @@ class _DietitianCard extends StatelessWidget {
   }
 }
 
-class _NoMatches extends StatelessWidget {
-  /// Whether this is "nothing matched the search" (a condition to try
-  /// instead makes sense) or "there is no panel to search yet" (it doesn't).
-  final bool hasQuery;
-
-  const _NoMatches({required this.hasQuery});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 34),
-      child: Column(
-        children: [
-          const Icon(
-            Icons.person_search_outlined,
-            size: 38,
-            color: AppColors.textMuted,
-          ),
-          const SizedBox(height: 10),
-          Text(
-            hasQuery
-                ? 'No dietitian matches that'
-                : 'No dietitians available right now',
-            style: const TextStyle(
-              fontSize: 15.5,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
-            ),
-          ),
-          if (hasQuery) ...[
-            const SizedBox(height: 4),
-            const Text(
-              'Try a condition instead, such as diabetes or thyroid.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 13,
-                height: 1.4,
-                color: AppColors.textMuted,
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-}
