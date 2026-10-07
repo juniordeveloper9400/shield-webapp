@@ -70,20 +70,31 @@ class WhatsApp {
   /// `https://wa.me/<digits>` — wa.me wants the full international number with
   /// nothing but digits. A ten-digit Indian number written without its country
   /// code gets `91` in front.
-  static Uri uriFor(String number) {
+  static Uri uriFor(String number, {String? message}) {
     var digits = number.replaceAll(RegExp(r'[^0-9]'), '');
     if (digits.length == 10) {
       digits = '91$digits';
     }
-    return Uri.parse('https://wa.me/$digits');
+    final text = (message ?? '').trim();
+    return Uri.parse(
+      text.isEmpty
+          ? 'https://wa.me/$digits'
+          : 'https://wa.me/$digits?text=${Uri.encodeComponent(text)}',
+    );
   }
 
   /// Opens the chat. A failure says so rather than doing nothing.
-  static Future<void> open(BuildContext context, String number) async {
+  ///
+  /// [message], when given, is pre-typed into the chat for the member to send.
+  static Future<void> open(
+    BuildContext context,
+    String number, {
+    String? message,
+  }) async {
     final messenger = ScaffoldMessenger.of(context);
     var opened = false;
     try {
-      opened = await opener(uriFor(number));
+      opened = await opener(uriFor(number, message: message));
     } catch (_) {
       opened = false;
     }

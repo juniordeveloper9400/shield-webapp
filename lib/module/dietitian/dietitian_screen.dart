@@ -1,9 +1,13 @@
 
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon, FontAwesomeIcons;
 
 import '../../data/backend/care_repository.dart';
+import '../../data/backend/contact_repository.dart';
 import '../../money.dart';
+import '../../phone.dart';
 import '../../theme/app_colors.dart';
+import '../home/prescription_card.dart' show PrescriptionCard;
 import 'dietitian.dart';
 
 /// The Dietitian destination: who you can talk to, and what it costs.
@@ -33,6 +37,18 @@ class _DietitianScreenState extends State<DietitianScreen> {
     }
   }
 
+  /// Opens a WhatsApp chat with the admin desk (the order line until one is
+  /// set), with the question already typed in.
+  Future<void> _openWhatsApp() async {
+    final admin = await ContactRepository.instance.adminWhatsapp();
+    if (!mounted) return;
+    await WhatsApp.open(
+      context,
+      admin ?? PrescriptionCard.orderPhone,
+      message: 'Hi, I would like to talk to a dietitian.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final dietitians = _dietitians;
@@ -60,14 +76,20 @@ class _DietitianScreenState extends State<DietitianScreen> {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
+      floatingActionButton: FloatingActionButton(
+        tooltip: 'Chat with a dietitian on WhatsApp',
+        backgroundColor: AppColors.brandGreenDeep,
+        foregroundColor: AppColors.white,
+        onPressed: _openWhatsApp,
+        child: const FaIcon(FontAwesomeIcons.whatsapp, size: 30),
+      ),
       body: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+        // Clears the floating WhatsApp button at the bottom right.
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 96),
         children: [
           const _ProgramBanner(),
           const SizedBox(height: 16),
           const _ServicesSection(),
-          const SizedBox(height: 16),
-          const _IncludedCard(),
           const SizedBox(height: 16),
           _SearchField(onChanged: (value) => setState(() => _query = value)),
           const SizedBox(height: 16),
@@ -147,88 +169,6 @@ class _ServicePanel {
 
   final String asset;
   final String label;
-}
-
-/// What a consultation buys, said once above the panel.
-class _IncludedCard extends StatelessWidget {
-  const _IncludedCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [AppColors.offerTint, AppColors.greenTint],
-        ),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: AppColors.border),
-      ),
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: const Icon(
-                  Icons.restaurant_menu_rounded,
-                  size: 22,
-                  color: AppColors.brandGreenDeep,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'Talk to a dietitian',
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textDark,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          for (final line in DietitianDirectory.included)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.only(top: 2, right: 8),
-                    child: Icon(
-                      Icons.check_circle_rounded,
-                      size: 16,
-                      color: AppColors.brandGreenDeep,
-                    ),
-                  ),
-                  Expanded(
-                    child: Text(
-                      line,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        height: 1.4,
-                        color: AppColors.textBody,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }
 
 class _SearchField extends StatelessWidget {
