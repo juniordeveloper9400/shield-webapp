@@ -63,6 +63,10 @@ class _DietitianScreenState extends State<DietitianScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
         children: [
+          const _ProgramBanner(),
+          const SizedBox(height: 16),
+          const _ServicesSection(),
+          const SizedBox(height: 16),
           const _IncludedCard(),
           const SizedBox(height: 16),
           _SearchField(onChanged: (value) => setState(() => _query = value)),
@@ -83,6 +87,66 @@ class _DietitianScreenState extends State<DietitianScreen> {
       ),
     );
   }
+}
+
+/// The CHANGE programme banner, shown at the top of the screen.
+class _ProgramBanner extends StatelessWidget {
+  const _ProgramBanner();
+
+  @override
+  Widget build(BuildContext context) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: Image.asset(
+        'assets/dietitian/change_program.png',
+        width: double.infinity,
+        fit: BoxFit.cover,
+        semanticLabel: 'CHANGE nutrition and lifestyle programme',
+      ),
+    );
+  }
+}
+
+/// The diet services, as the clinic's own printed panels: the CHANGE MAX
+/// programme, personalised consultation, the diet kit, exercises and discounts,
+/// and pharmacy and home-care support.
+class _ServicesSection extends StatelessWidget {
+  const _ServicesSection();
+
+  static const _panels = [
+    _ServicePanel('assets/dietitian/change_max.png', 'CHANGE MAX diet and nutrition guidance'),
+    _ServicePanel('assets/dietitian/services_1.png', 'Personalised diet consultation and monthly diet chart'),
+    _ServicePanel('assets/dietitian/services_2.png', 'Diet kit and weekly progress check'),
+    _ServicePanel('assets/dietitian/services_3.png', 'Customised exercises and diagnostic test discounts'),
+    _ServicePanel('assets/dietitian/services_4.png', 'Supplement discounts, pharmacy support and home care'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        for (final panel in _panels) ...[
+          ClipRRect(
+            borderRadius: BorderRadius.circular(14),
+            child: Image.asset(
+              panel.asset,
+              fit: BoxFit.fitWidth,
+              semanticLabel: panel.label,
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+}
+
+class _ServicePanel {
+  const _ServicePanel(this.asset, this.label);
+
+  final String asset;
+  final String label;
 }
 
 /// What a consultation buys, said once above the panel.

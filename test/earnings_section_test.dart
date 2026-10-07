@@ -425,9 +425,10 @@ void main() {
   });
 }
 
-/// A delivered order the store actually gave a real bill discount on — the
-/// only shape "Your earnings" counts at all now, per [Purchase.billDiscount]'s
-/// own doc. [id] lets a test either add a fresh one or, via [PurchaseService.
+/// A delivered, PAID order the store actually gave a real bill discount on —
+/// the only shape "Your earnings" counts at all now, per
+/// [Purchase.billDiscount]'s own doc and [PurchaseService.billDiscounted]
+/// (a discount counts once the bill is collected). [id] lets a test either add a fresh one or, via [PurchaseService.
 /// updateOne], swap in a billed version of an order already on file.
 Purchase _billedOrder({
   required String id,
@@ -440,7 +441,9 @@ Purchase _billedOrder({
   mrpTotal: 0,
   paidTotal: 0,
   status: OrderStatus.delivered,
+  paymentStatus: OrderPaymentStatus.paid,
   billAmount: billAmount,
+  billStatus: OrderPaymentStatus.paid,
   billDiscount: billDiscount,
 );
 

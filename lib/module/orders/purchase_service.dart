@@ -688,11 +688,18 @@ class PurchaseService extends ChangeNotifier {
   /// "26%" — the same fraction as a whole number of percent.
   String get savedPercentLabel => '${(savedFraction * 100).round()}%';
 
-  /// Only the orders the store actually gave a bill discount on — what
-  /// "Your earnings"' order breakdown shows at all, now that it counts a
-  /// real offer at billing time rather than the checkout-time printed price.
-  Iterable<Purchase> get billDiscounted =>
-      _counted.where((purchase) => purchase.billDiscount > 0);
+  /// Only the orders the store gave a bill discount on AND that have been
+  /// paid — what "Your earnings"' order breakdown shows at all. A discount on
+  /// a bill that is only priced and sent is an offer, not money kept: it
+  /// becomes an earning when the bill is collected (the wallet debit after the
+  /// member's OTP, plus any cash received), which is when `billStatus` turns
+  /// paid. Counting it earlier would show earnings for a bill the member can
+  /// still walk away from.
+  Iterable<Purchase> get billDiscounted => _counted.where(
+    (purchase) =>
+        purchase.billDiscount > 0 &&
+        purchase.billStatus == OrderPaymentStatus.paid,
+  );
 
   /// What those bills' own subtotals add up to before the discount.
   int get billGrossTotal =>
