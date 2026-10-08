@@ -148,6 +148,22 @@ class WalletCard {
     return monthlyRedeemable * instalmentOn(asOf);
   }
 
+  /// What the calendar month [asOf] falls in has released, counting this
+  /// month's twelfth from the 1st rather than from the card's due day.
+  ///
+  /// This is what the wallet card's "Redeemable" and "Available" are built on:
+  /// a month's allowance is a month's allowance from the day the month starts
+  /// (one instalment per calendar month since the card was issued, this month
+  /// included), so the figure does not jump partway through the month.
+  /// [releasedBy] is the narrower per-due-day question and is unchanged.
+  int releasedThroughMonthOf(DateTime asOf) {
+    if (asOf.isBefore(issuedOn)) return 0;
+    final months =
+        (asOf.year - issuedOn.year) * 12 + (asOf.month - issuedOn.month);
+    return monthlyRedeemable *
+        (months + 1).clamp(1, PrivilegeProgramme.validityMonths);
+  }
+
   /// What is still locked up in the card, waiting on later months.
   int remainingAfter(DateTime asOf) {
     final left = loaded - releasedBy(asOf);
@@ -582,7 +598,7 @@ class WalletService extends ChangeNotifier {
   int redeemableAllowanceOn(DateTime asOf) {
     final releasedAllTime = _cards.fold<int>(
       0,
-      (sum, card) => sum + card.releasedBy(asOf),
+      (sum, card) => sum + card.releasedThroughMonthOf(asOf),
     );
     final monthStart = DateTime(asOf.year, asOf.month);
     final spentBeforeThisMonth = planDebitsThrough(
@@ -672,7 +688,10 @@ class WalletService extends ChangeNotifier {
   /// has been used up is used up, and a negative one would read as a debt the
   /// member does not owe.
   int availableAllowanceOn(DateTime asOf) {
-    final released = _cards.fold<int>(0, (sum, card) => sum + card.releasedBy(asOf));
+    final released = _cards.fold<int>(
+      0,
+      (sum, card) => sum + card.releasedThroughMonthOf(asOf),
+    );
     final spent = planDebitsThrough(
       _entries.reversed.map((e) => (kind: e.kind, amount: e.amount, occurredOn: e.occurredOn)),
       asOf,

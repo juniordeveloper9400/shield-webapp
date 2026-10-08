@@ -56,7 +56,42 @@ void main() {
       0,
       reason: "the narrower question this isn't answering any more",
     );
-    expect(wallet.redeemableAllowanceOn(DateTime(2026, 10, 3)), 1832);
+    expect(wallet.redeemableAllowanceOn(DateTime(2026, 10, 3)), 2748); // Aug + Sep carry-forward + October's own twelfth, counted from the 1st
     wallet.reset();
+  });
+
+  test("Redeemable is the whole month's allowance and stays put; Available moves with orders", () {
+    final wallet = WalletService.instance;
+    wallet.reset();
+    final now = DateTime.now();
+    // A plan taken two months ago, on the 1st: its day has come round, so the
+    // three twelfths (two carried forward + this month's) are all counted.
+    wallet.activate(load, on: DateTime(now.year, now.month - 2, 1));
+    expect(wallet.redeemableAllowanceOn(now), 2748);
+    expect(wallet.availableAllowanceOn(now), 2748);
+
+    // An order this month comes off Available only — Redeemable is static.
+    wallet.spend(amount: 800, label: 'Order');
+    expect(wallet.redeemedThisMonth, 800);
+    final after = DateTime.now(); // the order is dated now, so ask as of after it
+    expect(wallet.redeemableAllowanceOn(after), 2748);
+    expect(wallet.availableAllowanceOn(after), 1948);
+    wallet.reset();
+  });
+
+  test("this month's twelfth counts from the 1st, before the card's own day", () {
+    // Issued on the 25th: the old per-due-day rule gave 0 on the 24th of the
+    // next month for the fresh twelfth; the month rule counts it from the 1st.
+    final late = WalletCard(
+      load: load,
+      issuedOn: DateTime(2026, 8, 25),
+      rechargedOn: DateTime(2026, 8, 25),
+    );
+    expect(late.releasedThroughMonthOf(DateTime(2026, 8, 25)), 916);
+    expect(late.releasedThroughMonthOf(DateTime(2026, 9, 1)), 1832);
+    expect(late.releasedThroughMonthOf(DateTime(2026, 9, 24)), 1832);
+    expect(late.releasedBy(DateTime(2026, 9, 24)), 916, reason: 'unchanged');
+    expect(late.releasedThroughMonthOf(DateTime(2026, 8, 1)), 0);
+    expect(late.releasedThroughMonthOf(DateTime(2030, 1, 1)), 10992);
   });
 }
