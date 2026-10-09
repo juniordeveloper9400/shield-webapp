@@ -130,7 +130,7 @@ class _ProductCard extends StatelessWidget {
 
   /// Height reserved below the artwork for the name, pack, pricing and the
   /// 40px ADD / quantity control.
-  static const double detailsExtent = 148;
+  static const double detailsExtent = 138;
 
   final Product product;
 
@@ -209,7 +209,7 @@ class _ProductCard extends StatelessWidget {
               ),
               Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+                  padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -260,7 +260,7 @@ class _ProductCard extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       // Same control as the category listing: ADD, then an inline
                       // quantity stepper backed by the shared cart.
                       CartControl(
