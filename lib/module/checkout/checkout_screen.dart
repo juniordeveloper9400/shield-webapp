@@ -965,7 +965,7 @@ class _LastMinuteBuysPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final products = ProductCatalogue.popularItems.take(8).toList();
+    final products = ProductCatalogue.lastMinuteBuys.take(8).toList();
     if (products.isEmpty) {
       return const SizedBox.shrink();
     }

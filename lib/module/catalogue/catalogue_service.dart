@@ -114,23 +114,25 @@ class CatalogueService extends ChangeNotifier {
   /// How many products a home row shows before "View all".
   static const int rowLimit = 12;
 
-  /// "Popular Items". The products the admin ticked as popular, or — when none
-  /// are ticked — the most recently added as an honest proxy.
-  List<Product> get popularPicks {
+  /// "Popular Items" — only the products the admin ticked as popular. Empty
+  /// (and the row is hidden) when the admin has not chosen any: nothing is
+  /// borrowed from the rest of the catalogue.
+  List<Product> get popularPicks =>
+      _all.where((p) => p.isPopular).take(rowLimit).toList();
+
+  /// "Deals You Love" — only the products the admin ticked as a deal. Empty
+  /// (and the row is hidden) when the admin has not chosen any, rather than
+  /// guessing from whatever happens to carry a discount.
+  List<Product> get dealsYouLove =>
+      _all.where((p) => p.isDeal).take(rowLimit).toList();
+
+  /// Checkout's "Last minute buys": the admin's popular picks, or the most
+  /// recently added products when none are ticked. This is a checkout
+  /// suggestion, not a home-feed section, so it keeps a fallback the home rows
+  /// no longer have.
+  List<Product> get lastMinuteBuys {
     final flagged = _all.where((p) => p.isPopular).toList();
     return (flagged.isNotEmpty ? flagged : _all).take(rowLimit).toList();
-  }
-
-  /// "Deals You Love". The products the admin ticked as a deal, or — when none
-  /// are ticked — everything with a discount, steepest first.
-  List<Product> get dealsYouLove {
-    final flagged = _all.where((p) => p.isDeal).toList();
-    if (flagged.isNotEmpty) {
-      return flagged.take(rowLimit).toList();
-    }
-    final withDeal = _all.where((p) => _discountPercent(p) > 0).toList()
-      ..sort((a, b) => _discountPercent(b).compareTo(_discountPercent(a)));
-    return withDeal.take(rowLimit).toList();
   }
 
   /// "Offer of the Day" — only the products the admin ticked for it. Empty
@@ -168,13 +170,5 @@ class CatalogueService extends ChangeNotifier {
             (p.brand ?? '').toLowerCase().contains(needle) ||
             p.pack.toLowerCase().contains(needle))
         .toList(growable: false);
-  }
-
-  static int _discountPercent(Product p) {
-    final label = p.discountLabel;
-    if (label == null) {
-      return 0;
-    }
-    return int.tryParse(label.split('%').first.trim()) ?? 0;
   }
 }

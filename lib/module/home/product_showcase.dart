@@ -391,11 +391,15 @@ IconData iconForCategorySlug(String? slug) {
 class ProductCatalogue {
   const ProductCatalogue._();
 
-  /// Admin-picked "Popular Items", or the newest products as a fallback.
+  /// Admin-picked "Popular Items" — empty until the admin ticks products.
   static List<Product> get popularItems =>
       CatalogueService.instance.popularPicks;
 
-  /// Admin-picked "Deals You Love", or the steepest discounts as a fallback.
+  /// Checkout's "Last minute buys" suggestions (popular picks, else newest).
+  static List<Product> get lastMinuteBuys =>
+      CatalogueService.instance.lastMinuteBuys;
+
+  /// Admin-picked "Deals You Love" — empty until the admin ticks products.
   static List<Product> get dealsYouLove =>
       CatalogueService.instance.dealsYouLove;
 
