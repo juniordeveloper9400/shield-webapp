@@ -1,5 +1,8 @@
+import 'package:flutter/foundation.dart';
+
 import '../../money.dart';
 import '../../module/home/product_showcase.dart';
+import '../../module/product/product_detail_content.dart';
 import 'backend_http.dart';
 
 /// Reads the storefront catalogue from `backend/api`'s public catalogue
@@ -24,6 +27,46 @@ class ProductRepository {
 
   /// Whether a read would actually reach the backend.
   bool get isAvailable => BackendHttp.isConfigured;
+
+  /// Test-only seam: a widget test can't reach a real backend, so this swaps
+  /// in fixture data for [detailFor] instead of exercising the network path
+  /// — the same shape of hook the other backend repositories' overrides use.
+  /// Reset to null in `tearDown`.
+  @visibleForTesting
+  static Future<ProductDetailData?> Function(int backendId)? detailOverride;
+
+  /// The admin-entered rich detail for one product — `app.product_detail`
+  /// plus its `app.product_faq` rows, from `GET /v1/public/catalogue/
+  /// products/:id` (`CatalogueService.getProduct`), keyed by the product's
+  /// numeric id ([Product.backendId], not its uuid).
+  ///
+  /// Returns `null` when the backend is off/unreachable or the product
+  /// simply has no detail row yet; [ProductDetailScreen] then shows only the
+  /// artwork, price and ADD — nothing admin-entered to show a section for.
+  Future<ProductDetailData?> detailFor(int backendId) async {
+    final override = detailOverride;
+    if (override != null) {
+      return override(backendId);
+    }
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final row = await BackendHttp.instance.request(
+        'GET',
+        '/v1/public/catalogue/products/$backendId',
+        auth: false,
+      ) as Map<String, dynamic>;
+      final data = ProductDetailData.fromRows(
+        row['detail'] as Map<String, dynamic>?,
+        row['faqs'],
+      );
+      return data.isEmpty ? null : data;
+    } catch (error) {
+      BackendHttp.log('ProductRepository.detailFor failed', error: error);
+      return null;
+    }
+  }
 
   /// Every `ACTIVE` product, newest-first per the backend's own ordering,
   /// mapped to the UI [Product] model.

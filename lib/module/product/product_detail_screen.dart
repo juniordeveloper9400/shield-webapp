@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/backend/product_repository.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../cart/cart_bar.dart';
@@ -13,18 +14,47 @@ import 'product_detail_content.dart';
 /// The full page for one product, reached by tapping any product card or tile.
 ///
 /// The card in a grid or a home row shows the six things that fit — name, pack,
-/// price, MRP, discount, artwork. Everything a shopper wants before committing
-/// — what it is, what it treats, how to take it, what to watch for — lives
-/// here. The prose is composed by [ProductDetail] from the same fixture the
-/// card was built from, so this screen needs no catalogue of its own.
-class ProductDetailScreen extends StatelessWidget {
+/// price, MRP, discount, artwork. This page always carries that plus ADD — the
+/// one thing every product has. Everything below it — what it is, what it
+/// treats, how to take it, what to watch for — is exactly what the pharmacy
+/// admin filled in for the product in the console (`app.product_detail` /
+/// `app.product_faq`), one section per field they used; a field left blank
+/// has no section at all, rather than invented copy standing in for it. A
+/// product nobody has added detail to yet shows artwork, price and ADD, and
+/// nothing else.
+class ProductDetailScreen extends StatefulWidget {
   final Product product;
 
   const ProductDetailScreen({super.key, required this.product});
 
   @override
+  State<ProductDetailScreen> createState() => _ProductDetailScreenState();
+}
+
+class _ProductDetailScreenState extends State<ProductDetailScreen> {
+  Product get product => widget.product;
+
+  /// Admin-entered content, once fetched. Null until the load settles or when
+  /// the product has no backend id / the backend is off — the page then
+  /// shows only the artwork, price and ADD.
+  ProductDetailData? _content;
+
+  @override
+  void initState() {
+    super.initState();
+    final backendId = product.backendId;
+    if (backendId != null) {
+      ProductRepository.instance.detailFor(backendId).then((data) {
+        if (mounted && data != null) {
+          setState(() => _content = data);
+        }
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final detail = ProductDetail.of(product);
+    final detail = ProductDetail.of(product, content: _content);
 
     return Scaffold(
       backgroundColor: AppColors.pageTint,
@@ -65,20 +95,34 @@ class ProductDetailScreen extends StatelessWidget {
                 discountPercent: detail.discountPercent,
               ),
               _HeaderCard(detail: detail),
-              _StorageStrip(text: detail.storage),
-              _Section(
-                title: 'Product highlights',
-                bullets: detail.highlights,
-                initiallyOpen: true,
-              ),
-              _Section(title: 'Product description', body: detail.description),
-              _Section(title: 'Key benefits', bullets: detail.benefits),
-              _Section(title: 'Directions for use', bullets: detail.directions),
-              _Section(title: 'Ingredients', body: detail.ingredients),
-              _Section(title: 'Safety information', bullets: detail.safety),
+              // Everything from here down is admin-entered — present only
+              // for the field the admin actually used, never a placeholder.
+              if (detail.storage.isNotEmpty) _StorageStrip(text: detail.storage),
+              if (detail.highlights.isNotEmpty)
+                _Section(
+                  title: 'Product highlights',
+                  bullets: detail.highlights,
+                  initiallyOpen: true,
+                ),
+              if (detail.description.isNotEmpty)
+                _Section(
+                  title: 'Product description',
+                  body: detail.description,
+                ),
+              if (detail.benefits.isNotEmpty)
+                _Section(title: 'Key benefits', bullets: detail.benefits),
+              if (detail.directions.isNotEmpty)
+                _Section(
+                  title: 'Directions for use',
+                  bullets: detail.directions,
+                ),
+              if (detail.ingredients.isNotEmpty)
+                _Section(title: 'Ingredients', body: detail.ingredients),
+              if (detail.safety.isNotEmpty)
+                _Section(title: 'Safety information', bullets: detail.safety),
               const _ReviewedStrip(),
               _RelatedRail(current: product),
-              _FaqCard(faqs: detail.faqs),
+              if (detail.faqs.isNotEmpty) _FaqCard(faqs: detail.faqs),
               const _Disclaimer(),
             ],
           ),
