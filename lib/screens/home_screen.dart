@@ -405,23 +405,31 @@ class _HomeProductRowsState extends State<_HomeProductRows> {
 
         return Column(
           children: [
+            // Each row's own background — distinguishes the three at a
+            // glance, the whole row (title included), not just the cards.
             if (catalogue.offerOfTheDay.isNotEmpty)
               ProductShowcase(
                 title: 'Offer of the Day',
                 subtitle: 'Handpicked by the pharmacy today',
                 products: catalogue.offerOfTheDay,
+                backgroundColor: AppColors.offerTint,
+                titleColor: AppColors.brandBlue,
               ),
             if (catalogue.popularPicks.isNotEmpty)
               ProductShowcase(
                 title: 'Popular Items',
                 subtitle: 'Freshly added at the pharmacy',
                 products: catalogue.popularPicks,
+                backgroundColor: AppColors.panelGreen,
+                titleColor: AppColors.brandGreenDeep,
               ),
             if (catalogue.dealsYouLove.isNotEmpty)
               ProductShowcase(
                 title: 'Deals You Love',
                 subtitle: 'Big savings & special discounts',
                 products: catalogue.dealsYouLove,
+                backgroundColor: AppColors.panelCream,
+                titleColor: AppColors.goldAccent,
               ),
             if (catalogue.wellness.isNotEmpty)
               ProductShowcase(

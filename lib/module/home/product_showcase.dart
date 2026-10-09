@@ -14,18 +14,29 @@ class ProductShowcase extends StatelessWidget {
   final List<Product> products;
   final VoidCallback? onViewAll;
 
+  /// The row's own background — distinct per home-feed tab (Offer of the
+  /// Day / Popular Items / Deals You Love) when used there; white everywhere
+  /// else, unchanged from before this had a colour of its own.
+  final Color backgroundColor;
+
+  /// The title's colour — tinted to match [backgroundColor] on a home-feed
+  /// tab; the usual near-black everywhere else.
+  final Color titleColor;
+
   const ProductShowcase({
     super.key,
     required this.title,
     required this.products,
     this.subtitle,
     this.onViewAll,
+    this.backgroundColor = AppColors.white,
+    this.titleColor = AppColors.textDark,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: AppColors.white,
+      color: backgroundColor,
       padding: const EdgeInsets.only(top: 20, bottom: 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -40,10 +51,10 @@ class ProductShowcase extends StatelessWidget {
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 21,
                           fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
+                          color: titleColor,
                         ),
                       ),
                       if (subtitle != null) ...[
