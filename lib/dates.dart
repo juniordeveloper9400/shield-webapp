@@ -89,3 +89,26 @@ String ageLabel(DateTime dob, {DateTime? asOf}) {
   final years = ageInYears(dob, asOf: asOf);
   return '$years ${years == 1 ? 'yr' : 'yrs'}';
 }
+
+/// A stand-in date of birth for someone who is [age] years old today — same
+/// month and day as [asOf] (today, unless fixed for a test), [age] years
+/// earlier. Reading it straight back through [ageInYears] on the same day
+/// gives back exactly [age], so a form that takes an age instead of a real
+/// date of birth (see `AgePickerField`) has something to store that agrees
+/// with what was picked, at least on the day it was picked — like any age
+/// that was never attached to a real birth date, it reads one year older
+/// once the "birthday" this stand-in invented comes round.
+DateTime dobForAge(int age, {DateTime? asOf}) {
+  final now = asOf ?? DateTime.now();
+  return DateTime(now.year - age, now.month, now.day);
+}
+
+/// `31 yrs · Born 1994` — an age paired with the birth year it implies, for
+/// a form that takes the age directly instead of a full date. Takes the
+/// same `DateTime` [ageLabel] does (real or a [dobForAge] stand-in) rather
+/// than a bare age, so an existing, real date of birth shows its own real
+/// year instead of one re-guessed from today.
+String ageWithBirthYearLabel(DateTime dob, {DateTime? asOf}) {
+  final years = ageInYears(dob, asOf: asOf);
+  return '$years ${years == 1 ? 'yr' : 'yrs'} · Born ${dob.year}';
+}

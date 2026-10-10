@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/age_picker.dart';
 import '../../widgets/labelled_field.dart';
 import '../../widgets/upload_picker.dart';
 import '../auth/auth_service.dart';
@@ -380,20 +381,20 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
     _syncCascade();
   }
 
-  Future<void> _pickDob() async {
+  Future<void> _pickAge() async {
     FocusManager.instance.primaryFocus?.unfocus();
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: _dob ?? DateTime(now.year - 30, now.month, now.day),
-      firstDate: DateTime(now.year - 90),
+    final picked = await pickAge(
+      context,
+      initialAge: _dob == null ? 30 : ageInYears(_dob!),
       // An agent has to be an adult.
-      lastDate: DateTime(now.year - 18, now.month, now.day),
+      minAge: 18,
+      maxAge: 90,
     );
-    if (picked != null) {
+    if (picked != null && mounted) {
+      final dob = dobForAge(picked);
       setState(() {
-        _dob = picked;
-        _dobText.text = formatDate(picked);
+        _dob = dob;
+        _dobText.text = ageWithBirthYearLabel(dob);
       });
     }
   }
@@ -830,14 +831,14 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
                 ),
                 const SizedBox(height: 14),
                 LabelledField(
-                  label: 'Date of birth',
-                  hint: 'Select date',
+                  label: 'Age',
+                  hint: 'Select your age',
                   controller: _dobText,
                   readOnly: true,
-                  onTap: _pickDob,
+                  onTap: _pickAge,
                   icon: Icons.event_rounded,
                   validator: (_) =>
-                      _dob == null ? 'Date of birth is required' : null,
+                      _dob == null ? 'Age is required' : null,
                 ),
                 const SizedBox(height: 14),
                 LabelledField(
