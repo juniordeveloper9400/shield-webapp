@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../data/backend/backend_http.dart';
 import '../auth/auth_service.dart' show OtpError;
+import '../auth/msg91_widget_otp.dart' as widget_otp;
 
 /// Proves the agent-registration form's recruit owns the phone number they
 /// gave, via `backend/api`'s MSG91-backed `/v1/agent/otp/*` endpoints
@@ -23,7 +24,7 @@ class AgentOtpVerifier {
 
   static AgentOtpVerifier get current => debugOverride ?? instance;
 
-  AgentOtpTransport _transport = BackendAgentOtpTransport();
+  AgentOtpTransport _transport = _defaultAgentOtpTransport();
 
   bool _pending = false;
   String? _phone;
@@ -70,11 +71,18 @@ class AgentOtpVerifier {
   /// Test hook: forget any injected transport and pending state.
   @visibleForTesting
   void reset() {
-    _transport = BackendAgentOtpTransport();
+    _transport = _defaultAgentOtpTransport();
     _pending = false;
     _phone = null;
   }
 }
+
+/// On web, MSG91's JS widget; everywhere else, the backend-direct calls
+/// that currently cannot send a code at all — see `auth_service.dart`'s
+/// `_defaultTransport` for the member-login equivalent of this same split
+/// and why.
+AgentOtpTransport _defaultAgentOtpTransport() =>
+    kIsWeb ? WidgetAgentOtpTransport() : BackendAgentOtpTransport();
 
 /// A send or confirm attempt's outcome: null [failure] on success.
 @immutable
@@ -148,6 +156,76 @@ class BackendAgentOtpTransport implements AgentOtpTransport {
       );
     } catch (error) {
       BackendHttp.log('AgentOtpVerifier.confirmCode failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.network);
+    }
+  }
+}
+
+/// Runs MSG91's own JS widget (web only — see `msg91_widget_otp.dart`'s own
+/// doc on the native gap) to send/verify the code, then has the backend
+/// confirm the resulting access-token server-side
+/// (`/v1/agent/otp/verify-widget`) before treating the recruit's phone as
+/// proven — the token alone, client-side, proves nothing. Used instead of
+/// [BackendAgentOtpTransport] because MSG91's Widget product has no real
+/// server-to-server "send": see
+/// `backend/api/src/modules/otp/otp.service.ts`'s own doc on why
+/// `sendMsg91Otp`/`verifyMsg91Otp` (what [BackendAgentOtpTransport] calls)
+/// turned out not to be a supported flow at all.
+class WidgetAgentOtpTransport implements AgentOtpTransport {
+  WidgetAgentOtpTransport({BackendHttp? http}) : _http = http ?? BackendHttp.instance;
+
+  final BackendHttp _http;
+
+  /// MSG91 identifiers are plain digits, country-code-prefixed, no `+`.
+  String _identifierFor(String e164Phone) => e164Phone.replaceAll(RegExp(r'[^0-9]'), '');
+
+  @override
+  Future<AgentOtpOutcome> sendCode(String e164Phone) async {
+    try {
+      await widget_otp.sendWidgetOtp(_identifierFor(e164Phone));
+      return const AgentOtpOutcome.success();
+    } on UnsupportedError catch (error) {
+      BackendHttp.log('AgentOtpVerifier.sendCode (widget) failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.unavailable);
+    } catch (error) {
+      BackendHttp.log('AgentOtpVerifier.sendCode (widget) failed', error: error);
+      return AgentOtpOutcome.failed(OtpError.unknown);
+    }
+  }
+
+  @override
+  Future<AgentOtpOutcome> confirmCode(String e164Phone, String code) async {
+    final String accessToken;
+    try {
+      accessToken = await widget_otp.verifyWidgetOtp(code);
+    } on UnsupportedError catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode (widget) failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.unavailable);
+    } catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode (widget) failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.wrongOtp);
+    }
+
+    if (!_http.isEnabled) {
+      return const AgentOtpOutcome.failed(OtpError.unavailable);
+    }
+    try {
+      final result = await _http.request(
+        'POST',
+        '/v1/agent/otp/verify-widget',
+        body: {'accessToken': accessToken, 'expectedPhone': e164Phone},
+      ) as Map<String, dynamic>;
+      if (result['ok'] == true) {
+        return const AgentOtpOutcome.success();
+      }
+      return const AgentOtpOutcome.failed(OtpError.wrongOtp);
+    } on BackendHttpException catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode (widget) failed', error: error);
+      return AgentOtpOutcome.failed(
+        error.isTooManyRequests ? OtpError.tooManyRequests : OtpError.network,
+      );
+    } catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode (widget) failed', error: error);
       return const AgentOtpOutcome.failed(OtpError.network);
     }
   }

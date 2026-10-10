@@ -9,8 +9,10 @@ import 'package:shield/module/auth/auth_service.dart';
 class FakeMemberOtpTransport implements MemberOtpTransport {
   FakeMemberOtpTransport({this.acceptedCode = code});
 
-  /// The one code [confirmCode] treats as correct.
-  static const String code = '123456';
+  /// The one code [confirmCode] treats as correct — matches
+  /// [AuthService.otpLength] (4), the real code length MSG91's widget
+  /// actually sends.
+  static const String code = '1234';
 
   final String acceptedCode;
   bool _sent = false;

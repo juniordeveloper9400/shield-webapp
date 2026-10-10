@@ -41,6 +41,9 @@ dependencies:
   # behaviour in debug and release, reliable from a phone. See
   # data/neon/neon_http.dart.
   http: ^1.6.0
+  # Runs MSG91's OTP widget JS directly on the web build (dart:js_interop) —
+  # see module/auth/msg91_widget_otp.dart.
+  web: ^1.1.0
   # Device location for "nearest Sahakar 360 branch" during registration and
   # privilege-plan activation. Works on Android/iOS and, on the web build,
   # through the browser's geolocation API. See registration/store_locator.dart.
