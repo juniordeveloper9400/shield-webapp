@@ -97,7 +97,8 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               _HeaderCard(detail: detail),
               // Everything from here down is admin-entered — present only
               // for the field the admin actually used, never a placeholder.
-              if (detail.storage.isNotEmpty) _StorageStrip(text: detail.storage),
+              if (detail.storage.isNotEmpty)
+                _StorageStrip(text: detail.storage),
               if (detail.highlights.isNotEmpty)
                 _Section(
                   title: 'Product highlights',
@@ -262,16 +263,6 @@ class _HeaderCard extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: const [
-              _TrustChip('WHO-GMP Certified'),
-              _TrustChip('ISO Certified Quality'),
-              _TrustChip('100% Genuine'),
-            ],
-          ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 14),
             child: Divider(height: 1, color: AppColors.border),
@@ -362,31 +353,6 @@ class _HeaderCard extends StatelessWidget {
             image: product.image,
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _TrustChip extends StatelessWidget {
-  final String label;
-
-  const _TrustChip(this.label);
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: AppColors.greenTint,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: AppColors.brandGreenDark,
-        ),
       ),
     );
   }
