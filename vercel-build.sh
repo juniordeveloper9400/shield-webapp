@@ -44,6 +44,22 @@ echo "BACKEND_API_BASE_URL: $BACKEND_URL"
 SENTRY_DSN_VALUE="${SENTRY_DSN:-}"
 echo "SENTRY_DSN length: ${#SENTRY_DSN_VALUE}"
 
+# MSG91 Widget OTP (set in the Vercel project's Environment Variables — same
+# widgetId/tokenAuth pair shieldweb's own VITE_MSG91_WIDGET_ID/
+# VITE_MSG91_TOKEN_AUTH and the root shield app's own build carry). Without
+# these, lib/module/auth/msg91_widget_otp_web.dart's _ensureWidget throws
+# "OTP sending is not configured in this build" and member sign-in/agent
+# registration can never send a code at all. tokenAuth is the scoped,
+# throttled, browser-safe token made specifically to travel in client code —
+# not the master Auth Key, which stays server-only (backend/api's own
+# MSG91_AUTH_KEY).
+MSG91_WIDGET_ID_VALUE="${MSG91_WIDGET_ID:-}"
+MSG91_WIDGET_TOKEN_AUTH_VALUE="${MSG91_WIDGET_TOKEN_AUTH:-}"
+echo "MSG91_WIDGET_ID length: ${#MSG91_WIDGET_ID_VALUE}"
+echo "MSG91_WIDGET_TOKEN_AUTH length: ${#MSG91_WIDGET_TOKEN_AUTH_VALUE}"
+
 flutter build web --release \
   --dart-define=BACKEND_API_BASE_URL="$BACKEND_URL" \
-  --dart-define=SENTRY_DSN="$SENTRY_DSN_VALUE"
+  --dart-define=SENTRY_DSN="$SENTRY_DSN_VALUE" \
+  --dart-define=MSG91_WIDGET_ID="$MSG91_WIDGET_ID_VALUE" \
+  --dart-define=MSG91_WIDGET_TOKEN_AUTH="$MSG91_WIDGET_TOKEN_AUTH_VALUE"
