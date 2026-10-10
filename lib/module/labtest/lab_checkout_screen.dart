@@ -36,15 +36,22 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
   bool get _canPlace =>
       !_placing &&
       !LabCartService.instance.isEmpty &&
-      LabCartService.instance.store != null;
+      LabCartService.instance.store != null &&
+      AddressBook.instance.deliverTo != null;
 
   Future<void> _placeLabTest() async {
     final cart = LabCartService.instance;
     final user = AuthService.instance.currentUser.value;
+    final hasAddress = AddressBook.instance.deliverTo != null;
     if (!_canPlace || user == null) {
       setState(() {
-        _error = cart.store == null
+        _error = cart.store == null && !hasAddress
+            ? 'Choose a branch and a delivery address above before placing '
+                  'this booking.'
+            : cart.store == null
             ? 'Choose a branch above before placing this booking.'
+            : !hasAddress
+            ? 'Choose a delivery address above before placing this booking.'
             : null;
       });
       return;
@@ -131,13 +138,19 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
         ),
       ),
       body: ListenableBuilder(
-        listenable: LabCartService.instance,
+        listenable: Listenable.merge([
+          LabCartService.instance,
+          AddressBook.instance,
+        ]),
         builder: (context, _) {
           final cart = LabCartService.instance;
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
               _ReviewCard(bookings: cart.bookings),
+              const SizedBox(height: 12),
+              // Not const — see LabAddressRow's own doc on why.
+              LabAddressRow(),
               const SizedBox(height: 12),
               const LabBranchRow(),
               const SizedBox(height: 12),
@@ -167,7 +180,10 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             child: ListenableBuilder(
-              listenable: LabCartService.instance,
+              listenable: Listenable.merge([
+                LabCartService.instance,
+                AddressBook.instance,
+              ]),
               builder: (context, _) {
                 final cart = LabCartService.instance;
                 return Row(

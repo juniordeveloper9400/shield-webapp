@@ -2,10 +2,112 @@ import 'package:flutter/material.dart';
 
 import '../../data/backend/care_repository.dart';
 import '../../theme/app_colors.dart';
+import '../location/address_book.dart';
+import '../location/address_selection_screen.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import 'lab_store.dart';
 import 'lab_store_picker_sheet.dart';
+
+/// Where the sample collection visits — the same [AddressBook] the medicine
+/// checkout's "Deliver to" row reads from and writes to, so an address saved
+/// on one checkout is already there on the other. "Change" opens
+/// [AddressSelectionScreen] — pick a saved address or add a new one, the
+/// same screen a plain product order uses — rather than a second, lab-only
+/// address picker.
+///
+/// Not `const` where it's used: its build() reads
+/// `AddressBook.instance.deliverTo` directly rather than a constructor
+/// field, so a `const` instance would never rebuild once an address is
+/// chosen (Flutter skips reconciling an unchanged `const` widget outright).
+class LabAddressRow extends StatelessWidget {
+  const LabAddressRow({super.key});
+
+  Future<void> _choose(BuildContext context) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final address = AddressBook.instance.deliverTo;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Material(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: () => _choose(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                // A missing address blocks checkout — same red the branch
+                // row below uses when nothing is chosen yet.
+                color: address == null ? AppColors.danger : AppColors.border,
+              ),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 20,
+                  color: AppColors.brandBlue,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Deliver to',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      Text(
+                        address == null
+                            ? 'Choose a delivery address'
+                            : '${address.label.label} (${address.pincode})',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                      if (address != null) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          address.summary,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            color: AppColors.textMuted,
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons.chevron_right_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// The branch this basket collects from — defaults to the member's home
 /// branch once the live, lab-eligible list has loaded (see
