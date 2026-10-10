@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart' hide PickedFile;
 
 import '../../dates.dart';
-import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../../widgets/app_image.dart';
 import '../../widgets/upload_picker.dart';
@@ -12,7 +11,6 @@ import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
 import '../patients/patient_book.dart';
 import '../prescription/prescription_image_view.dart';
-import '../prescription/upload_prescription_screen.dart';
 import '../registration/registration_service.dart';
 import '../registration/shield_store.dart';
 import '../registration/store_map_picker.dart';
@@ -376,10 +374,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
       );
   }
 
-  void _openUploadPrescription() {
-    UploadPrescriptionScreen.open(context);
-  }
-
   void _chooseAccount(StoreBankAccount? account) {
     if (account != null) {
       setState(() => _account = account);
@@ -603,17 +597,6 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
           if (_step == 1) ...[
             if (delivering) ...[
               _QuickActionCard(
-                iconBg: AppColors.goldTint,
-                iconColor: AppColors.goldAccent,
-                icon: Icons.assignment_outlined,
-                title: 'Upload a Prescription',
-                subtitle:
-                    'Please upload a valid prescription given by your '
-                    'doctor. This is optional',
-                onTap: _openUploadPrescription,
-              ),
-              const SizedBox(height: 14),
-              _QuickActionCard(
                 iconBg: AppColors.panelBlue,
                 iconColor: AppColors.brandBlue,
                 icon: Icons.local_offer_outlined,
@@ -647,19 +630,18 @@ class _CheckoutScreenState extends State<CheckoutScreen> {
               onPlanChanged: _choosePlan,
               onStoreChanged: _chooseStore,
               onAccountChanged: _chooseAccount,
-              // Delivering orders settle by wallet or cash — there is no bank
-              // transfer to pick an account for.
+              // Delivering orders settle cash-on-delivery/pickup — there is
+              // no bank transfer to pick an account for.
               showBankAccount: !delivering,
             ),
             const SizedBox(height: 14),
-            if (delivering)
-              _WalletCashPanel(
-                selected: _method,
-                amount: _order.amount,
-                onSelect: _chooseMethod,
-              )
-            else
-              _MethodPanel(selected: _method, onSelect: _chooseMethod),
+            // A delivering order no longer offers a payment choice here — it
+            // always settles cash-on-delivery/pickup (see the default set in
+            // initState), matching the backend's own removal of
+            // member-triggered wallet bill-settlement at checkout. The plan
+            // (non-delivering) checkout below still picks a payment method,
+            // since that is how the load amount itself is actually paid.
+            if (!delivering) _MethodPanel(selected: _method, onSelect: _chooseMethod),
           ] else ...[
             _BankTransferPanel(order: _order, account: _account),
             const SizedBox(height: 14),
@@ -1548,161 +1530,6 @@ class _FulfillmentChip extends StatelessWidget {
                   color: selected ? AppColors.brandBlue : AppColors.textDark,
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// Wallet and cash — the two payment choices on a delivering checkout, in
-/// place of [_MethodPanel]'s manual-settlement methods. The wallet tile
-/// listens to [WalletService] directly so its balance and affordability stay
-/// live without this screen having to track them itself.
-class _WalletCashPanel extends StatelessWidget {
-  final PaymentMethod selected;
-  final double amount;
-  final ValueChanged<PaymentMethod> onSelect;
-
-  const _WalletCashPanel({
-    required this.selected,
-    required this.amount,
-    required this.onSelect,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: WalletService.instance,
-      builder: (context, _) {
-        final wallet = WalletService.instance;
-        final share = wallet.walletShareOf(amount.round());
-        final remainder = amount.round() - share;
-        final selectable = share > 0;
-        final String? deniedNote = !wallet.isActivated
-            ? 'Get a Sahakar HealthPass first'
-            : selectable
-            ? null
-            : "This month's wallet allowance is used up";
-
-        return _Panel(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const CheckoutHeading('Payment option'),
-              const SizedBox(height: 10),
-              _WalletMethodTile(
-                selected: selected.id == PaymentMethods.wallet.id && selectable,
-                share: share,
-                remainder: remainder,
-                deniedNote: deniedNote,
-                onTap: selectable
-                    ? () => onSelect(PaymentMethods.wallet)
-                    : null,
-              ),
-              const SizedBox(height: 8),
-              _MethodTile(
-                method: PaymentMethods.cash,
-                selected: selected.id == PaymentMethods.cash.id,
-                onTap: () => onSelect(PaymentMethods.cash),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-}
-
-/// The wallet tile on [_WalletCashPanel]: this month's wallet share of the
-/// order when there is one to offer, or the reason there is not.
-class _WalletMethodTile extends StatelessWidget {
-  final bool selected;
-
-  /// What the wallet would cover of this order, this month.
-  final int share;
-
-  /// What is left over once [share] is taken off — paid in cash.
-  final int remainder;
-
-  final String? deniedNote;
-  final VoidCallback? onTap;
-
-  const _WalletMethodTile({
-    required this.selected,
-    required this.share,
-    required this.remainder,
-    required this.deniedNote,
-    required this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final method = PaymentMethods.wallet;
-    final denied = deniedNote != null;
-    final subtitle = deniedNote ??
-        (remainder > 0
-            ? '₹${formatRupees(share)} from wallet · ₹${formatRupees(remainder)} in cash'
-            : '₹${formatRupees(share)} from wallet');
-
-    return Material(
-      color: selected ? method.tint : AppColors.white,
-      borderRadius: BorderRadius.circular(10),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(10),
-        child: Container(
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(
-              color: selected ? method.accent : AppColors.border,
-              width: selected ? 1.4 : 1,
-            ),
-          ),
-          padding: const EdgeInsets.all(11),
-          child: Row(
-            children: [
-              Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(
-                  color: method.tint,
-                  borderRadius: BorderRadius.circular(9),
-                ),
-                child: Icon(method.icon, size: 20, color: method.accent),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      method.name,
-                      style: const TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                    Text(
-                      subtitle,
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: denied ? AppColors.danger : AppColors.textMuted,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              if (!denied)
-                Icon(
-                  selected
-                      ? Icons.radio_button_checked_rounded
-                      : Icons.radio_button_unchecked_rounded,
-                  size: 20,
-                  color: selected ? method.accent : AppColors.textMuted,
-                ),
             ],
           ),
         ),
