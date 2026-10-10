@@ -37,6 +37,13 @@ class Registration {
   final String pincode;
   final String state;
 
+  /// The member's own PAN — optional, unlike an agent's (see
+  /// `AgentService.validatePan`): registration itself is offered, never
+  /// imposed, and nothing here depends on it the way delivery depends on an
+  /// address. Defaults to `''` so every existing call site (tests included)
+  /// keeps compiling without naming it.
+  final String pan;
+
   /// The assigned branch, held by [ShieldStore.id] rather than by object so a
   /// change to the directory cannot leave a stale copy behind.
   final String storeId;
@@ -52,7 +59,22 @@ class Registration {
     required this.pincode,
     required this.state,
     required this.storeId,
+    this.pan = '',
   });
+
+  /// Real PAN format (`AAAAA9999A`) — the same check
+  /// `AgentService.validatePan` enforces for an agent's own KYC, except a
+  /// blank value is valid here: a member may leave this unanswered.
+  static String? validatePan(String? value) {
+    final text = (value ?? '').trim().toUpperCase();
+    if (text.isEmpty) {
+      return null;
+    }
+    if (!RegExp(r'^[A-Z]{5}[0-9]{4}[A-Z]$').hasMatch(text)) {
+      return 'PAN looks like ABCDE1234F';
+    }
+    return null;
+  }
 
   ShieldStore? get store => StoreDirectory.byId(storeId);
 
@@ -84,6 +106,7 @@ class Registration {
     String? pincode,
     String? state,
     String? storeId,
+    String? pan,
   }) {
     return Registration(
       name: name ?? this.name,
@@ -96,6 +119,7 @@ class Registration {
       pincode: pincode ?? this.pincode,
       state: state ?? this.state,
       storeId: storeId ?? this.storeId,
+      pan: pan ?? this.pan,
     );
   }
 }

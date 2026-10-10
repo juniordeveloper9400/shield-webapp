@@ -30,6 +30,7 @@ void main() {
     'place': 'Melattur',
     'pincode': '679326',
     'state': 'Kerala',
+    'pan': 'ABCDE1234F',
     'homeStoreId': 7,
     'homeStoreCode': 'SHD-MEL',
     'registrationCompletedAt': '2026-09-01T10:00:00.000Z',
@@ -56,6 +57,7 @@ void main() {
       expect(lookup.registration?.phone, '9876543210');
       expect(lookup.registration?.gender, Gender.female);
       expect(lookup.registration?.dob, DateTime(1994, 9, 4));
+      expect(lookup.registration?.pan, 'ABCDE1234F');
       expect(storeListAsked, isFalse);
     });
 
@@ -143,6 +145,7 @@ void main() {
       pincode: '679326',
       state: 'Kerala',
       storeId: 'SHD-MEL',
+      pan: 'abcde1234f',
     );
 
     test('sends the branch by its code, and needs no store list lookup to do it', () async {
@@ -166,6 +169,9 @@ void main() {
       expect(sent?['dob'], '1994-09-04');
       expect(sent?['gender'], 'FEMALE');
       expect(sent?['email'], 'asha@example.com');
+      // Sent exactly as given — uppercasing is the form's own job (see the
+      // uppercase TextInputFormatter on its PAN field), not this repository's.
+      expect(sent?['pan'], 'abcde1234f');
       expect(otherRequests, 0); // never silently drops the branch because a list was empty
     });
 

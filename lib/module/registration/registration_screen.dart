@@ -37,6 +37,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _name = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
+  final _pan = TextEditingController();
   final _address = TextEditingController();
   final _place = TextEditingController();
   final _pincode = TextEditingController();
@@ -89,6 +90,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _name.text = profile?.name ?? session.value?.name ?? '';
     _phone.text = profile?.phone ?? session.value?.phone ?? '';
     _email.text = profile?.email ?? '';
+    _pan.text = profile?.pan ?? '';
     _address.text = profile?.address ?? '';
     _place.text = profile?.place ?? '';
     _pincode.text = profile?.pincode ?? '';
@@ -138,6 +140,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
     _name.dispose();
     _phone.dispose();
     _email.dispose();
+    _pan.dispose();
     _address.dispose();
     _place.dispose();
     _pincode.dispose();
@@ -231,6 +234,7 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           name: _name.text.trim(),
           phone: _phone.text.trim(),
           email: _email.text.trim(),
+          pan: _pan.text.trim().toUpperCase(),
           gender: _gender!,
           dob: _dob!,
           address: _address.text.trim(),
@@ -421,6 +425,22 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           icon: Icons.mail_outline_rounded,
           keyboardType: TextInputType.emailAddress,
           validator: _validateEmail,
+        ),
+        const SizedBox(height: 14),
+        LabelledField(
+          label: 'PAN (optional)',
+          hint: 'ABCDE1234F',
+          controller: _pan,
+          icon: Icons.badge_outlined,
+          textCapitalization: TextCapitalization.characters,
+          inputFormatters: [
+            FilteringTextInputFormatter.allow(RegExp('[A-Za-z0-9]')),
+            LengthLimitingTextInputFormatter(10),
+            TextInputFormatter.withFunction(
+              (_, next) => next.copyWith(text: next.text.toUpperCase()),
+            ),
+          ],
+          validator: Registration.validatePan,
         ),
         const SizedBox(height: 14),
         _FieldLabel('Gender'),
