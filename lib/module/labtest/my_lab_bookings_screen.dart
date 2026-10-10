@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../../dates.dart';
@@ -29,10 +31,13 @@ class MyLabBookingsScreen extends StatefulWidget {
   State<MyLabBookingsScreen> createState() => _MyLabBookingsScreenState();
 }
 
-class _MyLabBookingsScreenState extends State<MyLabBookingsScreen> {
+class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
+    with WidgetsBindingObserver {
   late final LabBookingSource _source = widget.source ?? _liveSource();
   List<LabBookingRecord>? _bookings;
   bool _loading = true;
+  bool _refreshing = false;
+  Timer? _refreshTimer;
 
   static LabBookingSource _liveSource() {
     String phone() => AuthService.instance.currentUser.value?.phone ?? '';
@@ -49,18 +54,49 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _load();
+    // A booking's stage (Requested → Confirmed → Sample collected → Report
+    // ready) moves entirely from the lab's own console — nothing the member
+    // does here changes it — so without this the only way to see a status
+    // the lab just set is to leave and reopen the screen. Same 15s-while-
+    // open, foreground-and-current-route-only rule as OrderTrackScreen /
+    // UploadPrescriptionScreen use for product and prescription orders.
+    _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
+          ModalRoute.of(context)?.isCurrent == true) {
+        unawaited(_load());
+      }
+    });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
   }
 
   Future<void> _load() async {
-    final bookings = await _source.loadBookings();
-    if (!mounted) {
-      return;
+    if (_refreshing) return;
+    _refreshing = true;
+    try {
+      final bookings = await _source.loadBookings();
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _bookings = bookings;
+        _loading = false;
+      });
+    } finally {
+      _refreshing = false;
     }
-    setState(() {
-      _bookings = bookings;
-      _loading = false;
-    });
   }
 
   Future<void> _reload() async {
@@ -276,11 +312,7 @@ class _StageChip extends StatelessWidget {
       ),
       child: Text(
         stage.label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w700,
-          color: fg,
-        ),
+        style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: fg),
       ),
     );
   }

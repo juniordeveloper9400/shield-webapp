@@ -225,6 +225,44 @@ void main() {
 
       expect(find.text('Page 1 of 1'), findsOneWidget);
     });
+
+    testWidgets(
+      'follows a status the lab set live, with nobody pulling to refresh',
+      (tester) async {
+        var stage = LabStage.requested;
+        final live = LabBookingSource(
+          loadBookings: () async => [_booking(stage: stage)],
+          loadReportPages: (_) async => null,
+        );
+
+        await pump(tester, MyLabBookingsScreen(source: live));
+        // The progress bar names every stage regardless of which is current
+        // (see the "both name the stage" test above) — the chip is the one
+        // place only the current stage's label doubles up.
+        expect(find.text('Requested'), findsNWidgets(2));
+        expect(find.text('Confirmed'), findsOneWidget);
+
+        // The lab confirms it from the console — nothing happens here. The
+        // 15s timer only fires while the app is in the foreground; a widget
+        // test starts with no lifecycle state at all, so this says so
+        // explicitly, the same as the real app does on launch/resume.
+        tester.binding.handleAppLifecycleStateChanged(
+          AppLifecycleState.resumed,
+        );
+        stage = LabStage.confirmed;
+        await tester.pump(const Duration(seconds: 16));
+        await tester.pumpAndSettle();
+        expect(find.text('Confirmed'), findsNWidgets(2));
+        expect(find.text('Requested'), findsOneWidget);
+
+        // Leaving the screen stops the polling — advancing well past
+        // another interval afterwards must not throw.
+        await tester.pumpWidget(const SizedBox.shrink());
+        stage = LabStage.reportReady;
+        await tester.pump(const Duration(seconds: 31));
+        expect(tester.takeException(), isNull);
+      },
+    );
   });
 
   group('the report screen', () {
