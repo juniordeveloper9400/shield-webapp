@@ -14,7 +14,6 @@ import '../checkout/checkout_screen.dart';
 import '../location/address_book.dart';
 import '../orders/order_placed_screen.dart';
 import '../orders/purchase_service.dart';
-import '../prescription/upload_prescription_screen.dart';
 import '../wallet/wallet_service.dart';
 import 'cart_control.dart';
 import 'cart_service.dart';
@@ -228,10 +227,6 @@ class _CartScreenState extends State<CartScreen> {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
-  void _openUploadPrescription() {
-    UploadPrescriptionScreen.open(context);
-  }
-
   void _applyCoupon() {
     // The entry point is wired so the flow is in place; there is no coupon
     // engine behind it yet.
@@ -337,18 +332,6 @@ class _CartScreenState extends State<CartScreen> {
           padding: const EdgeInsets.all(16),
           child: Column(
             children: [
-              _ActionCard(
-                iconBg: AppColors.goldTint,
-                iconColor: AppColors.goldAccent,
-                icon: Icons.assignment_outlined,
-                title: 'Upload a Prescription',
-                titleColor: AppColors.textDark,
-                subtitle:
-                    'Please upload a valid prescription given by your doctor. '
-                    'This is optional',
-                onTap: _openUploadPrescription,
-              ),
-              const SizedBox(height: 12),
               _ActionCard(
                 iconBg: AppColors.panelBlue,
                 iconColor: AppColors.brandBlue,
