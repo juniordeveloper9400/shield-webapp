@@ -439,8 +439,8 @@ class _AgentRegistrationScreenState extends State<AgentRegistrationScreen> {
       _error = null;
     });
 
-    // A real SMS, sent on a throwaway secondary Firebase app so it never
-    // touches the recruiter's own session (see [AgentOtpVerifier]).
+    // A real MSG91-backed SMS, mediated entirely through backend/api so it
+    // never touches the recruiter's own session (see [AgentOtpVerifier]).
     final failure =
         await AgentOtpVerifier.current.sendCode('+91${_phone.text.trim()}');
     if (!mounted) {

@@ -76,9 +76,10 @@ class _LoginScreenState extends State<LoginScreen> {
   int _secondsLeft = 0;
 
   /// While set and in the future, the send button is disabled and the form
-  /// shows a self-updating "try again in N min" note — the device has hit the
-  /// four-an-hour cap or Firebase's own block. A ticking [_throttleTimer]
-  /// refreshes the note and clears both when the wait runs out.
+  /// shows a self-updating "try again in N min" note — the device has hit
+  /// the backend's own rate limit (`AuthThrottle`). A ticking
+  /// [_throttleTimer] refreshes the note and clears both when the wait
+  /// runs out.
   DateTime? _throttledUntil;
   Timer? _throttleTimer;
 
@@ -342,9 +343,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  /// The raw Firebase code, appended in parentheses when there is one — turns
-  /// a support screenshot into a precise pointer at the console setting to fix
-  /// (`unauthorized-domain`, `operation-not-allowed`, `billing-not-enabled`…).
+  /// The backend's own `reason` string, appended in parentheses when there
+  /// is one — turns a support screenshot into a precise pointer at what to
+  /// fix.
   String _diagnosticSuffix() {
     final code = AuthService.instance.lastAuthDiagnostic;
     return code == null || code.isEmpty ? '' : '\n($code)';

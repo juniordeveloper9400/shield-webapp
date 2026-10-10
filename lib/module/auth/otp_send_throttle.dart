@@ -2,13 +2,13 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Formerly a local cap on how often a device could ask for an OTP — a rolling
-/// four-an-hour window plus an hour-long hard block whenever Firebase returned
-/// `too-many-requests`.
+/// four-an-hour window plus an hour-long hard block whenever the SMS provider
+/// (Firebase at the time) returned a rate-limit error.
 ///
-/// That block re-armed on every Firebase hiccup and ended up locking real
+/// That block re-armed on every provider-side hiccup and ended up locking real
 /// members out of sign-in for an hour at a time, on every device. A member has
-/// to be able to sign in anywhere, any time, so the cap is gone: Firebase's own
-/// server-side rate limiting is the only limit now.
+/// to be able to sign in anywhere, any time, so the cap is gone: the backend's
+/// own server-side rate limiting (`AuthThrottle`) is the only limit now.
 ///
 /// The class stays so its call sites keep compiling. [blockedFor] never blocks
 /// and clears anything a previous build stored; the rest are no-ops.
@@ -36,7 +36,7 @@ class OtpSendThrottle {
   /// No-op — attempts are no longer counted.
   Future<void> recordSend() async {}
 
-  /// No-op — the app no longer takes a device off Firebase. Returns
+  /// No-op — the app no longer takes a device off the sign-in path at all. Returns
   /// [Duration.zero] for callers that use the value in a message.
   Future<Duration> registerServerBlock() async => Duration.zero;
 

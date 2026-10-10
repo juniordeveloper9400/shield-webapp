@@ -9,13 +9,13 @@ import 'backend_http.dart';
 /// - [phoneExists] → `POST /v1/member/auth/phone-lookup` (public, pre-sign-in)
 /// - [nameByPhone] → `GET /v1/member/me`, only while a backend session exists
 /// - [deleteAccount] → `DELETE /v1/member/me`
-/// - [upsertOnSignIn] → nothing extra: the backend session exchange that
-///   [BackendSession] runs right after Firebase sign-in creates or refreshes the
-///   row and records the login time itself.
+/// - [upsertOnSignIn] → nothing extra: the MSG91-backed OTP verify/register
+///   call itself creates or refreshes the row and records the login time —
+///   see `AuthService`'s `BackendMemberOtpTransport`.
 ///
 /// Best-effort, as before: a failed call returns null (or false) rather than
-/// throwing, so sign-in is never blocked by the backend being unreachable. The
-/// Firebase session stays the source of truth for whether someone is signed in.
+/// throwing. [BackendSession]'s own persisted token is the source of truth
+/// for whether someone is signed in.
 class MemberRepository {
   const MemberRepository._();
 
