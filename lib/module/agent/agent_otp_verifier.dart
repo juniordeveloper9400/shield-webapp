@@ -1,99 +1,154 @@
-import 'package:firebase_auth/firebase_auth.dart' as fb;
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 
-import '../../firebase_options.dart';
-import '../auth/auth_service.dart' show FirebaseAuthGateway, OtpError;
+import '../../data/backend/backend_http.dart';
+import '../auth/auth_service.dart' show OtpError;
 
-/// Sends and checks a real SMS code for the **agent-registration** screen,
-/// without ever signing the device in.
+/// Proves the agent-registration form's recruit owns the phone number they
+/// gave, via `backend/api`'s MSG91-backed `/v1/agent/otp/*` endpoints
+/// (member-authenticated — the recruiting member's own session carries the
+/// call, same as the root `shield` app's own `AgentPhoneVerifier`) — never
+/// signs anyone in.
 ///
-/// The recruiter is already signed in (member Firebase Phone Auth). Verifying
-/// the *new* agent's number on the primary `FirebaseAuth.instance` would swap
-/// the device's session onto that number. So this runs the whole round trip on
-/// a **secondary Firebase app** (`agentReg`) through an `ephemeral`
-/// [FirebaseAuthGateway] that signs out the moment the code checks out — all we
-/// want from it is proof the recruit holds the number.
-///
-/// Best-effort like the rest of the app: if Firebase is not configured on this
-/// build, [sendCode] returns [OtpError.unavailable] and the screen surfaces
-/// that instead of white-screening.
+/// Delegates the actual network calls to an [AgentOtpTransport] so tests can
+/// inject fakes with [useTransport] instead of a live backend.
 class AgentOtpVerifier {
   AgentOtpVerifier._();
 
   static final AgentOtpVerifier instance = AgentOtpVerifier._();
 
   /// Test hook — a fake the agent-registration screen uses in place of the
-  /// real Firebase round trip.
+  /// real backend round trip.
   @visibleForTesting
   static AgentOtpVerifier? debugOverride;
 
   static AgentOtpVerifier get current => debugOverride ?? instance;
 
-  FirebaseApp? _app;
-  FirebaseAuthGateway? _gateway;
+  AgentOtpTransport _transport = BackendAgentOtpTransport();
 
-  /// The gateway bound to the secondary app, built on first use. Null when
-  /// Firebase could not be brought up on this platform.
-  Future<FirebaseAuthGateway?> _ensureGateway() async {
-    final existing = _gateway;
-    if (existing != null) {
-      return existing;
-    }
-    try {
-      _app ??= await _openSecondaryApp();
-      final auth = fb.FirebaseAuth.instanceFor(app: _app!);
-      return _gateway = FirebaseAuthGateway(auth: auth, ephemeral: true);
-    } catch (error) {
-      debugPrint('AgentOtpVerifier: secondary Firebase app unavailable — $error');
-      return null;
-    }
+  bool _pending = false;
+  String? _phone;
+
+  /// Test hook: run send/confirm against [transport] — an in-memory fake —
+  /// instead of the real backend.
+  @visibleForTesting
+  void useTransport(AgentOtpTransport transport) {
+    _transport = transport;
   }
 
-  Future<FirebaseApp> _openSecondaryApp() async {
-    try {
-      return Firebase.app('agentReg');
-    } on FirebaseException {
-      return Firebase.initializeApp(
-        name: 'agentReg',
-        options: DefaultFirebaseOptions.currentPlatform,
-      );
-    }
-  }
-
-  /// Sends a code to [e164Phone] (`+91XXXXXXXXXX`). Null once it is on its way,
-  /// otherwise the reason it did not go.
+  /// Sends a code to [e164Phone] (`+91XXXXXXXXXX`). Null once it is on its
+  /// way, otherwise the reason it did not go.
   Future<OtpError?> sendCode(String e164Phone) async {
-    final gateway = await _ensureGateway();
-    if (gateway == null) {
-      return OtpError.unavailable;
+    final result = await _transport.sendCode(e164Phone);
+    if (result.failure == null) {
+      _phone = e164Phone;
+      _pending = true;
     }
-    try {
-      return await gateway.sendCode(e164Phone);
-    } catch (error) {
-      debugPrint('AgentOtpVerifier.sendCode: $error');
-      return OtpError.unavailable;
-    }
+    return result.failure;
   }
 
-  /// Checks [code] against the last [sendCode]. Null on success — the number is
-  /// proven and no session is left behind.
+  /// Checks [code] against the last [sendCode]. Null on success — the number
+  /// is proven and no session is left behind.
   Future<OtpError?> confirmCode(String code) async {
-    final gateway = _gateway;
-    if (gateway == null) {
+    final phone = _phone;
+    if (!_pending || phone == null) {
       return OtpError.noPendingRequest;
     }
-    try {
-      return await gateway.confirmCode(code);
-    } catch (error) {
-      debugPrint('AgentOtpVerifier.confirmCode: $error');
-      return OtpError.unknown;
+    final result = await _transport.confirmCode(phone, code.trim());
+    if (result.failure == null) {
+      _pending = false;
+      _phone = null;
     }
+    return result.failure;
   }
 
   /// Forget the pending verification (recruiter went back to edit the number).
   void discard() {
-    _gateway?.discard();
-    _gateway = null;
+    _pending = false;
+    _phone = null;
+  }
+
+  /// Test hook: forget any injected transport and pending state.
+  @visibleForTesting
+  void reset() {
+    _transport = BackendAgentOtpTransport();
+    _pending = false;
+    _phone = null;
+  }
+}
+
+/// A send or confirm attempt's outcome: null [failure] on success.
+@immutable
+class AgentOtpOutcome {
+  final OtpError? failure;
+
+  const AgentOtpOutcome.success() : failure = null;
+
+  const AgentOtpOutcome.failed(this.failure);
+}
+
+/// The send/verify half of [AgentOtpVerifier], swapped between the real
+/// backend call and an in-memory stand-in for tests.
+abstract class AgentOtpTransport {
+  Future<AgentOtpOutcome> sendCode(String e164Phone);
+  Future<AgentOtpOutcome> confirmCode(String e164Phone, String code);
+}
+
+/// Calls `backend/api`'s `/v1/agent/otp/send-msg91` and `/verify-msg91` —
+/// the same endpoints the root `shield` app's own `AgentPhoneVerifier` uses.
+class BackendAgentOtpTransport implements AgentOtpTransport {
+  BackendAgentOtpTransport({BackendHttp? http}) : _http = http ?? BackendHttp.instance;
+
+  final BackendHttp _http;
+
+  @override
+  Future<AgentOtpOutcome> sendCode(String e164Phone) async {
+    if (!_http.isEnabled) {
+      return const AgentOtpOutcome.failed(OtpError.unavailable);
+    }
+    try {
+      final result = await _http.request(
+        'POST',
+        '/v1/agent/otp/send-msg91',
+        body: {'phone': e164Phone},
+      ) as Map<String, dynamic>;
+      if (result['ok'] == true) {
+        return const AgentOtpOutcome.success();
+      }
+      return const AgentOtpOutcome.failed(OtpError.configError);
+    } on BackendHttpException catch (error) {
+      BackendHttp.log('AgentOtpVerifier.sendCode failed', error: error);
+      return AgentOtpOutcome.failed(
+        error.isTooManyRequests ? OtpError.tooManyRequests : OtpError.network,
+      );
+    } catch (error) {
+      BackendHttp.log('AgentOtpVerifier.sendCode failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.network);
+    }
+  }
+
+  @override
+  Future<AgentOtpOutcome> confirmCode(String e164Phone, String code) async {
+    if (!_http.isEnabled) {
+      return const AgentOtpOutcome.failed(OtpError.unavailable);
+    }
+    try {
+      final result = await _http.request(
+        'POST',
+        '/v1/agent/otp/verify-msg91',
+        body: {'phone': e164Phone, 'code': code},
+      ) as Map<String, dynamic>;
+      if (result['ok'] == true) {
+        return const AgentOtpOutcome.success();
+      }
+      return const AgentOtpOutcome.failed(OtpError.wrongOtp);
+    } on BackendHttpException catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode failed', error: error);
+      return AgentOtpOutcome.failed(
+        error.isTooManyRequests ? OtpError.tooManyRequests : OtpError.network,
+      );
+    } catch (error) {
+      BackendHttp.log('AgentOtpVerifier.confirmCode failed', error: error);
+      return const AgentOtpOutcome.failed(OtpError.network);
+    }
   }
 }

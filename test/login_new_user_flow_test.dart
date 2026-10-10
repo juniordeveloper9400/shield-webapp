@@ -5,7 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:shield/module/auth/auth_service.dart';
 import 'package:shield/module/auth/login_screen.dart';
 
-import 'support/fake_auth_gateway.dart';
+import 'support/fake_member_otp_transport.dart';
 
 /// The sign-in screen opens on the mobile number alone. "Create account" (the
 /// name field) only appears once the number is found to have no account, and a
@@ -13,15 +13,15 @@ import 'support/fake_auth_gateway.dart';
 void main() {
   /// Stands in for `app.users`: phone → stored name.
   late Map<String, String> members;
-  late FakeAuthGateway gateway;
+  late FakeMemberOtpTransport gateway;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     members = {};
-    gateway = FakeAuthGateway();
+    gateway = FakeMemberOtpTransport();
     AuthService.instance
       ..reset()
-      ..useGateway(gateway)
+      ..useTransport(gateway)
       ..useMemberLookup(
         phoneExists: (phone) async => members.containsKey(phone),
         nameByPhone: (phone) async => members[phone],
@@ -99,7 +99,7 @@ void main() {
       expect(find.text('Verify your number'), findsOneWidget);
       expect(AuthService.instance.pendingName, 'Asha Nair');
 
-      expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+      expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
       expect(AuthService.instance.currentUser.value?.name, 'Asha Nair');
     });
 
@@ -129,7 +129,7 @@ void main() {
       expect(find.text('Verify your number'), findsOneWidget);
       expect(find.text('Full name'), findsNothing);
 
-      expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+      expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
       expect(AuthService.instance.currentUser.value?.name, 'Asha Nair');
     });
 
@@ -152,7 +152,7 @@ void main() {
         expect(find.textContaining('saved name'), findsOneWidget);
         expect(AuthService.instance.pendingName, isEmpty);
 
-        expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+        expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
         expect(AuthService.instance.currentUser.value?.name, 'Asha Nair');
       },
     );
@@ -166,7 +166,7 @@ void main() {
         await AuthService.instance.requestOtp(name: 'Somebody Else', phone: phone),
         isNull,
       );
-      expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+      expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
 
       expect(AuthService.instance.currentUser.value?.name, 'Asha Nair');
     });
@@ -176,14 +176,14 @@ void main() {
         await AuthService.instance.requestOtp(name: 'Asha Nair', phone: phone),
         isNull,
       );
-      expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+      expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
 
       expect(AuthService.instance.currentUser.value?.name, 'Asha Nair');
     });
 
     test('with no stored or typed name it falls back to “Member”', () async {
       expect(await AuthService.instance.requestOtp(phone: phone), isNull);
-      expect(await AuthService.instance.verifyOtp(FakeAuthGateway.code), isNull);
+      expect(await AuthService.instance.verifyOtp(FakeMemberOtpTransport.code), isNull);
 
       expect(AuthService.instance.currentUser.value?.name, 'Member');
     });

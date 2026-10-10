@@ -66,6 +66,30 @@ class MemberRepository {
     }
   }
 
+  /// The signed-in member's own name and phone, straight from `app.users`
+  /// via `GET /v1/member/me` — what [AuthService.restoreSession] reads back
+  /// once a persisted backend session is live again, now that there is no
+  /// Firebase `currentUser` left to ask instead. Null when there is no live
+  /// backend session, the backend could not be reached, or the account
+  /// itself no longer exists.
+  Future<MemberProfile?> currentProfile() async {
+    if (!BackendHttp.isConfigured) return null;
+    try {
+      final body = await BackendHttp.instance.request('GET', '/v1/member/me');
+      if (body is Map) {
+        final phone = body['phone'];
+        if (phone is String && phone.isNotEmpty) {
+          final name = body['name'];
+          return MemberProfile(name: name is String ? name : '', phone: phone);
+        }
+      }
+      return null;
+    } catch (error) {
+      BackendHttp.log('MemberRepository.currentProfile failed', error: error);
+      return null;
+    }
+  }
+
   /// The stored name of the signed-in member, or null when there is no backend
   /// session yet or the read failed. Called at launch, when the Firebase profile
   /// carries no display name.
@@ -87,4 +111,13 @@ class MemberRepository {
   /// Kept so the restore path does not change. The backend records the login
   /// time on each session exchange, so there is nothing extra to send here.
   Future<void> touchLogin(String phone) async {}
+}
+
+/// The handful of `GET /v1/member/me` fields [MemberRepository.currentProfile]
+/// actually needs.
+class MemberProfile {
+  final String name;
+  final String phone;
+
+  const MemberProfile({required this.name, required this.phone});
 }

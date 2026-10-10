@@ -1,8 +1,8 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 
+import '../../data/backend/backend_http.dart';
 import '../../data/backend/backend_session.dart';
 import '../../data/backend/member_repository.dart';
 import '../location/address_book.dart';
@@ -15,8 +15,7 @@ import 'otp_send_throttle.dart';
 ///
 /// Identity is the mobile number: it is what the code was sent to, and it is
 /// what the backend keys the account on. The name is what the member typed on
-/// the way in and is only ever used for display — Firebase Phone Auth does not
-/// carry one, so the app holds it alongside the session.
+/// the way in and is only ever used for display.
 @immutable
 class AuthUser {
   final String name;
@@ -51,64 +50,64 @@ enum OtpError {
   /// The verification session lapsed before the code was entered.
   codeExpired,
 
-  /// Firebase is rate-limiting this device or number.
+  /// MSG91 (or the backend's own `AuthThrottle`) is rate-limiting this
+  /// device or number.
   tooManyRequests,
 
-  /// The app's own cap — four code requests inside an hour — has been hit.
-  /// Unlike [tooManyRequests] this never reaches Firebase; it keeps the
-  /// device well inside Firebase's harsher, opaque block. See
-  /// [AuthService.sendCooldownRemaining] for the wait.
+  /// Unused by the current MSG91-backed transport — kept because the UI
+  /// still switches over it. Historical: the app's own on-device cap (four
+  /// code requests inside an hour), removed once Firebase's own
+  /// `too-many-requests` block turned out harsher and this just piled a
+  /// redundant hour-long lock on top of it. See [AuthService.sendCooldownRemaining].
   throttled,
 
-  /// The project's SMS allowance is used up.
+  /// Unused by the current MSG91-backed transport — kept because the UI
+  /// still switches over it. Historical: Firebase Phone Auth's project-wide
+  /// SMS allowance being used up.
   quotaExceeded,
 
-  /// The send or verify call could not reach Firebase.
+  /// The send or verify call could not reach the backend.
   network,
 
-  /// Firebase never called back — usually the reCAPTCHA "verifying you're not
-  /// a robot" fallback opened and stalled, so `codeSent` never fired and no
-  /// SMS went out. The flow is abandoned rather than left spinning forever.
+  /// The backend call took too long to answer. The flow is abandoned rather
+  /// than left spinning forever.
   timeout,
 
-  /// Firebase Phone Auth is not available on this build — usually
-  /// `Firebase.initializeApp()` failed at launch because the current platform
-  /// has no configured options (only Android is wired; see FIREBASE_SETUP.md).
+  /// OTP sending/verification is unavailable right now — the backend is
+  /// unreachable, or `BACKEND_API_BASE_URL` was not configured at build
+  /// time.
   unavailable,
 
-  /// The Firebase project itself is not set up to send this SMS and retrying
-  /// will not help: the Phone provider is disabled, the project is still on
-  /// the no-billing Spark plan, or this build's SHA fingerprints are not
-  /// registered. See FIREBASE_SETUP.md.
+  /// The backend reports MSG91 itself is not configured on the server.
   configError,
 
-  /// Anything Firebase reported that does not map to one of the above.
+  /// Anything the backend reported that does not map to one of the above.
   unknown,
 }
 
 /// Phone-number sign-in for the member session.
 ///
 /// The flow is two calls — [requestOtp] sends the SMS, [verifyOtp] checks the
-/// code — and the same [currentUser] notifier every screen already listens to.
-/// The work behind those two calls is delegated to an [AuthGateway]; in the
-/// app that is always [FirebaseAuthGateway] (Firebase Phone Auth), built lazily
-/// on first use so `Firebase.initializeApp()` in `main()` has already run.
-/// There is no demo or offline fallback — a real code is sent and checked.
-/// Tests inject an in-memory fake with [useGateway] before driving the flow.
+/// code — and the same [currentUser] notifier every screen already listens
+/// to. The work behind those two calls is delegated to a
+/// [MemberOtpTransport]; in the app that is always
+/// [BackendMemberOtpTransport], which calls `backend/api`'s MSG91-backed
+/// `/v1/member/auth/otp/*` endpoints (same backend, same endpoints the root
+/// `shield` member app uses — see that app's `otp.service.ts`). There is no
+/// demo or offline fallback — a real code is sent and checked. Tests inject
+/// an in-memory fake with [useTransport] before driving the flow.
 ///
-/// Finishing the Firebase side (project `shield-zabnix`) is a checklist in
-/// `FIREBASE_SETUP.md` at the repo root: `flutterfire configure`, enable the
-/// Phone provider, register the app's SHA fingerprints, add an APNs key for
-/// iOS. The Admin SDK service account (`firebase-adminsdk-…@…gserviceaccount
-/// .com`) is a server credential and must never be added to this app.
+/// Because the backend is the *only* way a code is sent or checked, sign-in
+/// hard-depends on `BACKEND_API_BASE_URL` being configured and the backend
+/// being reachable.
 class AuthService {
   AuthService._();
 
   static final AuthService instance = AuthService._();
 
-  /// Stand-in code the agent registration screen's placeholder OTP step still
-  /// accepts (see `agent_registration_screen.dart`). The member sign-in flow
-  /// below does real Firebase verification and never uses this.
+  /// The fixed code [FakeMemberOtpTransport] treats as correct, exposed here
+  /// so widget tests can type a known value into the OTP field. No
+  /// production path uses this — real sign-in runs real MSG91 verification.
   static const String demoOtp = '123456';
 
   /// Digits in a code. The OTP field draws this many boxes.
@@ -120,25 +119,16 @@ class AuthService {
   /// Null while signed out. Widgets listen to this to decide what to show.
   final ValueNotifier<AuthUser?> currentUser = ValueNotifier<AuthUser?>(null);
 
-  /// Sends and checks the code. Null until first used or injected by a test;
-  /// the app builds a [FirebaseAuthGateway] on first access via [_activeGateway].
-  AuthGateway? _gateway;
+  /// Sends and checks the code. The real backend-calling implementation by
+  /// default; tests swap it with [useTransport].
+  MemberOtpTransport _transport = BackendMemberOtpTransport();
 
-  /// The gateway to run send/verify against, building the Firebase one on
-  /// first use. Only reached from [requestOtp] / [verifyOtp], which run after
-  /// `Firebase.initializeApp()`; tests must call [useGateway] first so this
-  /// never constructs a real Firebase client.
-  AuthGateway get _activeGateway =>
-      _gateway ??= FirebaseAuthGateway(onResolved: _resolvePendingFromGateway);
+  /// The backend's own `reason` string behind the most recent failure, or
+  /// null. Shown under the "not set up" line so a support screenshot names
+  /// the exact thing to fix.
+  String? _lastDiagnostic;
 
-  /// The raw Firebase error code behind the most recent config failure
-  /// (`operation-not-allowed`, `unauthorized-domain`, `billing-not-enabled`,
-  /// …), or null. Shown under the "not set up" line so a support screenshot
-  /// names the exact Firebase console setting to fix.
-  String? get lastAuthDiagnostic {
-    final gateway = _gateway;
-    return gateway is FirebaseAuthGateway ? gateway.lastDiagnostic : null;
-  }
+  String? get lastAuthDiagnostic => _lastDiagnostic;
 
   /// The local cap on code requests: four an hour, then the send button is
   /// refused until the oldest ages out.
@@ -176,25 +166,6 @@ class AuthService {
 
   String? get pendingPhone => _pending?.phone;
 
-  /// Android instant verification / SMS auto-retrieval signs the member into
-  /// Firebase without the code ever being typed. When that happens the gateway
-  /// calls this, and the half-finished sign-in is completed the same way
-  /// [verifyOtp] would have — so the member is not left sitting on the code
-  /// screen while Firebase already considers them signed in.
-  Future<void> _resolvePendingFromGateway() async {
-    final pending = _pending;
-    if (pending == null) {
-      return;
-    }
-    _pending = null;
-    final user = AuthUser(
-      name: await _nameFor(pending),
-      phone: pending.phone,
-    );
-    currentUser.value = user;
-    _afterSignIn(user);
-  }
-
   /// The name a member signs in under. A number that already has an account
   /// keeps the name stored on it, whatever was typed on the way in — typing a
   /// different name on the create-account path must not rename an existing
@@ -209,135 +180,85 @@ class AuthService {
     return typed.isEmpty ? 'Member' : typed;
   }
 
-  /// Persists the freshly signed-in user: writes the name onto the Firebase
-  /// profile so the next launch has it, records the account in the
-  /// `app.users` table, and bridges into a backend-issued session for the
-  /// agent/investor screens. All three are best-effort and never block the
-  /// sign-in.
+  /// Persists the freshly signed-in user, then re-runs the persona/
+  /// registration/wallet/address reloads every screen in this app depends
+  /// on — the backend session is already live by the time this runs (see
+  /// [verifyOtp]), so this replaces what `_bridgeToBackend`'s success branch
+  /// used to do, not just the Neon-direct bookkeeping below it.
   void _afterSignIn(AuthUser user) {
     _freshSignIn = user;
     // Signed in — clear the hourly send cap so a later sign-in starts fresh.
     _sendCooldownRemaining = null;
     unawaited(_sendThrottle.reset());
-    unawaited(_activeGateway.saveDisplayName(user.name));
     unawaited(
       MemberRepository.instance.upsertOnSignIn(
         name: user.name,
         phone: user.phone,
       ),
     );
-    unawaited(_bridgeToBackend(user));
-  }
-
-  /// Exchanges the Firebase ID token for a backend session — see
-  /// `BackendSession.signInWithFirebaseToken`. A missing/expired token or an
-  /// unreachable backend just leaves the backend session unset; it never
-  /// affects the Firebase sign-in this app already completed.
-  ///
-  /// On success, re-runs the persona check — see this method's callers'
-  /// own doc for why: `currentUser.value = user` fires PersonaService's
-  /// listener synchronously, which reads `BackendHttp.isSignedIn`
-  /// immediately, long before this async bridge has had time for a real
-  /// network round trip. Without this, that first check almost always
-  /// loses the race, resolves a converted agent/investor as "not
-  /// converted" because the backend session did not exist *yet*, and
-  /// nothing ever asks again until the next resume or the 60-second poll
-  /// — read as "my agent card was there, then a refresh removed it."
-  Future<void> _bridgeToBackend(AuthUser user) async {
-    try {
-      final idToken = await _activeGateway.currentIdToken();
-      if (idToken == null) {
-        return;
-      }
-      final signedIn = await BackendSession.instance.signInWithFirebaseToken(
-        idToken,
-        name: user.name,
-      );
-      if (signedIn) {
-        unawaited(PersonaService.instance.reload(user.phone));
-        unawaited(
-          RegistrationService.instance.loadForSignedInMember(user.phone),
-        );
-        unawaited(WalletService.instance.refreshFromDatabase(user.phone));
-        unawaited(AddressBook.instance.refreshFromDatabase());
-      }
-    } catch (error) {
-      debugPrint('_bridgeToBackend failed: $error');
-    }
+    unawaited(PersonaService.instance.reload(user.phone));
+    unawaited(RegistrationService.instance.loadForSignedInMember(user.phone));
+    unawaited(WalletService.instance.refreshFromDatabase(user.phone));
+    unawaited(AddressBook.instance.refreshFromDatabase());
   }
 
   /// Restores a persisted sign-in at launch, so a member who has signed in
   /// once goes straight into the app without seeing the login screen again.
   ///
-  /// Call from `main()` once `Firebase.initializeApp()` has run. A no-op when
-  /// already signed in, when there is no live session on the device, or when
-  /// Firebase is unavailable on this build.
+  /// Unlike the old Firebase version — which asked Firebase's own on-device
+  /// `currentUser` for this — there is no local identity left to ask: the
+  /// durable thing this now restores from is `BackendSession`'s persisted
+  /// refresh token. Once that is live again, `GET /v1/member/me` supplies
+  /// the name and phone to restore — see `MemberRepository.currentProfile`.
+  ///
+  /// Call from `main()` at launch. A no-op when already signed in, when
+  /// there is no persisted backend session on this device, or when the
+  /// backend is unreachable right now.
   Future<void> restoreSession() async {
     if (isSignedIn) {
       return;
     }
 
-    final AuthUser? restored;
+    bool restored;
     try {
-      restored = await _activeGateway.restoreUser();
+      restored = await BackendSession.instance.restore();
     } catch (error) {
-      debugPrint('restoreSession: gateway unavailable — $error');
+      debugPrint('restoreSession: backend unavailable — $error');
       return;
     }
-    if (restored == null || restored.phone.isEmpty) {
-      return;
-    }
-
-    // A deleted account (see deleteAccount) must not resurrect just because
-    // Firebase kept a local session alive — `false` is the one answer that
-    // actually blocks the restore; `null` ("could not check") falls open,
-    // the same as everywhere else this app treats the database as
-    // best-effort rather than a hard gate.
-    if (await MemberRepository.instance.phoneExists(restored.phone) == false) {
-      await _gateway?.signOut();
+    if (!restored) {
       return;
     }
 
-    // Phone Auth keeps the number but not the name. Take it from the profile,
-    // falling back to the members table, then to a neutral placeholder that
-    // registration will overwrite.
-    var name = restored.name.trim();
+    final profile = await MemberRepository.instance.currentProfile();
+    if (profile == null) {
+      // The session token itself was valid, but the profile fetch failed or
+      // the account is gone — never show a signed-in shell with no member
+      // behind it.
+      await BackendSession.instance.signOut();
+      return;
+    }
+
+    var name = profile.name.trim();
     if (name.isEmpty) {
-      name = (await MemberRepository.instance.nameByPhone(restored.phone))
+      name = (await MemberRepository.instance.nameByPhone(profile.phone))
               ?.trim() ??
           '';
     }
 
     final user = AuthUser(
       name: name.isEmpty ? 'Member' : name,
-      phone: restored.phone,
+      phone: profile.phone,
     );
     currentUser.value = user;
-    unawaited(MemberRepository.instance.touchLogin(restored.phone));
-    unawaited(_restoreOrBridgeBackend(user));
-  }
-
-  /// Restores a persisted backend session, or — when there is none to
-  /// restore (this device has never successfully bridged to backend/api
-  /// before, e.g. it was unreachable at the time this member last signed
-  /// in) — re-exchanges a fresh Firebase ID token instead. Without this
-  /// fallback, a member converted to an agent/investor while backend/api
-  /// was down would never see their portal card until they explicitly
-  /// signed out and back in.
-  Future<void> _restoreOrBridgeBackend(AuthUser user) async {
-    final restored = await BackendSession.instance.restore();
-    if (!restored) {
-      await _bridgeToBackend(user);
-    } else {
-      // _bridgeToBackend re-runs the persona check itself on success; this
-      // branch bypasses it entirely (a restored session, not a freshly
-      // exchanged one), so it needs the exact same re-check for the exact
-      // same reason — see _bridgeToBackend's own doc.
-      unawaited(PersonaService.instance.reload(user.phone));
-      unawaited(RegistrationService.instance.loadForSignedInMember(user.phone));
-      unawaited(WalletService.instance.refreshFromDatabase(user.phone));
-      unawaited(AddressBook.instance.refreshFromDatabase());
-    }
+    unawaited(MemberRepository.instance.touchLogin(profile.phone));
+    // Same re-check _afterSignIn's own doc describes: a restored session
+    // needs the exact same persona/registration/wallet/address reload a
+    // freshly completed sign-in gets, since nothing else triggers it here.
+    unawaited(PersonaService.instance.reload(profile.phone));
+    unawaited(RegistrationService.instance.loadForSignedInMember(profile.phone));
+    unawaited(WalletService.instance.refreshFromDatabase(profile.phone));
+    unawaited(AddressBook.instance.refreshFromDatabase());
   }
 
   /// Null when [value] is usable as a name, otherwise the reason it is not.
@@ -406,49 +327,39 @@ class AuthService {
     // clears anything an older build left stored so an updated app recovers.
     await _sendThrottle.blockedFor();
 
-    final OtpError? failure;
-    try {
-      failure = await _activeGateway.sendCode('+91$cleanPhone');
-    } catch (error) {
-      // No Firebase app on this platform, or the plugin threw before it could
-      // report a typed failure. Surface it as unavailable rather than letting
-      // it escape as an unhandled async error.
-      debugPrint('requestOtp: gateway unavailable — $error');
-      return OtpError.unavailable;
-    }
-    if (failure != null) {
-      // A genuine Firebase abuse block — surfaced honestly as "try again
-      // later" (it clears on Firebase's own schedule, usually minutes). The
-      // app no longer piles an hour-long device lock on top of it.
-      return failure;
+    _lastDiagnostic = null;
+    final result = await _transport.sendCode(cleanPhone);
+    if (!result.ok) {
+      _lastDiagnostic = result.diagnostic;
+      return result.failure;
     }
 
     _pending = _PendingLogin(name: cleanName, phone: cleanPhone);
     return null;
   }
 
-  /// Signs the pending member in when [code] matches. Returns null on success.
+  /// Signs the pending member in when [code] matches. Returns null on
+  /// success. Picks sign-in vs. registration on the backend by whether
+  /// [_pending] carries a typed name — the same split [requestOtp]'s caller
+  /// already made via [hasAccount] before ever sending a code.
   Future<OtpError?> verifyOtp(String code) async {
     final pending = _pending;
     if (pending == null) {
       return OtpError.noPendingRequest;
     }
 
-    final OtpError? failure;
-    try {
-      failure = await _activeGateway.confirmCode(code.trim());
-    } catch (error) {
-      debugPrint('verifyOtp: gateway unavailable — $error');
-      return OtpError.unavailable;
-    }
-    if (failure != null) {
-      return failure;
+    final result = await _transport.confirmCode(
+      pending.phone,
+      code.trim(),
+      name: pending.name.isEmpty ? null : pending.name,
+    );
+    if (!result.ok) {
+      _lastDiagnostic = result.diagnostic;
+      return result.failure;
     }
 
     _pending = null;
 
-    // Sign-up carries a typed name, sign-in does not — either way an existing
-    // account's stored name wins; see [_nameFor].
     final user = AuthUser(
       name: await _nameFor(pending),
       phone: pending.phone,
@@ -461,14 +372,12 @@ class AuthService {
   /// Drops the half-finished sign-in — the member went back to edit details.
   void cancelOtp() {
     _pending = null;
-    _gateway?.discard();
   }
 
   Future<void> logOut() async {
     _pending = null;
     _freshSignIn = null;
-    await _gateway?.signOut();
-    unawaited(BackendSession.instance.signOut());
+    await BackendSession.instance.signOut();
     currentUser.value = null;
     // Otherwise this member's registration details would still be sitting in
     // memory — and visible on the register bar — for whichever account (or
@@ -486,40 +395,18 @@ class AuthService {
   /// cleared (soft-deleted, not a row wiped out from under their order
   /// history). A no-op when nobody is signed in.
   ///
-  /// The database side is best-effort, same contract as every other write in
-  /// this app, and is what actually governs the account from here on —
-  /// [MemberRepository.phoneExists] and [restoreSession] both read
-  /// `deleted_at`. The Firebase identity is deleted outright when Firebase
-  /// allows it; when it refuses for want of a recent sign-in
-  /// (`requires-recent-login`), this falls back to a plain sign-out rather
-  /// than leaving the member stuck on a dialog that cannot finish — the
-  /// account already reads as deleted everywhere the app checks. Otherwise
-  /// runs the exact same session-teardown as [logOut] — the backend session,
-  /// wallet and address book must not survive a deleted account any more
-  /// than a plain sign-out.
+  /// There is no separate remote identity left to delete the way the old
+  /// Firebase version had to — a phone number verified through MSG91 leaves
+  /// nothing behind to clean up beyond the backend session, which
+  /// [MemberRepository.deleteAccount] already revokes server-side; this
+  /// still ends the local session the same way [logOut] does.
   Future<void> deleteAccount() async {
     final user = currentUser.value;
     if (user == null) {
       return;
     }
     await MemberRepository.instance.deleteAccount(user.phone);
-    // Same defensive shape as requestOtp/verifyOtp: no Firebase app on this
-    // platform, or the plugin throwing outright, must not stop the account
-    // itself from reading as deleted — that already happened above.
-    var deletedFirebaseUser = false;
-    try {
-      deletedFirebaseUser = await _activeGateway.deleteFirebaseUser();
-    } catch (error) {
-      debugPrint('deleteAccount: gateway unavailable — $error');
-    }
-    if (!deletedFirebaseUser) {
-      try {
-        await _gateway?.signOut();
-      } catch (error) {
-        debugPrint('deleteAccount: sign-out fallback failed — $error');
-      }
-    }
-    unawaited(BackendSession.instance.signOut());
+    await BackendSession.instance.signOut();
     _pending = null;
     _freshSignIn = null;
     currentUser.value = null;
@@ -536,13 +423,15 @@ class AuthService {
     currentUser.value = AuthUser(name: name.trim(), phone: phone.trim());
   }
 
-  /// Test hook: back to a signed-out session with nothing pending and no
-  /// gateway. Pair with [useGateway] before driving the sign-in flow.
+  /// Test hook: back to a signed-out session with nothing pending and the
+  /// real backend transport restored. Pair with [useTransport] before
+  /// driving the sign-in flow.
   @visibleForTesting
   void reset() {
     _pending = null;
     _freshSignIn = null;
-    _gateway = null;
+    _transport = BackendMemberOtpTransport();
+    _lastDiagnostic = null;
     _phoneExists = MemberRepository.instance.phoneExists;
     _nameByPhone = MemberRepository.instance.nameByPhone;
     currentUser.value = null;
@@ -559,367 +448,122 @@ class AuthService {
     _nameByPhone = nameByPhone;
   }
 
-  /// Test hook: run send/verify against [gateway] — an in-memory fake — so the
-  /// flow can be exercised without a live Firebase project.
+  /// Test hook: run send/verify against [transport] — an in-memory fake —
+  /// so the flow can be exercised without a live backend.
   @visibleForTesting
-  void useGateway(AuthGateway gateway) {
-    _gateway = gateway;
+  void useTransport(MemberOtpTransport transport) {
+    _transport = transport;
   }
 }
 
-/// The send/verify half of [AuthService], swapped between the real Firebase
-/// implementation and an in-memory stand-in.
-abstract class AuthGateway {
-  /// Starts verification for an E.164 number (`+91XXXXXXXXXX`). Returns null
-  /// once the code is on its way, otherwise the failure.
-  Future<OtpError?> sendCode(String e164Phone);
+/// A send or confirm attempt's outcome: [ok] true on success, otherwise the
+/// [failure] category plus the backend's own [diagnostic] reason string to
+/// show alongside it.
+@immutable
+class MemberOtpOutcome {
+  final bool ok;
+  final OtpError? failure;
+  final String? diagnostic;
 
-  /// Checks [code] against the last [sendCode]. Returns null when it matches.
-  Future<OtpError?> confirmCode(String code);
+  const MemberOtpOutcome.success() : ok = true, failure = null, diagnostic = null;
 
-  /// The member a persisted sign-in restores to, or null when there is no
-  /// live session on this device. Called once at launch so a signed-in member
-  /// never sees the login screen again until they sign out.
-  Future<AuthUser?> restoreUser();
-
-  /// Stores [name] on the persisted session — Firebase Phone Auth keeps the
-  /// number but carries no name, so it is written to the user's profile here
-  /// and read back by [restoreUser] on the next launch.
-  Future<void> saveDisplayName(String name);
-
-  /// Forgets the pending verification without signing out.
-  void discard();
-
-  Future<void> signOut();
-
-  /// The signed-in Firebase user's current ID token, or null when nobody is
-  /// signed in on this gateway — the credential [BackendSession] exchanges
-  /// for a backend-issued session. Never throws.
-  Future<String?> currentIdToken();
-
-  /// Deletes the signed-in Firebase identity outright — the account is gone,
-  /// not just signed out of this device. Returns false, changing nothing,
-  /// when there is nobody signed in or Firebase refuses for want of a recent
-  /// sign-in (`requires-recent-login`); the caller falls back to [signOut]
-  /// in that case.
-  Future<bool> deleteFirebaseUser();
+  const MemberOtpOutcome.failed(this.failure, [this.diagnostic]) : ok = false;
 }
 
-/// Firebase Phone Auth. Holds the `verificationId` from [sendCode] and pairs
-/// it with the typed code in [confirmCode].
-class FirebaseAuthGateway implements AuthGateway {
-  FirebaseAuthGateway({
-    this.onResolved,
-    fb.FirebaseAuth? auth,
-    this.ephemeral = false,
-  }) : _auth = auth ?? fb.FirebaseAuth.instance;
+/// The send/verify half of [AuthService], swapped between the real
+/// backend-calling implementation and an in-memory stand-in for tests.
+abstract class MemberOtpTransport {
+  /// Starts verification for a bare 10-digit number. Returns null once the
+  /// code is on its way, otherwise the failure.
+  Future<MemberOtpOutcome> sendCode(String phone);
 
-  /// Called when Android instant verification or SMS auto-retrieval signs the
-  /// member in before a code was ever typed, so [AuthService] can finish the
-  /// pending sign-in itself. Never fired when [ephemeral].
-  final void Function()? onResolved;
+  /// Checks [code] against the last [sendCode] for [phone]. [name] is
+  /// non-null only on the sign-up path — see [AuthService.verifyOtp]'s own
+  /// doc on why that alone is enough to pick sign-in vs. registration.
+  Future<MemberOtpOutcome> confirmCode(String phone, String code, {String? name});
+}
 
-  /// When true this gateway is a throwaway number-checker, not a sign-in: a
-  /// successful [confirmCode] proves the caller holds the number and then
-  /// immediately signs out, leaving no session behind. Used by
-  /// [AgentOtpVerifier] on a secondary Firebase app so verifying a *new*
-  /// agent's number never disturbs the signed-in recruiter.
-  final bool ephemeral;
+/// Calls `backend/api`'s MSG91-backed `/v1/member/auth/otp/*` endpoints —
+/// the same ones the root `shield` member app uses (see that app's
+/// `backend/api/src/modules/auth/auth.service.ts`). On a successful
+/// [confirmCode], the backend has already minted a session in the same
+/// call — this adopts it into [BackendSession] directly.
+class BackendMemberOtpTransport implements MemberOtpTransport {
+  BackendMemberOtpTransport({BackendHttp? http}) : _http = http ?? BackendHttp.instance;
 
-  final fb.FirebaseAuth _auth;
-
-  String? _verificationId;
-  int? _resendToken;
-
-  /// The raw Firebase code from the last [_map]ped failure — see
-  /// [AuthService.lastAuthDiagnostic].
-  String? _lastDiagnostic;
-
-  String? get lastDiagnostic => _lastDiagnostic;
-
-  /// Web only. `verifyPhoneNumber`'s callback API is unreliable in a browser —
-  /// when the reCAPTCHA step fails (most often the deploy origin is not in the
-  /// Firebase project's Authorized domains) none of its callbacks fire and the
-  /// send just hangs to the client deadline. `signInWithPhoneNumber` runs the
-  /// same reCAPTCHA but returns a [fb.ConfirmationResult] and throws a typed
-  /// error instead of stalling, so web uses it and keeps the handle here to
-  /// pair with the typed code in [confirmCode].
-  fb.ConfirmationResult? _webConfirmation;
-
-  /// How long to wait for Firebase to call back before giving up. Covers the
-  /// case where the reCAPTCHA fallback web page opens and never resolves, which
-  /// otherwise leaves [sendCode] hanging and the "Get OTP" button spinning.
-  static const Duration _callbackDeadline = Duration(seconds: 70);
-
-  /// Ceiling on a single verify round trip.
-  static const Duration _verifyDeadline = Duration(seconds: 30);
+  final BackendHttp _http;
 
   @override
-  Future<OtpError?> sendCode(String e164Phone) async {
-    _lastDiagnostic = null;
-    if (kIsWeb) {
-      return _sendCodeWeb(e164Phone);
-    }
-
-    final result = Completer<OtpError?>();
-
-    await _auth.verifyPhoneNumber(
-      phoneNumber: e164Phone,
-      // The SMS auto-retrieval window once the code is on its way. This does
-      // not bound the reCAPTCHA step, so it is not a substitute for the
-      // client-side deadline applied to [result] below.
-      timeout: const Duration(seconds: 60),
-      forceResendingToken: _resendToken,
-      verificationCompleted: (credential) async {
-        // Android instant validation / auto-retrieval: no code is ever typed,
-        // so sign in here and let [AuthService] promote the pending login.
-        try {
-          await _auth.signInWithCredential(credential);
-          _verificationId = null;
-          // On pure instant verification `codeSent` never fires — unblock the
-          // send call so the flow is not left spinning on "Get OTP".
-          if (!result.isCompleted) {
-            result.complete(null);
-          }
-          if (ephemeral) {
-            // Number proven; this gateway never keeps a session.
-            await _auth.signOut();
-          } else {
-            onResolved?.call();
-          }
-        } catch (_) {
-          // Fall through to the manual code path, which will surface any error.
-        }
-      },
-      verificationFailed: (e) {
-        if (!result.isCompleted) {
-          result.complete(_map(e));
-        }
-      },
-      codeSent: (verificationId, resendToken) {
-        _verificationId = verificationId;
-        _resendToken = resendToken;
-        if (!result.isCompleted) {
-          result.complete(null);
-        }
-      },
-      codeAutoRetrievalTimeout: (verificationId) {
-        _verificationId = verificationId;
-        if (!result.isCompleted) {
-          result.complete(null);
-        }
-      },
-    );
-
-    // If none of the callbacks above fire — the classic symptom of the
-    // reCAPTCHA fallback stalling — stop waiting so the caller can surface a
-    // real error instead of an endless spinner.
-    return result.future.timeout(
-      _callbackDeadline,
-      onTimeout: () => OtpError.timeout,
-    );
-  }
-
-  /// Web send path: [fb.FirebaseAuth.signInWithPhoneNumber] runs the reCAPTCHA
-  /// and returns a [fb.ConfirmationResult], throwing a typed
-  /// [fb.FirebaseAuthException] on failure rather than leaving the call hanging
-  /// the way `verifyPhoneNumber`'s browser callbacks do.
-  Future<OtpError?> _sendCodeWeb(String e164Phone) async {
-    try {
-      _webConfirmation = await _auth
-          .signInWithPhoneNumber(e164Phone)
-          .timeout(_callbackDeadline);
-      return null;
-    } on TimeoutException {
-      return OtpError.timeout;
-    } on fb.FirebaseAuthException catch (e) {
-      return _map(e);
-    } catch (error) {
-      debugPrint('signInWithPhoneNumber (web): $error');
-      return OtpError.unknown;
-    }
-  }
-
-  @override
-  Future<OtpError?> confirmCode(String code) async {
-    if (kIsWeb) {
-      final confirmation = _webConfirmation;
-      if (confirmation == null) {
-        return OtpError.noPendingRequest;
-      }
-      try {
-        await confirmation.confirm(code).timeout(_verifyDeadline);
-        _webConfirmation = null;
-        if (ephemeral) {
-          await _auth.signOut();
-        }
-        return null;
-      } on TimeoutException {
-        return OtpError.timeout;
-      } on fb.FirebaseAuthException catch (e) {
-        return _map(e);
-      } catch (_) {
-        return OtpError.unknown;
-      }
-    }
-
-    final verificationId = _verificationId;
-    if (verificationId == null) {
-      return OtpError.noPendingRequest;
+  Future<MemberOtpOutcome> sendCode(String phone) async {
+    if (!_http.isEnabled) {
+      return const MemberOtpOutcome.failed(OtpError.unavailable);
     }
     try {
-      final credential = fb.PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: code,
+      final result = await _http.request(
+        'POST',
+        '/v1/member/auth/otp/send',
+        body: {'phone': phone},
+        auth: false,
+      ) as Map<String, dynamic>;
+      if (result['ok'] == true) {
+        return const MemberOtpOutcome.success();
+      }
+      return MemberOtpOutcome.failed(OtpError.configError, result['reason'] as String?);
+    } on BackendHttpException catch (error) {
+      BackendHttp.log('AuthService.requestOtp failed', error: error);
+      return MemberOtpOutcome.failed(
+        error.isTooManyRequests ? OtpError.tooManyRequests : OtpError.network,
       );
-      await _auth.signInWithCredential(credential).timeout(_verifyDeadline);
-      _verificationId = null;
-      if (ephemeral) {
-        await _auth.signOut();
+    } catch (error) {
+      BackendHttp.log('AuthService.requestOtp failed', error: error);
+      return const MemberOtpOutcome.failed(OtpError.network);
+    }
+  }
+
+  @override
+  Future<MemberOtpOutcome> confirmCode(String phone, String code, {String? name}) async {
+    if (!_http.isEnabled) {
+      return const MemberOtpOutcome.failed(OtpError.unavailable);
+    }
+    try {
+      final Map<String, dynamic> result;
+      if (name == null) {
+        result = await _http.request(
+          'POST',
+          '/v1/member/auth/otp/verify',
+          body: {'phone': phone, 'code': code},
+          auth: false,
+        ) as Map<String, dynamic>;
+      } else {
+        result = await _http.request(
+          'POST',
+          '/v1/member/auth/otp/register',
+          body: {'phone': phone, 'code': code, 'name': name},
+          auth: false,
+        ) as Map<String, dynamic>;
       }
-      return null;
-    } on TimeoutException {
-      return OtpError.timeout;
-    } on fb.FirebaseAuthException catch (e) {
-      return _map(e);
-    } catch (_) {
-      return OtpError.unknown;
-    }
-  }
-
-  @override
-  Future<AuthUser?> restoreUser() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return null;
-    }
-    // Phone Auth stores the number as E.164 (`+91XXXXXXXXXX`); the app keys
-    // members on the bare ten digits.
-    final e164 = user.phoneNumber ?? '';
-    final phone = e164.startsWith('+91')
-        ? e164.substring(3)
-        : e164.replaceAll(RegExp(r'[^0-9]'), '');
-    return AuthUser(name: user.displayName ?? '', phone: phone);
-  }
-
-  @override
-  Future<String?> currentIdToken() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return null;
-    }
-    try {
-      return await user.getIdToken();
-    } catch (_) {
-      return null;
-    }
-  }
-
-  @override
-  Future<void> saveDisplayName(String name) async {
-    final user = _auth.currentUser;
-    if (user == null || name.trim().isEmpty || user.displayName == name.trim()) {
-      return;
-    }
-    try {
-      await user.updateDisplayName(name.trim());
+      final accessToken = result['accessToken'] as String?;
+      final refreshToken = result['refreshToken'] as String?;
+      if (accessToken == null || refreshToken == null) {
+        return const MemberOtpOutcome.failed(OtpError.unknown);
+      }
+      await BackendSession.instance.setTokens(accessToken: accessToken, refreshToken: refreshToken);
+      return const MemberOtpOutcome.success();
+    } on BackendHttpException catch (error) {
+      BackendHttp.log('AuthService.verifyOtp failed', error: error);
+      if (error.isTooManyRequests) {
+        return const MemberOtpOutcome.failed(OtpError.tooManyRequests);
+      }
+      if (error.isNotFound) {
+        return const MemberOtpOutcome.failed(
+          OtpError.unknown,
+          'This number is not registered yet — go back and create an account.',
+        );
+      }
+      return MemberOtpOutcome.failed(OtpError.wrongOtp, error.message);
     } catch (error) {
-      // Non-fatal: the name is also written to the members table, and the
-      // next launch falls back to that when the profile has no name.
-      debugPrint('saveDisplayName: $error');
-    }
-  }
-
-  @override
-  void discard() {
-    _verificationId = null;
-    _webConfirmation = null;
-  }
-
-  @override
-  Future<void> signOut() => _auth.signOut();
-
-  @override
-  Future<bool> deleteFirebaseUser() async {
-    final user = _auth.currentUser;
-    if (user == null) {
-      return true;
-    }
-    try {
-      await user.delete();
-      return true;
-    } on fb.FirebaseAuthException catch (e) {
-      // Firebase requires a fresh sign-in for a sensitive op like this once
-      // the session is old enough — expected on a long-lived Phone Auth
-      // session, not a bug. The caller falls back to a plain sign-out; the
-      // member's own account data is already gone from `app.users` by the
-      // time this runs (see AuthService.deleteAccount), so nothing is stuck.
-      debugPrint('deleteFirebaseUser: ${e.code} ${e.message}');
-      return false;
-    } catch (error) {
-      debugPrint('deleteFirebaseUser: $error');
-      return false;
-    }
-  }
-
-  OtpError _map(fb.FirebaseAuthException e) {
-    // Always surface the raw failure — without this every send/verify error
-    // collapses to one vague line and there is no way to tell a billing block
-    // from a bad SHA from a real quota hit. Check `flutter run` / `adb logcat`.
-    debugPrint(
-      'FirebaseAuth: code="${e.code}" message="${e.message}" '
-      'plugin="${e.plugin}"',
-    );
-    _lastDiagnostic = e.code.isEmpty ? null : e.code;
-    switch (e.code) {
-      case 'invalid-verification-code':
-        return OtpError.wrongOtp;
-      case 'invalid-phone-number':
-        return OtpError.invalidPhone;
-      case 'session-expired':
-      case 'code-expired':
-        return OtpError.codeExpired;
-      case 'too-many-requests':
-        return OtpError.tooManyRequests;
-      case 'quota-exceeded':
-        return OtpError.quotaExceeded;
-      case 'network-request-failed':
-        return OtpError.network;
-      case 'captcha-check-failed':
-      case 'web-context-cancelled':
-      case 'web-context-already-presented':
-      case 'missing-app-credential':
-      case 'invalid-app-credential':
-        // The reCAPTCHA step was shown and failed, was dismissed, or handed
-        // back a token Firebase rejected. On a debug Android build this fires
-        // when Play Integrity can't vouch for the app; on web it is a failed or
-        // abandoned reCAPTCHA. Retrying (Resend) gets a fresh challenge.
-        return OtpError.timeout;
-      case 'operation-not-allowed':
-      case 'billing-not-enabled':
-      case 'missing-client-identifier':
-      case 'app-not-authorized':
-      case 'unauthorized-domain':
-      case 'internal-error':
-        // Permanent, project-side misconfiguration rather than a transient
-        // limit: Phone provider off, project still on the Spark (no-billing)
-        // plan, SHA-1/SHA-256 not registered, the API key restricted, or — on
-        // web — the page's origin missing from the project's Authorized
-        // domains. None of these clear by retrying — see FIREBASE_SETUP.md.
-        assert(() {
-          debugPrint(
-            'FirebaseAuth: "${e.code}" is a console-side misconfiguration. '
-            'Phone Auth needs the Blaze plan for real numbers (or a test '
-            'number) and the Phone provider enabled. On Android also register '
-            "this build's SHA-1/SHA-256 on the shield-zabnix app; on web add "
-            'the deploy origin (the Vercel domain) under Authentication → '
-            'Settings → Authorized domains.',
-          );
-          return true;
-        }());
-        return OtpError.configError;
-      default:
-        return OtpError.unknown;
+      BackendHttp.log('AuthService.verifyOtp failed', error: error);
+      return const MemberOtpOutcome.failed(OtpError.network);
     }
   }
 }

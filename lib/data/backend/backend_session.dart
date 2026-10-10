@@ -102,6 +102,15 @@ class BackendSession {
     }
   }
 
+  /// Adopts a token pair the caller already minted some other way — the
+  /// MSG91-backed member OTP flow's `/otp/verify` and `/otp/register` return
+  /// a session directly in the same call that confirms the code, so there
+  /// is no separate exchange step to run the way [signInWithFirebaseToken]
+  /// needs one. See `AuthService`'s `BackendMemberOtpTransport`.
+  Future<void> setTokens({required String accessToken, required String refreshToken}) {
+    return _http.setSession(accessToken: accessToken, refreshToken: refreshToken);
+  }
+
   /// Revokes the backend session and clears local tokens. Never throws —
   /// sign-out must succeed locally even if the revoke call itself fails.
   Future<void> signOut() async {

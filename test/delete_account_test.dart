@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:shield/module/account/account_screen.dart';
 import 'package:shield/module/agent/agent_service.dart';
@@ -13,40 +14,6 @@ class _RecordingOpener {
     opened = uri;
     return result;
   }
-}
-
-/// Minimal in-memory [AuthGateway] — this tree has no shared
-/// `test/support/fake_auth_gateway.dart` the way the root app does, and the
-/// only thing these tests need is [deleteFirebaseUser]'s two outcomes.
-class _FakeAuthGateway implements AuthGateway {
-  bool refuseDelete = false;
-  bool signOutCalled = false;
-
-  @override
-  Future<OtpError?> sendCode(String e164Phone) async => null;
-
-  @override
-  Future<OtpError?> confirmCode(String code) async => null;
-
-  @override
-  Future<AuthUser?> restoreUser() async => null;
-
-  @override
-  Future<void> saveDisplayName(String name) async {}
-
-  @override
-  void discard() {}
-
-  @override
-  Future<void> signOut() async {
-    signOutCalled = true;
-  }
-
-  @override
-  Future<String?> currentIdToken() async => null;
-
-  @override
-  Future<bool> deleteFirebaseUser() async => !refuseDelete;
 }
 
 void main() {
@@ -68,6 +35,10 @@ void main() {
   }
 
   setUp(() {
+    // deleteAccount now ends with BackendSession.signOut(), which persists
+    // the cleared session via shared_preferences — needs a mock channel or
+    // the call hangs waiting on a real platform channel.
+    SharedPreferences.setMockInitialValues({});
     AuthService.instance.reset();
     AgentService.instance.reset();
   });
@@ -77,50 +48,22 @@ void main() {
   });
 
   group('AuthService.deleteAccount', () {
-    test('ends the session and deletes the Firebase identity outright when '
-        'Firebase allows it', () async {
+    test('ends the session', () async {
       final auth = AuthService.instance;
-      final gateway = _FakeAuthGateway();
-      auth.useGateway(gateway);
       auth.signInAs();
 
       await auth.deleteAccount();
 
       expect(auth.isSignedIn, isFalse);
       expect(auth.hasPendingOtp, isFalse);
-      expect(
-        gateway.signOutCalled,
-        isFalse,
-        reason: 'deleteFirebaseUser succeeded — no fallback sign-out needed',
-      );
-    });
-
-    test('still ends the session when Firebase refuses '
-        '(requires-recent-login)', () async {
-      final auth = AuthService.instance;
-      final gateway = _FakeAuthGateway()..refuseDelete = true;
-      auth.useGateway(gateway);
-      auth.signInAs();
-
-      await auth.deleteAccount();
-
-      expect(
-        auth.isSignedIn,
-        isFalse,
-        reason: 'the account is already gone in app.users regardless',
-      );
-      expect(gateway.signOutCalled, isTrue);
     });
 
     test('is a no-op with nobody signed in', () async {
       final auth = AuthService.instance;
-      final gateway = _FakeAuthGateway();
-      auth.useGateway(gateway);
 
       await auth.deleteAccount();
 
       expect(auth.isSignedIn, isFalse);
-      expect(gateway.signOutCalled, isFalse);
     });
   });
 
@@ -181,7 +124,6 @@ void main() {
 
     testWidgets('confirming deletes the account and the gate returns to '
         'login', (tester) async {
-      AuthService.instance.useGateway(_FakeAuthGateway());
       AuthService.instance.signInAs();
       await pumpToSettings(tester);
 
