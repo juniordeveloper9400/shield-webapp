@@ -69,8 +69,30 @@ Future<void> _ensureWidget() async {
       'failure': (JSAny? _) {}.toJS,
     }.jsify();
     web.window.callMethod('initSendOTP'.toJS, config);
+    // initSendOTP defers its own setup (it waits for DOMContentLoaded, or a
+    // 1ms setTimeout when the document is already ready — confirmed by
+    // reading the real minified function body in a browser console on
+    // shieldweb, which hit the exact same assumption as a real bug:
+    // window.sendOtp/verifyOtp are not attached synchronously right after
+    // this call returns). Poll briefly instead of assuming instant
+    // availability.
+    await _waitForExposedMethods();
     _widgetInitialized = true;
   }
+}
+
+/// Polls for `sendOtp`/`verifyOtp` to appear on `window` after
+/// `initSendOTP` runs — see `_ensureWidget`'s own doc on why this can't be
+/// a single synchronous check.
+Future<void> _waitForExposedMethods() async {
+  final deadline = DateTime.now().add(const Duration(seconds: 5));
+  while (DateTime.now().isBefore(deadline)) {
+    if (web.window.hasProperty('sendOtp'.toJS).toDart && web.window.hasProperty('verifyOtp'.toJS).toDart) {
+      return;
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 50));
+  }
+  throw StateError('The OTP verification script did not load correctly.');
 }
 
 /// Sends a real SMS OTP to [identifier] — MSG91 format: country-code
