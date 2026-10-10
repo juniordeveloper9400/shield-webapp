@@ -4,7 +4,10 @@ enum LabStage {
   requested('Requested'),
   confirmed('Confirmed'),
   sampleCollected('Sample collected'),
-  reportReady('Report ready'),
+  // Still the DB's REPORT_READY underneath (see parse/fromJson below) — the
+  // member-facing label just reads "Completed" instead, since this is the
+  // last step either way and nothing moves a booking past it.
+  reportReady('Completed'),
   cancelled('Cancelled');
 
   const LabStage(this.label);

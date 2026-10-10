@@ -56,8 +56,8 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _load();
-    // A booking's stage (Requested → Confirmed → Sample collected → Report
-    // ready) moves entirely from the lab's own console — nothing the member
+    // A booking's stage (Requested → Confirmed → Sample collected →
+    // Completed) moves entirely from the lab's own console — nothing the member
     // does here changes it — so without this the only way to see a status
     // the lab just set is to leave and reopen the screen. Same 15s-while-
     // open, foreground-and-current-route-only rule as OrderTrackScreen /
@@ -318,7 +318,7 @@ class _StageChip extends StatelessWidget {
   }
 }
 
-/// Requested → Confirmed → Sample collected → Report ready, with everything up
+/// Requested → Confirmed → Sample collected → Completed, with everything up
 /// to the current stage filled in.
 class _StageBar extends StatelessWidget {
   final LabStage stage;
