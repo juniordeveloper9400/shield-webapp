@@ -66,3 +66,7 @@ _flutter/
 
 .vercel
 .env*
+
+# Local-only dart-define values (real secrets) — never commit
+msg91.local.json
+*.local.json
