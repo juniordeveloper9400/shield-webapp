@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import '../../module/checkout/fulfillment_type.dart';
 import '../../module/orders/purchase_service.dart' show LinkedOrder;
 import '../../module/prescription/medicine_duration.dart';
-import '../neon/neon_http.dart';
 import 'backend_http.dart';
 
 /// One prescription's pharmacist-built intake card, as read back from the
@@ -242,26 +241,6 @@ class PrescriptionRepository {
 
   Future<String?> softDelete(String id) async {
     if (!BackendHttp.isConfigured) {
-      if (NeonHttp.isConfigured) {
-        final raw = id.trim();
-        final isInt = int.tryParse(raw) != null;
-        try {
-          if (isInt) {
-            await NeonHttp.instance.query(
-              'UPDATE app.prescription SET deleted_at = now(), updated_at = now() WHERE id = \$1::bigint AND deleted_at IS NULL',
-              [int.parse(raw)],
-            );
-          } else {
-            await NeonHttp.instance.query(
-              'UPDATE app.prescription SET deleted_at = now(), updated_at = now() WHERE uuid = \$1::uuid AND deleted_at IS NULL',
-              [raw],
-            );
-          }
-          return null;
-        } catch (e) {
-          return e.toString();
-        }
-      }
       return 'backend not configured';
     }
     try {

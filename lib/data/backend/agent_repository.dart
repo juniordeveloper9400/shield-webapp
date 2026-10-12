@@ -48,9 +48,8 @@ class AgentRequestOutcome {
 /// Reads and writes the agent roster through `backend/api`'s `/v1/agent/*`
 /// routes — see `agent.service.ts`.
 ///
-/// Every method is best-effort, the same contract [NeonHttp]-backed
-/// repositories used: an unconfigured backend, a signed-out member, or a
-/// network blip no-ops rather than throwing. Registering an agent must never
+/// Every method is best-effort: an unconfigured backend, a signed-out
+/// member, or a network blip no-ops rather than throwing. Registering an agent must never
 /// fail because the backend is unreachable — [AgentService]'s in-memory
 /// roster is the source of truth the UI reads; this is the write-through.
 ///

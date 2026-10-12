@@ -10,15 +10,17 @@ import '../neon/_flutter_test_env.dart'
     if (dart.library.io) '../neon/_flutter_test_env_io.dart';
 
 /// Talks to `backend/api` over plain HTTPS — no credential of any kind is
-/// compiled into this client, unlike [NeonHttp] (`lib/data/neon/neon_http.dart`),
-/// which ships the Neon database password. Session state (a short-lived
-/// access token, a longer-lived refresh token) is issued by the backend at
-/// sign-in, not baked in at build time.
+/// compiled into this client. This used to be contrasted against a sibling
+/// `NeonHttp`, which shipped the Neon database password straight into the
+/// app; that class (and the credential it compiled in) is gone now, along
+/// with every direct-Neon repository (see `docs/security.md` and
+/// `backend/docs/migration-plan.md`'s Phase 5). Session state (a
+/// short-lived access token, a longer-lived refresh token) is issued by
+/// the backend at sign-in, not baked in at build time.
 ///
-/// Shape deliberately mirrors `NeonHttp`: private singleton constructor,
-/// an `isConfigured` guard, a `--dart-define` base URL, and a
-/// `dart:developer`-based [log] so log lines survive a release build. See
-/// that file's own doc comment for why `dart:developer` over `debugPrint`.
+/// Private singleton constructor, an `isConfigured` guard, a
+/// `--dart-define` base URL, and a `dart:developer`-based [log] so log
+/// lines survive a release build.
 class BackendHttp {
   BackendHttp._() : _client = http.Client(), _forceConfigured = null;
 
@@ -27,7 +29,7 @@ class BackendHttp {
   /// actual protocol logic (401-retry, error parsing) can run against a
   /// [http.testing.MockClient] under `flutter test` — which
   /// [isConfigured] otherwise always reports false under, by design (see
-  /// `NeonHttp._underTest`'s doc). Does not affect [instance] or the static
+  /// [isUnderFlutterTest]). Does not affect [instance] or the static
   /// [isConfigured] every repository's own `isAvailable`/`_run` checks.
   @visibleForTesting
   BackendHttp.test({required http.Client client})
