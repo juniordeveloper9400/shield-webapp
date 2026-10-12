@@ -17,13 +17,6 @@ fi
 export PATH="$PWD/$FLUTTER_DIR/bin:$PATH"
 git config --global --add safe.directory "$PWD/$FLUTTER_DIR"
 
-# lib/data/neon/neon_secret.dart is git-ignored. The web bundle does not use it:
-# the empty template is copied only so the shared NeonHttp file compiles, and no
-# database connection is ever built into the bundle.
-if [ ! -f lib/data/neon/neon_secret.dart ]; then
-  cp lib/data/neon/neon_secret.example.dart lib/data/neon/neon_secret.dart
-fi
-
 flutter --version
 flutter config --enable-web
 flutter pub get
