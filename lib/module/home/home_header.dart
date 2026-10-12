@@ -2,38 +2,17 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../cart/cart_badge.dart';
-import '../location/address_book.dart';
-import '../location/location_sheet.dart';
 import '../persona/persona_service.dart';
 import '../wallet/wallet_screen.dart';
 import 'points_badge.dart';
 
-/// Top app chrome: menu, wordmark, cart, account balances, and the delivery
-/// location selector beneath them.
-class HomeHeader extends StatefulWidget {
+/// Top app chrome: menu, wordmark, cart, and account balances.
+class HomeHeader extends StatelessWidget {
   const HomeHeader({super.key});
 
   /// Height of the action row. Fixed so that a cart drawn outside this
   /// widget can be centred against the wallet without guessing at font metrics.
   static const double rowHeight = 42;
-
-  static const String defaultPincode = AddressBook.defaultPincode;
-
-  @override
-  State<HomeHeader> createState() => _HomeHeaderState();
-}
-
-class _HomeHeaderState extends State<HomeHeader> {
-  /// The location is not held here. [AddressBook] owns it, so an address
-  /// saved from the form — which this widget never sees — shows up in the
-  /// header the moment it is saved, and so does a pincode from the sheet.
-  Future<void> _chooseLocation() async {
-    final book = AddressBook.instance;
-    final chosen = await LocationSheet.show(context, book.pincode);
-    if (chosen != null) {
-      book.setPincode(chosen);
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -102,42 +81,6 @@ class _HomeHeaderState extends State<HomeHeader> {
                 ),
               ),
             ],
-          ),
-        ),
-        const SizedBox(height: 4),
-        InkWell(
-          onTap: _chooseLocation,
-          borderRadius: BorderRadius.circular(6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Rebuilds on its own whenever the delivery location changes,
-                // including from the address form on another route.
-                Flexible(
-                  child: ListenableBuilder(
-                    listenable: AddressBook.instance,
-                    builder: (context, _) => Text(
-                      AddressBook.instance.locationLabel,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: AppColors.brandBlue,
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 2),
-                const Icon(
-                  Icons.keyboard_arrow_down_rounded,
-                  size: 20,
-                  color: AppColors.brandBlue,
-                ),
-              ],
-            ),
           ),
         ),
       ],
