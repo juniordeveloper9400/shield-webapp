@@ -8,17 +8,14 @@ const String appPackageId = 'com.zabnix.shield';
 
 /// The link a member shares to invite someone.
 ///
-/// On Android this is the app's Play Store listing with the member's own invite
-/// code riding along as Play's `referrer` parameter. Play hands that value back
-/// to the app on its first launch after install ([InstallReferrer]), so the
-/// registration form fills in the Referral ID without the friend typing it.
-///
-/// On the web the same code travels as `?ref=` on the address the app is served
-/// from, read back the same way on the first load.
+/// Always the app's Play Store listing, even when the member is sharing from
+/// the web build — a friend following the link should land on the app
+/// download, not the webapp, so they end up as a real app install rather
+/// than a one-off browser session. The member's own invite code rides along
+/// as Play's `referrer` parameter; Play hands that value back to the app on
+/// its first launch after install ([InstallReferrer]), so the registration
+/// form fills in the Referral ID without the friend typing it.
 Uri inviteLinkFor(String code) {
-  if (kIsWeb) {
-    return Uri.base.replace(path: '/', queryParameters: {'ref': code});
-  }
   return Uri.https('play.google.com', '/store/apps/details', {
     'id': appPackageId,
     'referrer': code,
