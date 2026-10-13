@@ -58,5 +58,7 @@ flutter build apk --release --dart-define=BACKEND_API_BASE_URL=$BackendApiBaseUr
 
 Write-Host ''
 Write-Host 'Done: build/app/outputs/flutter-apk/app-release.apk' -ForegroundColor Green
-Write-Host 'Uninstall the app on the phone first, then install this. The login'
-Write-Host 'screen must show a green "Database connected" line.'
+Write-Host 'Uninstall the app on the phone first, then install this. "Get OTP" on'
+Write-Host 'the sign-in screen must actually text a code - "Verification is'
+Write-Host 'unavailable on this device right now" means BACKEND_API_BASE_URL'
+Write-Host 'above is wrong or the backend is unreachable, not a code problem.'
