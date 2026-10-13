@@ -52,6 +52,13 @@ class BackendHttp {
 
   static bool get isConfigured => _baseUrl.isNotEmpty && !_underTest;
 
+  /// [_baseUrl] itself, for a diagnostic line on screen when [isConfigured]
+  /// is false — not a secret (see this class's own doc: the URL is public),
+  /// and the whole point is to make "which build is this, really" provable
+  /// from a screenshot instead of guessed at from a build log on a
+  /// different machine. Empty string when nothing was compiled in.
+  static String get configuredBaseUrlForDiagnostics => _baseUrl;
+
   /// Non-null only on a [BackendHttp.test] instance — overrides
   /// [isConfigured] for that instance alone.
   final bool? _forceConfigured;
