@@ -71,9 +71,8 @@ void main() {
       expect(find.text('ADD'), findsWidgets);
 
       expect(find.byIcon(Icons.ac_unit_rounded), findsNothing);
-      expect(find.text('Product highlights'), findsNothing);
+      expect(find.text('Key uses'), findsNothing);
       expect(find.text('Product description'), findsNothing);
-      expect(find.text('Key benefits'), findsNothing);
       expect(find.text('Frequently asked questions'), findsNothing);
     });
 
@@ -86,7 +85,7 @@ void main() {
 
       await pumpDetail(tester, doloWithId);
 
-      expect(find.text('Product highlights'), findsNothing);
+      expect(find.text('Key uses'), findsNothing);
       expect(find.text('Frequently asked questions'), findsNothing);
     });
   });
@@ -101,12 +100,13 @@ void main() {
 
       expect(find.byIcon(Icons.ac_unit_rounded), findsOneWidget);
       expect(find.text(adminContent.storage), findsOneWidget);
-      expect(find.text('Product highlights'), findsOneWidget);
+      // "Key uses" merges the old highlights/benefits fields — one section.
+      expect(find.text('Key uses'), findsOneWidget);
       expect(find.text('Fast-acting'), findsOneWidget);
-      expect(find.text('Key benefits'), findsOneWidget);
+      expect(find.text('Brings down fever'), findsOneWidget);
       expect(find.text('Frequently asked questions'), findsOneWidget);
       // Left blank by the admin — no section for it.
-      expect(find.text('Directions for use'), findsNothing);
+      expect(find.text('How to use'), findsNothing);
       expect(find.text('Ingredients'), findsNothing);
       expect(find.text('Safety information'), findsNothing);
     });

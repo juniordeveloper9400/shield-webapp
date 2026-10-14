@@ -99,10 +99,14 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
               // for the field the admin actually used, never a placeholder.
               if (detail.storage.isNotEmpty)
                 _StorageStrip(text: detail.storage),
-              if (detail.highlights.isNotEmpty)
+              // "Highlights" and "Key benefits" are two admin fields from
+              // before the console combined them into one "Key uses" field
+              // (see ProductsPage.tsx); shown together here so neither an
+              // older product's benefits nor a newer one's highlights is lost.
+              if (detail.highlights.isNotEmpty || detail.benefits.isNotEmpty)
                 _Section(
-                  title: 'Product highlights',
-                  bullets: detail.highlights,
+                  title: 'Key uses',
+                  bullets: <String>{...detail.highlights, ...detail.benefits}.toList(),
                   initiallyOpen: true,
                 ),
               if (detail.description.isNotEmpty)
@@ -110,11 +114,9 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
                   title: 'Product description',
                   body: detail.description,
                 ),
-              if (detail.benefits.isNotEmpty)
-                _Section(title: 'Key benefits', bullets: detail.benefits),
               if (detail.directions.isNotEmpty)
                 _Section(
-                  title: 'Directions for use',
+                  title: 'How to use',
                   bullets: detail.directions,
                 ),
               if (detail.ingredients.isNotEmpty)
