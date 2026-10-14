@@ -74,6 +74,20 @@ class LabCartService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The member's preferred date for collection/visit, from the checkout's
+  /// "Preferred date" row — optional. The lab can still set or change it
+  /// from the admin console's own Schedule section regardless.
+  DateTime? _scheduledFor;
+
+  DateTime? get scheduledFor => _scheduledFor;
+
+  /// Records (or clears, passing null) the member's own pick from the
+  /// checkout's "Preferred date" row.
+  void chooseScheduledFor(DateTime? date) {
+    _scheduledFor = date;
+    notifyListeners();
+  }
+
   /// Defaults the branch to the member's registered home branch, matched by
   /// code against [eligible] — the live, lab-collection-eligible list
   /// [LabCartScreen]'s branch row just fetched. A no-op once something has
@@ -173,6 +187,7 @@ class LabCartService extends ChangeNotifier {
     _bookings.clear();
     _chosenStore = null;
     _fulfillmentType = LabFulfillmentType.homeCollection;
+    _scheduledFor = null;
     notifyListeners();
   }
 

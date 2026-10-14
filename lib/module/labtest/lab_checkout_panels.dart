@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../data/backend/care_repository.dart';
+import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
@@ -304,6 +305,103 @@ class _LabBranchRowState extends State<LabBranchRow> {
                   Icons.chevron_right_rounded,
                   color: AppColors.textMuted,
                 ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Lets the member pick a preferred date for the visit/collection —
+/// optional, shown on [LabCheckoutScreen] only (scheduling makes no sense
+/// before a booking exists). Sent through to `backend/api` as the
+/// booking's own `scheduledFor`, so the lab sees it already filled in on
+/// the admin console's Schedule section instead of starting blank; the
+/// lab can still change it from there regardless.
+class LabScheduleRow extends StatelessWidget {
+  const LabScheduleRow({super.key});
+
+  Future<void> _choose(BuildContext context) async {
+    final now = DateTime.now();
+    final current = LabCartService.instance.scheduledFor;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current != null && current.isAfter(now) ? current : now,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 60)),
+      helpText: 'Preferred date',
+    );
+    if (picked != null) {
+      LabCartService.instance.chooseScheduledFor(picked);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final date = LabCartService.instance.scheduledFor;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 4),
+      child: Material(
+        color: date == null ? AppColors.white : AppColors.brandBlue.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: () => _choose(context),
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: date == null ? AppColors.border : AppColors.brandBlue,
+                width: date == null ? 1 : 1.5,
+              ),
+            ),
+            padding: const EdgeInsets.all(14),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.event_outlined,
+                  size: 20,
+                  color: AppColors.brandBlue,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Preferred date (optional)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                      Text(
+                        date == null ? 'Choose a date' : formatDate(date),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (date != null)
+                  IconButton(
+                    onPressed: () => LabCartService.instance.chooseScheduledFor(null),
+                    icon: const Icon(Icons.close_rounded, size: 18),
+                    color: AppColors.textMuted,
+                    tooltip: 'Clear date',
+                    visualDensity: VisualDensity.compact,
+                  )
+                else
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textMuted,
+                  ),
               ],
             ),
           ),
