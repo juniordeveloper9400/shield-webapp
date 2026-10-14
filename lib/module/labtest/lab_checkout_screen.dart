@@ -33,24 +33,29 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
   bool _placing = false;
   String? _error;
 
+  bool get _needsAddress =>
+      LabCartService.instance.fulfillmentType ==
+      LabFulfillmentType.homeCollection;
+
   bool get _canPlace =>
       !_placing &&
       !LabCartService.instance.isEmpty &&
       LabCartService.instance.store != null &&
-      AddressBook.instance.deliverTo != null;
+      (!_needsAddress || AddressBook.instance.deliverTo != null);
 
   Future<void> _placeLabTest() async {
     final cart = LabCartService.instance;
     final user = AuthService.instance.currentUser.value;
+    final needsAddress = _needsAddress;
     final hasAddress = AddressBook.instance.deliverTo != null;
     if (!_canPlace || user == null) {
       setState(() {
-        _error = cart.store == null && !hasAddress
+        _error = cart.store == null && needsAddress && !hasAddress
             ? 'Choose a branch and a delivery address above before placing '
                   'this booking.'
             : cart.store == null
             ? 'Choose a branch above before placing this booking.'
-            : !hasAddress
+            : needsAddress && !hasAddress
             ? 'Choose a delivery address above before placing this booking.'
             : null;
       });
@@ -95,8 +100,9 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
       OrderRepository.instance.saveLabBookings(
         phone: user.phone,
         name: user.name,
-        address: AddressBook.instance.deliverTo,
+        address: needsAddress ? AddressBook.instance.deliverTo : null,
         storeId: cart.store?.id,
+        fulfillmentType: cart.fulfillmentType,
         bookings: bookings,
       ),
     );
@@ -149,9 +155,16 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
             children: [
               _ReviewCard(bookings: cart.bookings),
               const SizedBox(height: 12),
-              // Not const — see LabAddressRow's own doc on why.
-              LabAddressRow(),
+              const LabFulfillmentRow(),
               const SizedBox(height: 12),
+              // Only home collection needs a delivery address — a store
+              // visit's "branch" (LabBranchRow below) is where the member
+              // goes themselves, so there's nothing to deliver to.
+              if (_needsAddress) ...[
+                // Not const — see LabAddressRow's own doc on why.
+                LabAddressRow(),
+                const SizedBox(height: 12),
+              ],
               const LabBranchRow(),
               const SizedBox(height: 12),
               const LabBillCard(),

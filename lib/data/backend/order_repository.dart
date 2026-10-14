@@ -2,6 +2,7 @@ import 'dart:math';
 
 import '../../module/cart/cart_service.dart';
 import '../../module/checkout/fulfillment_type.dart';
+import '../../module/labtest/lab_fulfillment_type.dart';
 import '../../module/location/address_book.dart';
 import '../../module/orders/bill_invoice.dart';
 import 'address_repository.dart';
@@ -388,6 +389,7 @@ class OrderRepository {
     /// `storeId`; the backend falls back to the member's own home branch
     /// when this is null, the same as root's direct-Neon write does.
     int? storeId,
+    LabFulfillmentType fulfillmentType = LabFulfillmentType.homeCollection,
   }) async {
     if (!BackendHttp.isConfigured || bookings.isEmpty) {
       return;
@@ -414,6 +416,7 @@ class OrderRepository {
             ],
             if (addressId != null) 'addressId': addressId,
             if (storeId != null) 'storeId': storeId,
+            'fulfillmentType': fulfillmentType.apiValue,
           },
         );
       } catch (error) {

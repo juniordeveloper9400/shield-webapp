@@ -9,6 +9,98 @@ import 'lab_package.dart';
 import 'lab_store.dart';
 import 'lab_store_picker_sheet.dart';
 
+/// Lets the member pick how their sample reaches the lab — the lab visits
+/// them (home collection, the default) or they visit the branch themselves
+/// (store visit). Only home collection needs a delivery address, so
+/// [LabCheckoutScreen] shows/requires [LabAddressRow] only while this is set
+/// to home collection.
+class LabFulfillmentRow extends StatelessWidget {
+  const LabFulfillmentRow({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final chosen = LabCartService.instance.fulfillmentType;
+
+    return Row(
+      children: [
+        Expanded(
+          child: _FulfillmentOption(
+            label: 'Home Collection',
+            icon: Icons.home_outlined,
+            selected: chosen == LabFulfillmentType.homeCollection,
+            onTap: () => LabCartService.instance
+                .chooseFulfillmentType(LabFulfillmentType.homeCollection),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _FulfillmentOption(
+            label: 'Store Visit',
+            icon: Icons.storefront_outlined,
+            selected: chosen == LabFulfillmentType.storeVisit,
+            onTap: () => LabCartService.instance
+                .chooseFulfillmentType(LabFulfillmentType.storeVisit),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _FulfillmentOption extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _FulfillmentOption({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: selected ? AppColors.brandBlue.withValues(alpha: 0.08) : AppColors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: selected ? AppColors.brandBlue : AppColors.border,
+              width: selected ? 1.5 : 1,
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            children: [
+              Icon(
+                icon,
+                size: 20,
+                color: selected ? AppColors.brandBlue : AppColors.textMuted,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: selected ? AppColors.brandBlue : AppColors.textDark,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Where the sample collection visits — the same [AddressBook] the medicine
 /// checkout's "Deliver to" row reads from and writes to, so an address saved
 /// on one checkout is already there on the other. "Change" opens
@@ -258,7 +350,9 @@ class LabBillCard extends StatelessWidget {
             accent: AppColors.brandGreenDark,
           ),
           _LabBillRow(
-            label: 'Home collection',
+            label: cart.fulfillmentType == LabFulfillmentType.storeVisit
+                ? 'Store visit'
+                : 'Home collection',
             value: cart.collectionFee == 0
                 ? 'FREE'
                 : '₹${formatRupees(cart.collectionFee)}',
