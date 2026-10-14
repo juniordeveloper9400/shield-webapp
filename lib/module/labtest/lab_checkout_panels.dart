@@ -250,7 +250,10 @@ class _LabBranchRowState extends State<LabBranchRow> {
     return Padding(
       padding: const EdgeInsets.only(top: 4),
       child: Material(
-        color: AppColors.white,
+        // Blue once a branch is actually chosen — the same "this is the
+        // selected one" treatment the Home Collection / Store Visit cards
+        // above use, rather than looking identical to an empty row.
+        color: store == null ? AppColors.white : AppColors.brandBlue.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: () => _choose(context),
@@ -262,7 +265,8 @@ class _LabBranchRowState extends State<LabBranchRow> {
                 // A missing branch blocks checkout — same red the "Deliver
                 // to / Patient" rows use on the commerce checkout when
                 // something required is still unset.
-                color: store == null ? AppColors.danger : AppColors.border,
+                color: store == null ? AppColors.danger : AppColors.brandBlue,
+                width: store == null ? 1 : 1.5,
               ),
             ),
             padding: const EdgeInsets.all(14),
