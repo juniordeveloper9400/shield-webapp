@@ -92,6 +92,7 @@ class _ProductDetailScreenState extends State<ProductDetailScreen> {
             children: [
               _ArtworkCard(
                 product: product,
+                images: detail.images,
                 discountPercent: detail.discountPercent,
               ),
               _HeaderCard(detail: detail),
@@ -159,58 +160,195 @@ class _Card extends StatelessWidget {
   }
 }
 
-class _ArtworkCard extends StatelessWidget {
+class _ArtworkCard extends StatefulWidget {
   final Product product;
+  final List<String> images;
   final int discountPercent;
 
-  const _ArtworkCard({required this.product, required this.discountPercent});
+  const _ArtworkCard({
+    required this.product,
+    required this.images,
+    required this.discountPercent,
+  });
+
+  @override
+  State<_ArtworkCard> createState() => _ArtworkCardState();
+}
+
+class _ArtworkCardState extends State<_ArtworkCard> {
+  late PageController _pageController;
+  int _currentIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final primaryImg = widget.product.image;
+    final images = widget.images.isNotEmpty
+        ? widget.images
+        : [if (primaryImg != null && primaryImg.isNotEmpty) primaryImg];
+
     return _Card(
       padding: EdgeInsets.zero,
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(13),
-        child: AspectRatio(
-          aspectRatio: 1.15,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: AppImage(
-                    image: product.image,
-                    fallbackIcon: product.icon,
-                    iconSize: 96,
-                    fit: BoxFit.contain,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(13),
+            child: AspectRatio(
+              aspectRatio: 1.15,
+              child: Stack(
+                children: [
+                  Positioned.fill(
+                    child: images.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: AppImage(
+                              image: widget.product.image,
+                              fallbackIcon: widget.product.icon,
+                              iconSize: 96,
+                              fit: BoxFit.contain,
+                            ),
+                          )
+                        : PageView.builder(
+                            controller: _pageController,
+                            itemCount: images.length,
+                            onPageChanged: (i) => setState(() => _currentIndex = i),
+                            itemBuilder: (context, i) => Padding(
+                              padding: const EdgeInsets.all(18),
+                              child: AppImage(
+                                image: images[i],
+                                fallbackIcon: widget.product.icon,
+                                iconSize: 96,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                          ),
                   ),
+                  if (widget.discountPercent > 0)
+                    Positioned(
+                      top: 0,
+                      left: 0,
+                      child: Container(
+                        padding: const EdgeInsets.fromLTRB(12, 7, 16, 8),
+                        decoration: const BoxDecoration(
+                          color: AppColors.brandGreenDark,
+                          borderRadius: BorderRadius.only(
+                            bottomRight: Radius.circular(14),
+                          ),
+                        ),
+                        child: Text(
+                          '${widget.discountPercent}% OFF',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 8,
+                      right: 12,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withAlpha(140),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${_currentIndex + 1} / ${images.length}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+          if (images.length > 1)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              child: SizedBox(
+                height: 52,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: images.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, i) {
+                    final isSelected = i == _currentIndex;
+                    return GestureDetector(
+                      onTap: () {
+                        _pageController.animateToPage(
+                          i,
+                          duration: const Duration(milliseconds: 250),
+                          curve: Curves.easeInOut,
+                        );
+                      },
+                      child: Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isSelected ? AppColors.brandGreenDark : AppColors.border,
+                            width: isSelected ? 2 : 1,
+                          ),
+                        ),
+                        padding: const EdgeInsets.all(4),
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: AppImage(
+                                image: images[i],
+                                fallbackIcon: widget.product.icon,
+                                fit: BoxFit.contain,
+                              ),
+                            ),
+                            if (i == 0)
+                              Positioned(
+                                top: 0,
+                                left: 0,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.brandGreenDark,
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: const Text(
+                                    'P',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 8,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
-              if (discountPercent > 0)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  child: Container(
-                    padding: const EdgeInsets.fromLTRB(12, 7, 16, 8),
-                    decoration: const BoxDecoration(
-                      color: AppColors.brandGreenDark,
-                      borderRadius: BorderRadius.only(
-                        bottomRight: Radius.circular(14),
-                      ),
-                    ),
-                    child: Text(
-                      '$discountPercent% OFF',
-                      style: const TextStyle(
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.white,
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
     );
   }

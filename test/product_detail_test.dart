@@ -122,5 +122,21 @@ void main() {
 
       expect(find.textContaining('with or without food'), findsOneWidget);
     });
+
+    testWidgets('product with multiple images shows gallery indicator and thumbnails', (
+      tester,
+    ) async {
+      const multiImageContent = ProductDetailData(
+        description: 'Multi-image test product',
+        images: ['https://example.com/img1.jpg', 'https://example.com/img2.jpg'],
+      );
+
+      ProductRepository.detailOverride = (_) async => multiImageContent;
+
+      await pumpDetail(tester, doloWithId);
+
+      expect(find.text('1 / 2'), findsOneWidget);
+      expect(find.text('P'), findsOneWidget);
+    });
   });
 }

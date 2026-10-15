@@ -30,6 +30,7 @@ class ProductDetailData {
   final List<String> directions;
   final List<String> safety;
   final List<ProductFaq> faqs;
+  final List<String> images;
 
   const ProductDetailData({
     this.form,
@@ -42,6 +43,7 @@ class ProductDetailData {
     this.directions = const [],
     this.safety = const [],
     this.faqs = const [],
+    this.images = const [],
   });
 
   /// True when the admin has entered nothing at all — the page is then 100%
@@ -56,15 +58,17 @@ class ProductDetailData {
       benefits.isEmpty &&
       directions.isEmpty &&
       safety.isEmpty &&
-      faqs.isEmpty;
+      faqs.isEmpty &&
+      images.isEmpty;
 
   /// Builds from one `app.product_detail` row (or null) plus its FAQ rows, as
   /// they come back from Neon's HTTP endpoint — every scalar a string, every
   /// array column pre-wrapped as a JSON string by `to_json(...)` in the query.
   factory ProductDetailData.fromRows(
     Map<String, dynamic>? detail,
-    Object? faqsJson,
-  ) {
+    Object? faqsJson, {
+    Object? imagesJson,
+  }) {
     String str(Object? v) => (v ?? '').toString().trim();
 
     List<String> list(Object? v) {
@@ -128,6 +132,7 @@ class ProductDetailData {
       directions: list(detail?['directions']),
       safety: list(detail?['safety']),
       faqs: faqs,
+      images: list(detail?['images'] ?? imagesJson),
     );
   }
 }
@@ -166,6 +171,7 @@ class ProductDetail {
   final String ingredients;
   final String storage;
   final List<ProductFaq> faqs;
+  final List<String> images;
 
   const ProductDetail._({
     required this.product,
@@ -179,6 +185,7 @@ class ProductDetail {
     required this.ingredients,
     required this.storage,
     required this.faqs,
+    required this.images,
   });
 
   /// The details-page content for [product] — entirely what the pharmacy
@@ -200,6 +207,13 @@ class ProductDetail {
         ? admin!.manufacturer!.trim()
         : ListingCatalogue.brandOf(product);
 
+    final gallery = <String>[];
+    if (admin?.images.isNotEmpty == true) {
+      gallery.addAll(admin!.images);
+    } else if (product.image != null && product.image!.isNotEmpty) {
+      gallery.add(product.image!);
+    }
+
     return ProductDetail._(
       product: product,
       form: form,
@@ -212,6 +226,7 @@ class ProductDetail {
       ingredients: admin?.ingredients.trim() ?? '',
       storage: admin?.storage.trim() ?? '',
       faqs: admin?.faqs ?? const [],
+      images: gallery,
     );
   }
 
