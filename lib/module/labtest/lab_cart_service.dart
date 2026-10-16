@@ -181,7 +181,11 @@ class LabCartService extends ChangeNotifier {
   /// booking the same panel twice is a correction to who it covers, not a
   /// second visit.
   void book(LabPackage package, {required List<Patient> patients}) {
-    final chosen = patients.take(maxPatients).toList();
+    final seen = <String>{};
+    final chosen = patients
+        .where((p) => seen.add(p.id))
+        .take(maxPatients)
+        .toList();
     final index = _bookings.indexWhere(
       (booking) => booking.package.name == package.name,
     );

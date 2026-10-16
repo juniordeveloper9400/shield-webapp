@@ -184,8 +184,11 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add-profile-1')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Who is this for?'), findsOneWidget);
+    expect(find.text('Select number of patients'), findsOneWidget);
+    await tester.tap(find.text('2 patients'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Patient 1'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('Patient 2'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Add · ₹'));

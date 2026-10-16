@@ -158,7 +158,12 @@ void main() {
 
       await tester.tap(find.text('2 patients'));
       await tester.pumpAndSettle();
+      await tester.tap(find.text('Add another patient'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Patient 3'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add another patient'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Patient 4'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add · ₹5,196'));
