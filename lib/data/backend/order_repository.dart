@@ -5,6 +5,7 @@ import '../../module/checkout/fulfillment_type.dart';
 import '../../module/labtest/lab_fulfillment_type.dart';
 import '../../module/location/address_book.dart';
 import '../../module/orders/bill_invoice.dart';
+import '../../module/patients/patient_book.dart';
 import 'address_repository.dart';
 import 'backend_http.dart';
 import 'care_repository.dart';
@@ -81,6 +82,16 @@ class OrderItem {
   });
 }
 
+/// One patient on a booking, and their own collection address when they
+/// have one of their own — see [LabCartService.addressFor]'s own doc. A null
+/// [address] falls back to the booking's shared address server-side.
+class LabBookingPatientInput {
+  final Patient patient;
+  final Address? address;
+
+  const LabBookingPatientInput({required this.patient, this.address});
+}
+
 /// One package booked in the lab cart, as [OrderRepository.saveLabBookings]
 /// sends it — the same shape root's direct-Neon `LabBookingInput` carries,
 /// so `lab_cart_screen.dart`'s checkout call needs no changes beyond its
@@ -94,7 +105,7 @@ class LabBookingInput {
   final String reportIn;
   final int unitPrice;
   final int mrp;
-  final int patients;
+  final List<LabBookingPatientInput> patients;
   final String forWhom;
   final String ageRange;
   final String preparation;
@@ -369,13 +380,18 @@ class OrderRepository {
   /// fresh `CareRepository.fetchLabPackages()` read rather than changing
   /// what the (shared, unmodified) cart screen passes in.
   ///
-  /// The backend's booking schema also wants a named `patients` array (a
-  /// patient id, or a plain name) — the on-screen flow only ever collects a
-  /// headcount per package (`LabCartService`/`patient_count_sheet.dart`,
-  /// identical to root), so this synthesizes placeholder names
-  /// ("Patient 1", "Patient 2", …) for that count instead, matching root's
-  /// own booking UX exactly rather than the stricter shape the backend was
-  /// also built to accept.
+  /// The backend's booking schema wants a named `patients` array — a
+  /// patient id when the patient is already a synced backend row (`Patient.
+  /// remoteId`, same field root's direct-Neon write reads), else just the
+  /// name/age — plus, per patient, their own `addressId` when
+  /// [LabBookingPatientInput.address] carries one (set from
+  /// `LabPatientAddressList`'s "Change"); omitted, the backend falls back to
+  /// the booking's own shared [address].
+  ///
+  /// This app's [AddressRepository.create] has no dedup (see its own doc),
+  /// so each distinct patient's own address is written once and cached here
+  /// — the same `patientAddressIdCache` root's write keeps — even when they
+  /// appear on more than one booking in this basket.
   ///
   /// Best-effort: a booking that fails to resolve or submit is logged and
   /// skipped rather than failing the rest of the basket.
@@ -398,6 +414,7 @@ class OrderRepository {
     final addressId =
         address == null ? null : await AddressRepository.instance.create(address);
     final packages = await CareRepository.instance.fetchLabPackages() ?? const [];
+    final patientAddressIdCache = <String, int?>{};
     for (final booking in bookings) {
       final package = packages.where((p) => p.name == booking.name).firstOrNull;
       if (package == null) {
@@ -407,14 +424,30 @@ class OrderRepository {
         continue;
       }
       try {
+        final patients = <Map<String, dynamic>>[];
+        for (final entry in booking.patients) {
+          int? patientAddressId;
+          if (entry.address != null) {
+            if (!patientAddressIdCache.containsKey(entry.patient.id)) {
+              patientAddressIdCache[entry.patient.id] =
+                  await AddressRepository.instance.create(entry.address!);
+            }
+            patientAddressId = patientAddressIdCache[entry.patient.id];
+          }
+          patients.add({
+            if (entry.patient.remoteId != null)
+              'patientId': int.tryParse(entry.patient.remoteId!),
+            'name': entry.patient.name,
+            'age': entry.patient.age,
+            if (patientAddressId != null) 'addressId': patientAddressId,
+          });
+        }
         await BackendHttp.instance.request(
           'POST',
           '/v1/member/lab-bookings',
           body: {
             'labPackageId': int.parse(package.id),
-            'patients': [
-              for (var i = 1; i <= booking.patients; i++) {'name': 'Patient $i'},
-            ],
+            'patients': patients,
             if (addressId != null) 'addressId': addressId,
             if (storeId != null) 'storeId': storeId,
             'fulfillmentType': fulfillmentType.apiValue,

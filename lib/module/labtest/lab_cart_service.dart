@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../location/address_book.dart';
+import '../patients/patient_book.dart';
 import '../registration/registration_service.dart';
 import 'lab_fulfillment_type.dart';
 import 'lab_package.dart';
@@ -7,21 +9,23 @@ import 'lab_store.dart';
 
 export 'lab_fulfillment_type.dart' show LabFulfillmentType;
 
-/// One package booked for a number of patients.
+/// One package booked for a named list of patients — each may carry their
+/// own collection address (see [LabCartService.addressFor]); one with none
+/// of its own falls back to the basket's shared delivery address.
 @immutable
 class LabBooking {
   final LabPackage package;
-  final int patients;
+  final List<Patient> patients;
 
   const LabBooking({required this.package, required this.patients});
 
   /// The package price is per patient, so the line is priced per head.
-  int get amount => package.priceValue * patients;
+  int get amount => package.priceValue * patients.length;
 
-  int get mrpAmount => package.mrpValue * patients;
+  int get mrpAmount => package.mrpValue * patients.length;
 
-  LabBooking withPatients(int count) =>
-      LabBooking(package: package, patients: count);
+  LabBooking withPatients(List<Patient> next) =>
+      LabBooking(package: package, patients: next);
 }
 
 /// The lab basket.
@@ -41,6 +45,28 @@ class LabCartService extends ChangeNotifier {
   static const int maxPatients = 5;
 
   final List<LabBooking> _bookings = [];
+
+  /// Each patient's own collection address, by [Patient.id] — set from the
+  /// checkout screen's own per-patient "Change" (see [setAddressFor]).
+  /// Absent for a patient who has not been given one of their own yet; that
+  /// patient's visit then goes to the basket's shared delivery address
+  /// ([AddressBook.instance.deliverTo]) instead, the original behaviour.
+  final Map<String, Address> _addressByPatientId = {};
+
+  /// This patient's own address, or null when they have none of their own
+  /// (the basket's shared address applies to them instead).
+  Address? addressFor(Patient patient) => _addressByPatientId[patient.id];
+
+  /// Records (or clears, passing null) [patient]'s own collection address —
+  /// does not touch any other patient's, or the basket's shared one.
+  void setAddressFor(Patient patient, Address? address) {
+    if (address == null) {
+      _addressByPatientId.remove(patient.id);
+    } else {
+      _addressByPatientId[patient.id] = address;
+    }
+    notifyListeners();
+  }
 
   /// The member's own branch pick for this basket — set by [chooseStore]
   /// (from [LabStorePickerSheet]) or by [defaultStoreIfNeeded] once the live
@@ -123,7 +149,7 @@ class LabCartService extends ChangeNotifier {
   /// Every head across every booking, which is what the collection visit has
   /// to plan for.
   int get patientCount =>
-      _bookings.fold(0, (sum, booking) => sum + booking.patients);
+      _bookings.fold(0, (sum, booking) => sum + booking.patients.length);
 
   int get subtotal => _bookings.fold(0, (sum, booking) => sum + booking.amount);
 
@@ -138,9 +164,9 @@ class LabCartService extends ChangeNotifier {
 
   int get payable => subtotal + collectionFee;
 
-  /// How many patients this package is currently booked for, or null when it
-  /// is not in the basket. The detail screen opens its sheet on this.
-  int? patientsFor(LabPackage package) {
+  /// The patients this package is currently booked for, or null when it is
+  /// not in the basket. The detail screen opens its picker sheet on this.
+  List<Patient>? patientsFor(LabPackage package) {
     for (final booking in _bookings) {
       if (booking.package.name == package.name) {
         return booking.patients;
@@ -152,18 +178,18 @@ class LabCartService extends ChangeNotifier {
   /// Books [package] for [patients].
   ///
   /// Replaces rather than adds when the package is already in the basket:
-  /// booking the same panel twice is a correction to the patient count, not a
+  /// booking the same panel twice is a correction to who it covers, not a
   /// second visit.
-  void book(LabPackage package, {required int patients}) {
-    final count = patients.clamp(1, maxPatients);
+  void book(LabPackage package, {required List<Patient> patients}) {
+    final chosen = patients.take(maxPatients).toList();
     final index = _bookings.indexWhere(
       (booking) => booking.package.name == package.name,
     );
 
     if (index == -1) {
-      _bookings.add(LabBooking(package: package, patients: count));
+      _bookings.add(LabBooking(package: package, patients: chosen));
     } else {
-      _bookings[index] = _bookings[index].withPatients(count);
+      _bookings[index] = _bookings[index].withPatients(chosen);
     }
     notifyListeners();
   }
@@ -185,6 +211,7 @@ class LabCartService extends ChangeNotifier {
   /// same moment the commerce cart empties itself after "Place order".
   void clear() {
     _bookings.clear();
+    _addressByPatientId.clear();
     _chosenStore = null;
     _fulfillmentType = LabFulfillmentType.homeCollection;
     _scheduledFor = null;

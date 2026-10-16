@@ -5,6 +5,7 @@ import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../location/address_book.dart';
 import '../location/address_selection_screen.dart';
+import '../patients/patient_book.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import 'lab_store.dart';
@@ -102,99 +103,119 @@ class _FulfillmentOption extends StatelessWidget {
   }
 }
 
-/// Where the sample collection visits — the same [AddressBook] the medicine
-/// checkout's "Deliver to" row reads from and writes to, so an address saved
-/// on one checkout is already there on the other. "Change" opens
-/// [AddressSelectionScreen] — pick a saved address or add a new one, the
-/// same screen a plain product order uses — rather than a second, lab-only
-/// address picker.
+/// One collection address row per distinct patient across the basket — each
+/// can have their own, set via "Change" below; a patient with none of their
+/// own falls back to the basket's shared [AddressBook.deliverTo].
 ///
-/// Not `const` where it's used: its build() reads
-/// `AddressBook.instance.deliverTo` directly rather than a constructor
-/// field, so a `const` instance would never rebuild once an address is
-/// chosen (Flutter skips reconciling an unchanged `const` widget outright).
-class LabAddressRow extends StatelessWidget {
-  const LabAddressRow({super.key});
+/// Not `const` where it's used (see [LabFulfillmentRow]'s own note): each
+/// row's build() reads [LabCartService.addressFor]/[AddressBook.deliverTo]
+/// directly, so a `const` ancestor would never show a change here either.
+class LabPatientAddressList extends StatelessWidget {
+  final List<Patient> patients;
+
+  const LabPatientAddressList({super.key, required this.patients});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        for (final patient in patients) ...[
+          _LabPatientAddressRow(patient: patient),
+          const SizedBox(height: 10),
+        ],
+      ],
+    );
+  }
+}
+
+class _LabPatientAddressRow extends StatelessWidget {
+  final Patient patient;
+
+  const _LabPatientAddressRow({required this.patient});
 
   Future<void> _choose(BuildContext context) async {
-    await Navigator.of(context).push(
+    final chosen = await Navigator.of(context).push<Address>(
       MaterialPageRoute(builder: (_) => const AddressSelectionScreen()),
     );
+    if (chosen != null) {
+      LabCartService.instance.setAddressFor(patient, chosen);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final address = AddressBook.instance.deliverTo;
+    // This patient's own address, else the basket's shared one — same
+    // precedence LabCheckoutScreen's own `_everyPatientHasAddress` follows.
+    final address =
+        LabCartService.instance.addressFor(patient) ??
+        AddressBook.instance.deliverTo;
 
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Material(
-        color: AppColors.white,
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        onTap: () => _choose(context),
         borderRadius: BorderRadius.circular(12),
-        child: InkWell(
-          onTap: () => _choose(context),
-          borderRadius: BorderRadius.circular(12),
-          child: Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                // A missing address blocks checkout — same red the branch
-                // row below uses when nothing is chosen yet.
-                color: address == null ? AppColors.danger : AppColors.border,
-              ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              // A missing address blocks checkout — same red the branch
+              // row below uses when nothing is chosen yet.
+              color: address == null ? AppColors.danger : AppColors.border,
             ),
-            padding: const EdgeInsets.all(14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(
-                  Icons.location_on_outlined,
-                  size: 20,
-                  color: AppColors.brandBlue,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'Deliver to',
-                        style: TextStyle(
-                          fontSize: 12,
+          ),
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(
+                Icons.location_on_outlined,
+                size: 20,
+                color: AppColors.brandBlue,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      patient.name,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                    Text(
+                      address == null
+                          ? 'Choose a collection address'
+                          : '${address.label.label} (${address.pincode})',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    if (address != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        address.summary,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 12.5,
                           color: AppColors.textMuted,
                         ),
                       ),
-                      Text(
-                        address == null
-                            ? 'Choose a delivery address'
-                            : '${address.label.label} (${address.pincode})',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                          color: AppColors.textDark,
-                        ),
-                      ),
-                      if (address != null) ...[
-                        const SizedBox(height: 2),
-                        Text(
-                          address.summary,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            color: AppColors.textMuted,
-                          ),
-                        ),
-                      ],
                     ],
-                  ),
+                  ],
                 ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: AppColors.textMuted,
-                ),
-              ],
-            ),
+              ),
+              const Icon(
+                Icons.chevron_right_rounded,
+                color: AppColors.textMuted,
+              ),
+            ],
           ),
         ),
       ),

@@ -11,7 +11,9 @@ import 'package:shield/module/labtest/lab_checkout_screen.dart';
 import 'package:shield/module/labtest/lab_package.dart';
 import 'package:shield/module/labtest/lab_store.dart';
 import 'package:shield/module/location/address_book.dart';
+import 'package:shield/module/patients/patient_book.dart';
 import 'package:shield/module/registration/registration_service.dart';
+import 'package:shield/theme/app_colors.dart';
 
 const _activeLife = LabPackage(
   id: '2',
@@ -53,6 +55,7 @@ void main() {
     AuthService.instance.reset();
     RegistrationService.instance.reset();
     AddressBook.instance.reset();
+    PatientBook.instance.reset();
     CareRepository.labStoresOverride = () async => [_melattur];
   });
   tearDown(() {
@@ -60,8 +63,22 @@ void main() {
     AuthService.instance.reset();
     RegistrationService.instance.reset();
     AddressBook.instance.reset();
+    PatientBook.instance.reset();
     CareRepository.labStoresOverride = null;
   });
+
+  /// [count] fresh patients on the account, for tests that only care how
+  /// many are booked, not who they are.
+  List<Patient> somePatients(int count) => [
+    for (var i = 1; i <= count; i++)
+      PatientBook.instance.add(
+        name: 'Patient $i',
+        phone: '900000000$i',
+        dob: DateTime(1990, 1, i),
+        gender: PatientGender.other,
+        relation: i == 1 ? PatientRelation.self : PatientRelation.other,
+      ),
+  ];
 
   void giveAddress() {
     AddressBook.instance.add(
@@ -99,7 +116,7 @@ void main() {
       'checkout screen — not a fake "choosing a slot" toast',
       (tester) async {
         registerAndSignIn();
-        LabCartService.instance.book(_activeLife, patients: 2);
+        LabCartService.instance.book(_activeLife, patients: somePatients(2));
         await pump(tester, const LabCartScreen());
 
         expect(find.text('Proceed to checkout'), findsOneWidget);
@@ -116,7 +133,7 @@ void main() {
     testWidgets('signed out, asks to sign in before opening checkout', (
       tester,
     ) async {
-      LabCartService.instance.book(_activeLife, patients: 2);
+      LabCartService.instance.book(_activeLife, patients: somePatients(2));
       await pump(tester, const LabCartScreen());
 
       await tester.tap(find.text('Proceed to checkout'));
@@ -127,11 +144,37 @@ void main() {
     });
 
     testWidgets(
-      'a delivery address is required to place the booking, and the row '
+      'switching between Home Collection and Store Visit actually moves the blue highlight',
+      (tester) async {
+        // A non-const LabFulfillmentRow regression check — a const instance
+        // would keep reading whichever option was selected at first build,
+        // never rebuilding after a tap (see its own call site comment).
+        registerAndSignIn();
+        LabCartService.instance.book(_activeLife, patients: somePatients(1));
+        await pump(tester, const LabCartScreen());
+        await tester.tap(find.text('Proceed to checkout'));
+        await tester.pumpAndSettle();
+
+        Color? colorOf(String label) =>
+            tester.widget<Text>(find.text(label)).style?.color;
+
+        expect(colorOf('Home Collection'), AppColors.brandBlue);
+        expect(colorOf('Store Visit'), AppColors.textDark);
+
+        await tester.tap(find.text('Store Visit'));
+        await tester.pumpAndSettle();
+
+        expect(colorOf('Store Visit'), AppColors.brandBlue);
+        expect(colorOf('Home Collection'), AppColors.textDark);
+      },
+    );
+
+    testWidgets(
+      'a collection address is required to place the booking, and the row '
       'picks up an address added elsewhere',
       (tester) async {
         registerAndSignIn();
-        LabCartService.instance.book(_activeLife, patients: 2);
+        LabCartService.instance.book(_activeLife, patients: somePatients(1));
         await pump(tester, const LabCartScreen());
         await tester.tap(find.text('Proceed to checkout'));
         await tester.pumpAndSettle();
@@ -139,7 +182,7 @@ void main() {
         // Nothing on file yet: the row asks for one, same red-border guard
         // the branch row already uses, and "Place lab test" is disabled —
         // same as a missing branch already disables it.
-        expect(find.text('Choose a delivery address'), findsOneWidget);
+        expect(find.text('Choose a collection address'), findsOneWidget);
         expect(
           tester
               .widget<FilledButton>(
@@ -168,7 +211,7 @@ void main() {
       (tester) async {
         registerAndSignIn();
         giveAddress();
-        LabCartService.instance.book(_activeLife, patients: 2);
+        LabCartService.instance.book(_activeLife, patients: somePatients(2));
         await pump(tester, const LabCartScreen());
         await tester.tap(find.text('Proceed to checkout'));
         await tester.pumpAndSettle();

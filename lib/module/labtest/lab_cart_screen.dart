@@ -6,7 +6,7 @@ import 'lab_cart_service.dart';
 import 'lab_checkout_panels.dart';
 import 'lab_checkout_screen.dart';
 import 'lab_package.dart';
-import 'patient_count_sheet.dart';
+import 'lab_patient_picker_sheet.dart';
 
 /// The lab basket: booked packages, how many patients each covers, and the
 /// bill.
@@ -115,7 +115,7 @@ class _BookingCard extends StatelessWidget {
   const _BookingCard({required this.index, required this.booking});
 
   Future<void> _changePatients(BuildContext context) async {
-    final chosen = await PatientCountSheet.show(
+    final chosen = await LabPatientPickerSheet.show(
       context,
       booking.package,
       initial: booking.patients,
@@ -176,9 +176,11 @@ class _BookingCard extends StatelessWidget {
                   onPressed: () => _changePatients(context),
                   icon: const Icon(Icons.person_outline_rounded, size: 18),
                   label: Text(
-                    booking.patients == 1
-                        ? '1 patient'
-                        : '${booking.patients} patients',
+                    booking.patients.length == 1
+                        ? booking.patients.first.name
+                        : '${booking.patients.length} patients',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
                       fontSize: 14,
                       fontWeight: FontWeight.w600,
@@ -207,7 +209,7 @@ class _BookingCard extends StatelessWidget {
                     ),
                   ),
                   Text(
-                    '₹${package.price} × ${booking.patients}',
+                    '₹${package.price} × ${booking.patients.length}',
                     style: const TextStyle(
                       fontSize: 12,
                       color: AppColors.textMuted,

@@ -11,7 +11,7 @@ import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import 'lab_package_screen.dart';
 import 'package_card.dart';
-import 'patient_count_sheet.dart';
+import 'lab_patient_picker_sheet.dart';
 import 'profile_tile.dart';
 import 'top_packages_screen.dart';
 import 'top_profiles_screen.dart';
@@ -354,7 +354,7 @@ class _MostCommonTestCard extends StatelessWidget {
 
   Future<void> _add(BuildContext context) async {
     final cart = LabCartService.instance;
-    final chosen = await PatientCountSheet.show(
+    final chosen = await LabPatientPickerSheet.show(
       context,
       test,
       initial: cart.patientsFor(test),

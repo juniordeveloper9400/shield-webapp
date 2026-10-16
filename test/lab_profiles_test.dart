@@ -6,6 +6,7 @@ import 'package:shield/module/labtest/lab_cart_service.dart';
 import 'package:shield/module/labtest/lab_package.dart';
 import 'package:shield/module/labtest/lab_test_screen.dart';
 import 'package:shield/module/labtest/top_packages_screen.dart';
+import 'package:shield/module/patients/patient_book.dart';
 
 LabPackage _profile(
   int n, {
@@ -37,12 +38,29 @@ const _package = LabPackage(
 /// "Top Profiles and Tests": the single tests and group tests a lab switched on
 /// with "Show in the app", listed as bookable rows beside the package cards.
 void main() {
-  setUp(LabCartService.instance.reset);
+  setUp(() {
+    LabCartService.instance.reset();
+    PatientBook.instance.reset();
+  });
   tearDown(() {
     LabCartService.instance.reset();
+    PatientBook.instance.reset();
     CareRepository.labPackagesOverride = null;
     CareRepository.labCategoriesOverride = null;
   });
+
+  /// [count] fresh patients on the account, for tests that only care how
+  /// many are booked, not who they are.
+  List<Patient> somePatients(int count) => [
+    for (var i = 1; i <= count; i++)
+      PatientBook.instance.add(
+        name: 'Patient $i',
+        phone: '900000000$i',
+        dob: DateTime(1990, 1, i),
+        gender: PatientGender.other,
+        relation: i == 1 ? PatientRelation.self : PatientRelation.other,
+      ),
+  ];
 
   Future<void> pump(
     WidgetTester tester,
@@ -158,6 +176,7 @@ void main() {
       _package,
       _profile(1, name: 'HbA1c'),
     ];
+    somePatients(2);
 
     await pump(tester, const LabTestScreen());
 
@@ -165,15 +184,16 @@ void main() {
     await tester.tap(find.byKey(const ValueKey('add-profile-1')));
     await tester.pumpAndSettle();
 
-    expect(find.text('Select number of patients'), findsOneWidget);
-    await tester.tap(find.text('2 patients'));
+    expect(find.text('Who is this for?'), findsOneWidget);
+    await tester.tap(find.text('Patient 1'));
+    await tester.tap(find.text('Patient 2'));
     await tester.pumpAndSettle();
     await tester.tap(find.textContaining('Add · ₹'));
     await tester.pumpAndSettle();
 
     expect(LabCartService.instance.bookingCount, 1);
     expect(LabCartService.instance.bookings.first.package.name, 'HbA1c');
-    expect(LabCartService.instance.bookings.first.patients, 2);
+    expect(LabCartService.instance.bookings.first.patients.length, 2);
     expect(LabCartService.instance.subtotal, 618);
     expect(find.byIcon(Icons.check_rounded), findsOneWidget);
   });

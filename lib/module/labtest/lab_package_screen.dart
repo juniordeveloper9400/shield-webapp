@@ -5,7 +5,7 @@ import 'lab_cart_badge.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import '../registration/registration_gate.dart';
-import 'patient_count_sheet.dart';
+import 'lab_patient_picker_sheet.dart';
 
 /// Package detail — what "Book" opens.
 ///
@@ -28,7 +28,7 @@ class LabPackageScreen extends StatelessWidget {
       return;
     }
     final cart = LabCartService.instance;
-    final chosen = await PatientCountSheet.show(
+    final chosen = await LabPatientPickerSheet.show(
       context,
       package,
       initial: cart.patientsFor(package),
@@ -43,9 +43,9 @@ class LabPackageScreen extends StatelessWidget {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            chosen == 1
+            chosen.length == 1
                 ? '${package.name} added for 1 patient'
-                : '${package.name} added for $chosen patients',
+                : '${package.name} added for ${chosen.length} patients',
           ),
         ),
       );
@@ -457,9 +457,9 @@ class _PriceBlock extends StatelessWidget {
                   child: Text(
                     patients == null
                         ? 'Add'
-                        : patients == 1
+                        : patients.length == 1
                         ? 'Booked for 1 patient · Change'
-                        : 'Booked for $patients patients · Change',
+                        : 'Booked for ${patients.length} patients · Change',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

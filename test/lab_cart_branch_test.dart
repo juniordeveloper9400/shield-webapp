@@ -7,6 +7,7 @@ import 'package:shield/module/labtest/lab_cart_service.dart';
 import 'package:shield/module/labtest/lab_package.dart';
 import 'package:shield/module/labtest/lab_store.dart';
 import 'package:shield/module/labtest/lab_store_picker_sheet.dart';
+import 'package:shield/module/patients/patient_book.dart';
 import 'package:shield/module/registration/registration_service.dart';
 
 const _activeLife = LabPackage(
@@ -43,13 +44,28 @@ void main() {
   setUp(() {
     LabCartService.instance.reset();
     RegistrationService.instance.reset();
+    PatientBook.instance.reset();
     CareRepository.labStoresOverride = () async => [_melattur, _tirur];
   });
   tearDown(() {
     LabCartService.instance.reset();
     RegistrationService.instance.reset();
+    PatientBook.instance.reset();
     CareRepository.labStoresOverride = null;
   });
+
+  /// [count] fresh patients on the account, for tests that only care how
+  /// many are booked, not who they are.
+  List<Patient> somePatients(int count) => [
+    for (var i = 1; i <= count; i++)
+      PatientBook.instance.add(
+        name: 'Patient $i',
+        phone: '900000000$i',
+        dob: DateTime(1990, 1, i),
+        gender: PatientGender.other,
+        relation: i == 1 ? PatientRelation.self : PatientRelation.other,
+      ),
+  ];
 
   Future<void> pump(WidgetTester tester, Widget child) async {
     tester.view.physicalSize = const Size(400, 1400);
@@ -64,7 +80,7 @@ void main() {
     tester,
   ) async {
     CareRepository.labStoresOverride = () async => [];
-    LabCartService.instance.book(_activeLife, patients: 2);
+    LabCartService.instance.book(_activeLife, patients: somePatients(2));
     await pump(tester, const LabCartScreen());
 
     expect(find.text('Choose a branch'), findsOneWidget);
@@ -88,7 +104,7 @@ void main() {
           storeId: 'SHD-TIR',
         ),
       );
-      LabCartService.instance.book(_activeLife, patients: 2);
+      LabCartService.instance.book(_activeLife, patients: somePatients(2));
       await pump(tester, const LabCartScreen());
 
       expect(find.text('Sahakar 360 Pharmacy Tirur'), findsOneWidget);
@@ -99,7 +115,7 @@ void main() {
   testWidgets('opening the picker and choosing a branch reaches the basket', (
     tester,
   ) async {
-    LabCartService.instance.book(_activeLife, patients: 2);
+    LabCartService.instance.book(_activeLife, patients: somePatients(2));
     await pump(tester, const LabCartScreen());
 
     await tester.tap(find.text('Choose a branch'));
@@ -126,7 +142,7 @@ void main() {
     expect(LabCartService.instance.scheduledFor, null);
 
     LabCartService.instance.chooseScheduledFor(date);
-    LabCartService.instance.book(_activeLife, patients: 2);
+    LabCartService.instance.book(_activeLife, patients: somePatients(2));
     LabCartService.instance.clear();
     expect(LabCartService.instance.scheduledFor, null);
   });
@@ -136,17 +152,19 @@ void main() {
     (tester) async {
       // Regression check for a canonicalized `const _BillCard()` silently
       // going stale on this exact kind of edit — see root's identical test.
-      LabCartService.instance.book(_activeLife, patients: 2);
+      final patients = somePatients(4);
+      LabCartService.instance.book(_activeLife, patients: patients.sublist(0, 2));
       await pump(tester, const LabCartScreen());
 
       await tester.tap(find.text('2 patients'));
       await tester.pumpAndSettle();
-      await tester.tap(find.text('4 patients'));
+      await tester.tap(find.text('Patient 3'));
+      await tester.tap(find.text('Patient 4'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('Add · ₹5,196'));
       await tester.pumpAndSettle();
 
-      expect(LabCartService.instance.bookings.single.patients, 4);
+      expect(LabCartService.instance.bookings.single.patients.length, 4);
       expect(find.text('- ₹7,796'), findsOneWidget);
       expect(find.text('For 4 patients'), findsOneWidget);
     },

@@ -5,7 +5,7 @@ import '../../widgets/app_image.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import 'lab_package_screen.dart';
-import 'patient_count_sheet.dart';
+import 'lab_patient_picker_sheet.dart';
 
 /// "Top Profiles and Tests": a card of single tests and group tests — the ones
 /// the lab switched on with "Show in the app" on the console's Test Master —
@@ -69,7 +69,7 @@ class LabProfileTile extends StatelessWidget {
 
   Future<void> _add(BuildContext context) async {
     final cart = LabCartService.instance;
-    final chosen = await PatientCountSheet.show(
+    final chosen = await LabPatientPickerSheet.show(
       context,
       profile,
       initial: cart.patientsFor(profile),
