@@ -348,26 +348,6 @@ class _ArtworkCardState extends State<_ArtworkCard> {
                                 fit: BoxFit.contain,
                               ),
                             ),
-                            if (i == 0)
-                              Positioned(
-                                top: 0,
-                                left: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.brandGreenDark,
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: const Text(
-                                    'P',
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
                           ],
                         ),
                       ),
