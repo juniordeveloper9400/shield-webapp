@@ -277,6 +277,34 @@ class _ArtworkCardState extends State<_ArtworkCard> {
                         ),
                       ),
                     ),
+                  if (images.length > 1)
+                    Positioned(
+                      bottom: 8,
+                      left: 0,
+                      right: 0,
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: List.generate(images.length, (i) {
+                          final active = i == _currentIndex;
+                          return AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            curve: Curves.easeOut,
+                            margin: const EdgeInsets.symmetric(horizontal: 3),
+                            width: active ? 18 : 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: active
+                                  ? AppColors.brandGreenDark
+                                  : Colors.white.withAlpha(180),
+                              borderRadius: BorderRadius.circular(4),
+                              border: active
+                                  ? null
+                                  : Border.all(color: Colors.black.withAlpha(30)),
+                            ),
+                          );
+                        }),
+                      ),
+                    ),
                 ],
               ),
             ),
