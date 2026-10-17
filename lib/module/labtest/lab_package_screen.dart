@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 
+import '../../data/backend/contact_repository.dart';
+import '../../phone.dart';
 import '../../theme/app_colors.dart';
+import '../home/prescription_card.dart' show PrescriptionCard;
 import 'lab_cart_badge.dart';
+import 'lab_cart_screen.dart';
 import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import '../registration/registration_gate.dart';
@@ -52,6 +56,18 @@ class LabPackageScreen extends StatelessWidget {
       );
   }
 
+  /// Opens a WhatsApp chat with the admin desk, the same "ask before you
+  /// book" line every other screen's WhatsApp shortcut reaches.
+  Future<void> _openWhatsApp(BuildContext context) async {
+    final admin = await ContactRepository.instance.adminWhatsapp();
+    if (!context.mounted) return;
+    await WhatsApp.open(
+      context,
+      admin ?? PrescriptionCard.orderPhone,
+      message: 'Hi, I have a question about ${package.name}.',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -85,8 +101,20 @@ class LabPackageScreen extends StatelessWidget {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
+      // Always reachable while browsing a test's details, wherever the
+      // member has scrolled to — the same "ask before you book" shortcut
+      // every other booking screen offers, just pinned here instead of
+      // sitting inline in one section.
+      floatingActionButton: FloatingActionButton(
+        key: const ValueKey('package-whatsapp-fab'),
+        onPressed: () => _openWhatsApp(context),
+        backgroundColor: AppColors.brandGreenDeep,
+        tooltip: 'Chat on WhatsApp',
+        child: const Icon(Icons.chat_rounded, color: AppColors.white),
+      ),
+      bottomNavigationBar: _BottomBar(package: package, onAdd: () => _add(context)),
       body: ListView(
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.only(bottom: 16),
         children: [
           _Header(package: package),
           const SizedBox(height: 10),
@@ -96,7 +124,7 @@ class LabPackageScreen extends StatelessWidget {
             _OrgansBlock(package: package),
             const SizedBox(height: 10),
           ],
-          _PriceBlock(package: package, onAdd: () => _add(context)),
+          _PriceBlock(package: package),
           const SizedBox(height: 10),
           const _CouponCard(),
           const SizedBox(height: 10),
@@ -120,9 +148,107 @@ class LabPackageScreen extends StatelessWidget {
             const SizedBox(height: 10),
             _PreparationBlock(package: package),
           ],
+          const SizedBox(height: 10),
+          _HowItWorksBlock(package: package),
+          const SizedBox(height: 10),
+          _CommonQuestionsBlock(package: package),
           const SizedBox(height: 24),
         ],
       ),
+    );
+  }
+}
+
+/// The fixed footer every scroll position keeps in view: how many patients
+/// this test is booked for (tap to choose or change), and — once the basket
+/// holds at least one booking — the running total with a shortcut straight
+/// to the cart.
+class _BottomBar extends StatelessWidget {
+  final LabPackage package;
+  final VoidCallback onAdd;
+
+  const _BottomBar({required this.package, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: LabCartService.instance,
+      builder: (context, _) {
+        final cart = LabCartService.instance;
+        final patients = cart.patientsFor(package);
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onAdd,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandBlue,
+                      side: const BorderSide(color: AppColors.searchBorder),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    icon: const Icon(Icons.expand_more_rounded, size: 18),
+                    label: Text(
+                      patients == null
+                          ? 'Add'
+                          : patients.length == 1
+                          ? '1 Patient'
+                          : '${patients.length} Patients',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ),
+                if (!cart.isEmpty) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.of(context).push(
+                        MaterialPageRoute(builder: (_) => const LabCartScreen()),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.brandBlue,
+                        foregroundColor: AppColors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(28),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: Color(0xFFC9D8F0),
+                            ),
+                          ),
+                          const Text(
+                            'View Cart',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -442,9 +568,8 @@ class _OrganChip extends StatelessWidget {
 
 class _PriceBlock extends StatelessWidget {
   final LabPackage package;
-  final VoidCallback onAdd;
 
-  const _PriceBlock({required this.package, required this.onAdd});
+  const _PriceBlock({required this.package});
 
   @override
   Widget build(BuildContext context) {
@@ -452,86 +577,46 @@ class _PriceBlock extends StatelessWidget {
       width: double.infinity,
       color: AppColors.white,
       padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 6,
+        crossAxisAlignment: WrapCrossAlignment.center,
         children: [
-          Wrap(
-            spacing: 10,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '₹${package.price}',
+          Text(
+            '₹${package.price}',
+            style: const TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w800,
+              color: AppColors.textDark,
+            ),
+          ),
+          Text(
+            '₹${package.mrp}',
+            style: const TextStyle(
+              fontSize: 15,
+              color: AppColors.textMuted,
+              decoration: TextDecoration.lineThrough,
+            ),
+          ),
+          if (package.discountLabel.isNotEmpty)
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.greenTint,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              child: Text(
+                package.discountLabel,
                 style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandGreenDark,
                 ),
               ),
-              Text(
-                '₹${package.mrp}',
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: AppColors.textMuted,
-                  decoration: TextDecoration.lineThrough,
-                ),
-              ),
-              if (package.discountLabel.isNotEmpty)
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.greenTint,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    package.discountLabel,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.brandGreenDark,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Reflects the basket, so reopening a booked package offers to
-          // change the count rather than pretending nothing is booked.
-          ListenableBuilder(
-            listenable: LabCartService.instance,
-            builder: (context, _) {
-              final patients = LabCartService.instance.patientsFor(package);
-
-              return SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: onAdd,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.brandBlue,
-                    side: const BorderSide(color: AppColors.searchBorder),
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    patients == null
-                        ? 'Add'
-                        : patients.length == 1
-                        ? 'Booked for 1 patient · Change'
-                        : 'Booked for ${patients.length} patients · Change',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
+            ),
         ],
       ),
     );
@@ -585,6 +670,32 @@ class _IncludedTestsBlock extends StatelessWidget {
           ),
           const SizedBox(height: 4),
           for (final profile in profiles) _IncludedTestRow(profile: profile),
+          const Divider(height: 1, color: AppColors.border),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'TOTAL',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    letterSpacing: 0.4,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.brandBlue,
+                  ),
+                ),
+                Text(
+                  '${profiles.length} test${profiles.length == 1 ? '' : 's'}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
@@ -910,6 +1021,264 @@ class _PreparationLine extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// "How It Works" — the three-step booking flow every lab test follows here
+/// (book a slot, sample collection, report). [package.reportIn] is the only
+/// test-specific fact; the steps themselves describe the one booking flow
+/// the app offers, the same for every test, so they are fixed copy rather
+/// than something each Test Master row would need to repeat.
+class _HowItWorksBlock extends StatelessWidget {
+  final LabPackage package;
+
+  const _HowItWorksBlock({required this.package});
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = [
+      (
+        'Book a slot',
+        'Pick a convenient time window, any day of the week.',
+      ),
+      (
+        'Sample taken at home',
+        'A trained phlebotomist collects your sample at your door.',
+      ),
+      (
+        'Report ${package.reportIn.isEmpty ? 'ready soon' : 'in ${package.reportIn}'}',
+        'Your digital report is shared on WhatsApp and in the app.',
+      ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'How It Works',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 14),
+          for (var i = 0; i < steps.length; i++)
+            _HowItWorksStep(
+              number: i + 1,
+              title: steps[i].$1,
+              body: steps[i].$2,
+              isLast: i == steps.length - 1,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HowItWorksStep extends StatelessWidget {
+  final int number;
+  final String title;
+  final String body;
+  final bool isLast;
+
+  const _HowItWorksStep({
+    required this.number,
+    required this.title,
+    required this.body,
+    required this.isLast,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return IntrinsicHeight(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Column(
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
+                  color: AppColors.brandBlue,
+                  shape: BoxShape.circle,
+                ),
+                child: Text(
+                  '$number',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.white,
+                  ),
+                ),
+              ),
+              if (!isLast)
+                Expanded(
+                  child: Container(width: 1.5, color: AppColors.border),
+                ),
+            ],
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: isLast ? 0 : 18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    body,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      height: 1.4,
+                      color: AppColors.textBody,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Common Questions" — the questions a member asks before booking any test
+/// here, the same across every one; only the answers that genuinely vary
+/// (the fasting window) read from [package] rather than being fixed copy.
+class _CommonQuestionsBlock extends StatelessWidget {
+  final LabPackage package;
+
+  const _CommonQuestionsBlock({required this.package});
+
+  @override
+  Widget build(BuildContext context) {
+    final questions = <(String, String)>[
+      (
+        "Do I need a doctor's prescription to book this?",
+        'No. You can book this test directly — no prescription or consultation needed.',
+      ),
+      (
+        'Is ₹${package.price} the final amount, or do I pay at collection?',
+        '₹${package.price} is the full price — nothing further is collected at your door.',
+      ),
+      if (package.fasting.isNotEmpty)
+        (
+          'What time should I stop eating?',
+          'Fast for ${package.fasting} before your sample is taken — plain water is fine.',
+        ),
+      (
+        'Can I book this for my parents at a different address?',
+        'Yes — add each person as their own patient and set a separate collection address for them at checkout.',
+      ),
+      (
+        'Is home collection available at my pincode?',
+        "You'll be asked to confirm your address and a convenient time slot when booking — if it isn't serviceable there, you'll see that before you pay.",
+      ),
+      (
+        'What if a value comes back out of range?',
+        "It's flagged clearly in your report, and our team can help you understand next steps.",
+      ),
+    ];
+
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Common Questions',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          for (final q in questions)
+            _QuestionTile(question: q.$1, answer: q.$2),
+        ],
+      ),
+    );
+  }
+}
+
+class _QuestionTile extends StatefulWidget {
+  final String question;
+  final String answer;
+
+  const _QuestionTile({required this.question, required this.answer});
+
+  @override
+  State<_QuestionTile> createState() => _QuestionTileState();
+}
+
+class _QuestionTileState extends State<_QuestionTile> {
+  bool _open = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InkWell(
+          onTap: () => setState(() => _open = !_open),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    widget.question,
+                    style: const TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+                Icon(
+                  _open
+                      ? Icons.keyboard_arrow_up_rounded
+                      : Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.textMuted,
+                ),
+              ],
+            ),
+          ),
+        ),
+        if (_open)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Text(
+              widget.answer,
+              style: const TextStyle(
+                fontSize: 13.5,
+                height: 1.45,
+                color: AppColors.textBody,
+              ),
+            ),
+          ),
+        const Divider(height: 1, color: AppColors.border),
+      ],
     );
   }
 }
