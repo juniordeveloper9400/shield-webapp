@@ -135,6 +135,19 @@ class LabPackage {
 
   final String about;
 
+  /// `app.lab_test.short_name`, synced the same way [fasting] is — shown as
+  /// an "Also referred as" chip on the detail screen.
+  final String shortName;
+
+  /// `app.lab_test.specification_2` ("Why this test" on the Test Master
+  /// form), synced the same way — shown as its own "Why is this done"
+  /// section.
+  final String whyThisTest;
+
+  /// `app.lab_test.symptoms`, synced the same way — chips for "Symptoms
+  /// that may indicate this test".
+  final List<String> symptoms;
+
   const LabPackage({
     required this.id,
     this.slug = '',
@@ -163,6 +176,9 @@ class LabPackage {
     this.sample = '',
     this.organs = const [],
     this.about = '',
+    this.shortName = '',
+    this.whyThisTest = '',
+    this.symptoms = const [],
   });
 
   /// [price] and [mrp] are written pre-grouped for display; these are the
@@ -200,6 +216,7 @@ class LabTestDetail {
   final String sample;
   final String reportingTime;
   final String fasting;
+  final List<String> symptoms;
   final String about;
   final String whyThisTest;
 
@@ -211,6 +228,7 @@ class LabTestDetail {
     this.sample = '',
     this.reportingTime = '',
     this.fasting = '',
+    this.symptoms = const [],
     this.about = '',
     this.whyThisTest = '',
   });

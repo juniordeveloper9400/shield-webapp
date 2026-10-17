@@ -79,6 +79,10 @@ class _LabTestDetailScreenState extends State<LabTestDetailScreen> {
                   body: test.whyThisTest,
                 ),
               ],
+              if (test.symptoms.isNotEmpty) ...[
+                const SizedBox(height: 10),
+                _SymptomsBlock(symptoms: test.symptoms),
+              ],
               const SizedBox(height: 24),
             ],
           );
@@ -273,6 +277,67 @@ class _DetailTextBlock extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Symptoms that may indicate this test" — chips entered on the Test
+/// Master's "Why this test" tab, never hardcoded here.
+class _SymptomsBlock extends StatelessWidget {
+  final List<String> symptoms;
+
+  const _SymptomsBlock({required this.symptoms});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Symptoms that may indicate this test',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [for (final symptom in symptoms) _SymptomChip(symptom)],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SymptomChip extends StatelessWidget {
+  final String label;
+
+  const _SymptomChip(this.label);
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w500,
+          color: AppColors.textDark,
+        ),
       ),
     );
   }

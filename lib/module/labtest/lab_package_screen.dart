@@ -98,13 +98,28 @@ class LabPackageScreen extends StatelessWidget {
           ],
           _PriceBlock(package: package, onAdd: () => _add(context)),
           const SizedBox(height: 10),
-          if (package.profiles.isNotEmpty) ...[
-            _IncludedTestsBlock(profiles: package.profiles),
-            const SizedBox(height: 10),
-          ],
           const _CouponCard(),
           const SizedBox(height: 10),
           _AboutBlock(package: package),
+          if (package.whyThisTest.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _DetailTextBlock(
+              title: 'Why is this done',
+              body: package.whyThisTest,
+            ),
+          ],
+          if (package.symptoms.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _SymptomsBlock(symptoms: package.symptoms),
+          ],
+          if (package.profiles.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _IncludedTestsBlock(profiles: package.profiles),
+          ],
+          if (package.fasting.isNotEmpty || package.preparation.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            _PreparationBlock(package: package),
+          ],
           const SizedBox(height: 24),
         ],
       ),
@@ -161,6 +176,22 @@ class _Header extends StatelessWidget {
               ),
             ],
           ),
+          if (package.shortName.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Also referred as',
+              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 6),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final alias in package.shortName.split(','))
+                  if (alias.trim().isNotEmpty) _AliasChip(label: alias.trim()),
+              ],
+            ),
+          ],
           const SizedBox(height: 16),
           Wrap(
             spacing: 16,
@@ -172,6 +203,31 @@ class _Header extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _AliasChip extends StatelessWidget {
+  final String label;
+
+  const _AliasChip({required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 13.5,
+          fontWeight: FontWeight.w600,
+          color: AppColors.textDark,
+        ),
       ),
     );
   }
@@ -499,13 +555,33 @@ class _IncludedTestsBlock extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Included In The Package',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: AppColors.textDark,
-            ),
+          Row(
+            children: [
+              const Text(
+                'Includes these tests',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textDark,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                decoration: BoxDecoration(
+                  color: AppColors.offerTint,
+                  shape: BoxShape.circle,
+                ),
+                padding: const EdgeInsets.all(7),
+                child: Text(
+                  '${profiles.length}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.brandBlue,
+                  ),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 4),
           for (final profile in profiles) _IncludedTestRow(profile: profile),
@@ -680,6 +756,156 @@ class _AboutBlock extends StatelessWidget {
               fontSize: 14,
               height: 1.5,
               color: AppColors.textBody,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// A plain title + body text block — "Why is this done" (`package.
+/// whyThisTest`), staff-entered on the Test Master's "Why this test" tab.
+class _DetailTextBlock extends StatelessWidget {
+  final String title;
+  final String body;
+
+  const _DetailTextBlock({required this.title, required this.body});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: AppColors.textBody,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Symptoms that may indicate this test" — chips entered on the Test
+/// Master's "Why this test" tab, never hardcoded here.
+class _SymptomsBlock extends StatelessWidget {
+  final List<String> symptoms;
+
+  const _SymptomsBlock({required this.symptoms});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Symptoms that may indicate this test',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final symptom in symptoms) _OrganChip(label: symptom),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Preparation instructions" — built from [LabPackage.fasting] (the
+/// Test Master's own Fasting field) and the free-text [LabPackage.preparation]
+/// sentence, when either is set. Nothing here is hardcoded: a package with
+/// neither simply never shows this block (see the caller's own guard).
+class _PreparationBlock extends StatelessWidget {
+  final LabPackage package;
+
+  const _PreparationBlock({required this.package});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Preparation instructions',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 10),
+          if (package.fasting.isNotEmpty) _PreparationLine(package.fasting),
+          if (package.preparation.isNotEmpty)
+            _PreparationLine(package.preparation),
+        ],
+      ),
+    );
+  }
+}
+
+class _PreparationLine extends StatelessWidget {
+  final String text;
+
+  const _PreparationLine(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Padding(
+            padding: EdgeInsets.only(top: 6, right: 8),
+            child: Icon(
+              Icons.circle,
+              size: 6,
+              color: AppColors.textMuted,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.5,
+                color: AppColors.textBody,
+              ),
             ),
           ),
         ],

@@ -83,6 +83,9 @@ class CareRepository {
             sample: _str(row['sample']),
             organs: _stringList(row['organs']),
             about: _str(row['about']),
+            shortName: _str(row['shortName']),
+            whyThisTest: _str(row['whyThisTest']),
+            symptoms: _stringList(row['symptoms']),
           ),
       ];
     } catch (error) {
@@ -242,6 +245,7 @@ class CareRepository {
         sample: _str(row['sample']),
         reportingTime: _str(row['reportingTime']),
         fasting: _str(row['fasting']),
+        symptoms: _stringList(row['symptoms']),
         about: _str(row['about']),
         whyThisTest: _str(row['whyThisTest']),
       );
