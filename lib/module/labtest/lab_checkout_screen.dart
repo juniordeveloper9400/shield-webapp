@@ -244,7 +244,7 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
                           ),
                         ),
                         const Text(
-                          'Total',
+                          'Estimated total',
                           style: TextStyle(
                             fontSize: 12,
                             color: AppColors.textMuted,
@@ -318,6 +318,12 @@ class _ReviewCard extends StatelessWidget {
               fontWeight: FontWeight.w700,
               color: AppColors.textDark,
             ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Estimated charges: The lab may update these charges. '
+            'The final amount will be confirmed by the lab.',
+            style: TextStyle(fontSize: 12.5, height: 1.35, color: AppColors.textMuted),
           ),
           const SizedBox(height: 10),
           for (final booking in bookings) ...[
