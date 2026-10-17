@@ -857,23 +857,29 @@ class _FaqCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _Card(
+    return Container(
+      margin: const EdgeInsets.only(top: 12),
+      color: AppColors.white,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Frequently asked questions',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: Text(
+              'Frequently asked questions (FAQs)',
+              style: TextStyle(
+                fontSize: 20,
+                height: 1.4,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textDark,
+              ),
             ),
           ),
-          const SizedBox(height: 4),
-          for (var i = 0; i < faqs.length; i++) ...[
-            if (i > 0) const Divider(height: 1, color: AppColors.border),
-            _FaqRow(faq: faqs[i]),
+          for (final faq in faqs) ...[
+            const Divider(height: 1, thickness: 1, color: AppColors.border),
+            _FaqRow(faq: faq),
           ],
+          const Divider(height: 1, thickness: 1, color: AppColors.border),
         ],
       ),
     );
@@ -895,90 +901,57 @@ class _FaqRowState extends State<_FaqRow> {
   @override
   Widget build(BuildContext context) {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
-          onTap: () => setState(() => _open = !_open),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _FaqBadge(letter: 'Q', color: AppColors.brandBlue),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.faq.question,
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w700,
+        Semantics(
+          button: true,
+          expanded: _open,
+          child: Material(
+            color: AppColors.white,
+            child: InkWell(
+              onTap: () => setState(() => _open = !_open),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.faq.question,
+                        style: const TextStyle(
+                          fontSize: 17,
+                          height: 1.4,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Icon(
+                      _open
+                          ? Icons.keyboard_arrow_up_rounded
+                          : Icons.keyboard_arrow_down_rounded,
+                      size: 28,
                       color: AppColors.textDark,
                     ),
-                  ),
+                  ],
                 ),
-                const SizedBox(width: 8),
-                Icon(
-                  _open ? Icons.remove_rounded : Icons.add_rounded,
-                  size: 20,
-                  color: AppColors.textMuted,
-                ),
-              ],
+              ),
             ),
           ),
         ),
         if (_open)
           Padding(
-            padding: const EdgeInsets.only(bottom: 14),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const _FaqBadge(letter: 'A', color: AppColors.brandGreenDark),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.faq.answer,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      height: 1.5,
-                      color: AppColors.textBody,
-                    ),
-                  ),
-                ),
-              ],
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 22),
+            child: Text(
+              widget.faq.answer,
+              style: const TextStyle(
+                fontSize: 14,
+                height: 1.6,
+                color: AppColors.textBody,
+              ),
             ),
           ),
       ],
-    );
-  }
-}
-
-/// The small "Q" / "A" marker in front of each FAQ row, so a question and its
-/// answer read as a distinct, labelled pair rather than two plain lines of
-/// text at different weights.
-class _FaqBadge extends StatelessWidget {
-  final String letter;
-  final Color color;
-
-  const _FaqBadge({required this.letter, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 20,
-      height: 20,
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(6),
-      ),
-      child: Text(
-        letter,
-        style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: color,
-        ),
-      ),
     );
   }
 }

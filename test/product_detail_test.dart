@@ -73,7 +73,7 @@ void main() {
       expect(find.byIcon(Icons.ac_unit_rounded), findsNothing);
       expect(find.text('Key uses'), findsNothing);
       expect(find.text('Product description'), findsNothing);
-      expect(find.text('Frequently asked questions'), findsNothing);
+      expect(find.text('Frequently asked questions (FAQs)'), findsNothing);
     });
 
     testWidgets('a product with a backend id but nothing added still shows '
@@ -86,7 +86,7 @@ void main() {
       await pumpDetail(tester, doloWithId);
 
       expect(find.text('Key uses'), findsNothing);
-      expect(find.text('Frequently asked questions'), findsNothing);
+      expect(find.text('Frequently asked questions (FAQs)'), findsNothing);
     });
   });
 
@@ -104,7 +104,7 @@ void main() {
       expect(find.text('Key uses'), findsOneWidget);
       expect(find.text('Fast-acting'), findsOneWidget);
       expect(find.text('Brings down fever'), findsOneWidget);
-      expect(find.text('Frequently asked questions'), findsOneWidget);
+      expect(find.text('Frequently asked questions (FAQs)'), findsOneWidget);
       // Left blank by the admin — no section for it.
       expect(find.text('How to use'), findsNothing);
       expect(find.text('Ingredients'), findsNothing);
