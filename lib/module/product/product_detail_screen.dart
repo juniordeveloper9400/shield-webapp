@@ -902,17 +902,21 @@ class _FaqRowState extends State<_FaqRow> {
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const _FaqBadge(letter: 'Q', color: AppColors.brandBlue),
+                const SizedBox(width: 10),
                 Expanded(
                   child: Text(
                     widget.faq.question,
                     style: const TextStyle(
                       fontSize: 14,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       color: AppColors.textDark,
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
                 Icon(
                   _open ? Icons.remove_rounded : Icons.add_rounded,
                   size: 20,
@@ -925,16 +929,56 @@ class _FaqRowState extends State<_FaqRow> {
         if (_open)
           Padding(
             padding: const EdgeInsets.only(bottom: 14),
-            child: Text(
-              widget.faq.answer,
-              style: const TextStyle(
-                fontSize: 13,
-                height: 1.5,
-                color: AppColors.textBody,
-              ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const _FaqBadge(letter: 'A', color: AppColors.brandGreenDark),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    widget.faq.answer,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      height: 1.5,
+                      color: AppColors.textBody,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
       ],
+    );
+  }
+}
+
+/// The small "Q" / "A" marker in front of each FAQ row, so a question and its
+/// answer read as a distinct, labelled pair rather than two plain lines of
+/// text at different weights.
+class _FaqBadge extends StatelessWidget {
+  final String letter;
+  final Color color;
+
+  const _FaqBadge({required this.letter, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 20,
+      height: 20,
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        letter,
+        style: TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w800,
+          color: color,
+        ),
+      ),
     );
   }
 }
