@@ -29,7 +29,24 @@ class LabProfile {
   final String name;
   final int parameters;
 
-  const LabProfile(this.emoji, this.name, this.parameters);
+  /// The real Test Master row this was built from (`app.lab_profile.
+  /// test_id`, migration 0106) — lets tapping this row open a real Test
+  /// Details page. Null for a profile synced from a single test/group's own
+  /// one-package listing, which already points the member straight at that
+  /// one test.
+  final String? testId;
+
+  /// `app.lab_test.short_name`, copied alongside [testId] — shown next to
+  /// [name] as its alias.
+  final String shortName;
+
+  const LabProfile(
+    this.emoji,
+    this.name,
+    this.parameters, {
+    this.testId,
+    this.shortName = '',
+  });
 }
 
 /// A bookable diagnostic package — read from `app.lab_package` (see
@@ -104,6 +121,12 @@ class LabPackage {
   /// What the patient must do beforehand, e.g. '12 hrs fasting'.
   final String preparation;
 
+  /// A short, structured prep note (e.g. "12 hrs fasting"), shown as its own
+  /// fact chip alongside Report in / Home sample — distinct from the
+  /// free-text [preparation] sentence (`app.lab_package.fasting`, migration
+  /// 0106).
+  final String fasting;
+
   /// What is collected, e.g. 'Blood, Urine'.
   final String sample;
 
@@ -136,6 +159,7 @@ class LabPackage {
     this.forWhom = '',
     this.ageRange = '',
     this.preparation = '',
+    this.fasting = '',
     this.sample = '',
     this.organs = const [],
     this.about = '',
@@ -163,4 +187,31 @@ class LabPackage {
 
   static int _toInt(String amount) =>
       int.tryParse(amount.replaceAll(',', '').trim()) ?? 0;
+}
+
+/// A single test's full detail — `GET /v1/public/care/lab-tests/:id`
+/// (`CareRepository.fetchLabTestDetail`), opened by tapping an included test
+/// inside a package's "Included In The Package" list.
+class LabTestDetail {
+  final String id;
+  final String name;
+  final String shortName;
+  final String testType;
+  final String sample;
+  final String reportingTime;
+  final String fasting;
+  final String about;
+  final String whyThisTest;
+
+  const LabTestDetail({
+    required this.id,
+    required this.name,
+    this.shortName = '',
+    this.testType = 'TEST',
+    this.sample = '',
+    this.reportingTime = '',
+    this.fasting = '',
+    this.about = '',
+    this.whyThisTest = '',
+  });
 }

@@ -31,7 +31,7 @@ class PackageCard extends StatelessWidget {
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppColors.border),
       ),
       clipBehavior: Clip.antiAlias,
@@ -39,14 +39,14 @@ class PackageCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.all(12),
             child: _Headline(package: package),
           ),
           _ProfileStrip(package: package, onViewAll: onViewAll),
           if (fillHeight)
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
                 child: package.inheritsFrom == null
                     ? _ProfileGrid(profiles: package.profiles)
                     : _InheritedBlock(package: package),
@@ -54,14 +54,14 @@ class PackageCard extends StatelessWidget {
             )
           else
             Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
               child: package.inheritsFrom == null
                   ? _ProfileGrid(profiles: package.profiles)
                   : _InheritedBlock(package: package),
             ),
           const Divider(height: 1, color: AppColors.border),
           Padding(
-            padding: const EdgeInsets.all(14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: _PriceRow(package: package),
           ),
         ],
@@ -81,11 +81,11 @@ class _Headline extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          width: 66,
-          height: 66,
+          width: 50,
+          height: 50,
           decoration: BoxDecoration(
             color: AppColors.brandBlue,
-            borderRadius: BorderRadius.circular(10),
+            borderRadius: BorderRadius.circular(8),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -93,7 +93,7 @@ class _Headline extends StatelessWidget {
               Text(
                 '${package.testCount}',
                 style: const TextStyle(
-                  fontSize: 25,
+                  fontSize: 19,
                   height: 1,
                   fontWeight: FontWeight.w800,
                   color: AppColors.white,
@@ -103,8 +103,8 @@ class _Headline extends StatelessWidget {
               const Text(
                 'TESTS',
                 style: TextStyle(
-                  fontSize: 9.5,
-                  letterSpacing: 0.6,
+                  fontSize: 8.5,
+                  letterSpacing: 0.5,
                   fontWeight: FontWeight.w700,
                   color: Color(0xFFC9D8F0),
                 ),
@@ -112,7 +112,7 @@ class _Headline extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,46 +122,41 @@ class _Headline extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 19,
+                  fontSize: 16,
                   fontWeight: FontWeight.w800,
                   color: AppColors.textDark,
                 ),
               ),
-              const SizedBox(height: 5),
-              Wrap(
-                spacing: 10,
-                runSpacing: 4,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  _Stat(
-                    icon: Icons.star_rounded,
-                    colour: const Color(0xFFF5A623),
-                    text: package.rating,
-                    bold: true,
-                  ),
-                  _Stat(
-                    icon: Icons.person_rounded,
-                    colour: AppColors.brandBlue,
-                    text: package.booked,
-                  ),
-                ],
-              ),
               const SizedBox(height: 4),
               Wrap(
-                spacing: 10,
-                runSpacing: 4,
+                spacing: 8,
+                runSpacing: 3,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  _Stat(
+                  if (package.rating.isNotEmpty)
+                    _Stat(
+                      icon: Icons.star_rounded,
+                      colour: const Color(0xFFF5A623),
+                      text: package.rating,
+                      bold: true,
+                    ),
+                  if (package.booked.isNotEmpty)
+                    _Stat(
+                      icon: Icons.person_rounded,
+                      colour: AppColors.brandBlue,
+                      text: package.booked,
+                    ),
+                  const _Stat(
                     icon: Icons.home_outlined,
                     colour: AppColors.brandGreenDeep,
                     text: 'Free collection',
                   ),
-                  _Stat(
-                    icon: Icons.description_outlined,
-                    colour: AppColors.brandBlue,
-                    text: package.reportIn,
-                  ),
+                  if (package.reportIn.isNotEmpty)
+                    _Stat(
+                      icon: Icons.description_outlined,
+                      colour: AppColors.brandBlue,
+                      text: package.reportIn,
+                    ),
                 ],
               ),
             ],
@@ -187,17 +182,22 @@ class _Stat extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (text.isEmpty) return const SizedBox.shrink();
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 15, color: colour),
-        const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(
-            fontSize: 12.5,
-            fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
-            color: AppColors.textBody,
+        Icon(icon, size: 13.5, color: colour),
+        const SizedBox(width: 3),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: bold ? FontWeight.w800 : FontWeight.w600,
+              color: AppColors.textBody,
+            ),
           ),
         ),
       ],
@@ -215,7 +215,7 @@ class _ProfileStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       color: AppColors.pageTint,
-      padding: const EdgeInsets.fromLTRB(14, 10, 8, 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: Row(
         children: [
           Expanded(
@@ -224,7 +224,7 @@ class _ProfileStrip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(
-                fontSize: 14,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: AppColors.textDark,
               ),
@@ -234,13 +234,13 @@ class _ProfileStrip extends StatelessWidget {
             onPressed: onViewAll,
             style: TextButton.styleFrom(
               minimumSize: Size.zero,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: const Text(
               'View all',
               style: TextStyle(
-                fontSize: 14,
+                fontSize: 12.5,
                 fontWeight: FontWeight.w600,
                 color: AppColors.brandBlue,
               ),
@@ -264,12 +264,12 @@ class _ProfileGrid extends StatelessWidget {
       children: [
         for (var i = 0; i < profiles.length; i += 2)
           Padding(
-            padding: const EdgeInsets.only(bottom: 10),
+            padding: const EdgeInsets.only(bottom: 6),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Expanded(child: _ProfileRow(profile: profiles[i])),
-                const SizedBox(width: 12),
+                const SizedBox(width: 8),
                 Expanded(
                   child: i + 1 < profiles.length
                       ? _ProfileRow(profile: profiles[i + 1])
@@ -292,26 +292,26 @@ class _ProfileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(profile.emoji, style: const TextStyle(fontSize: 14)),
-        const SizedBox(width: 6),
+        Text(profile.emoji, style: const TextStyle(fontSize: 12)),
+        const SizedBox(width: 4),
         Expanded(
           child: Text(
             profile.name,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 13.5,
+              fontSize: 12,
               fontWeight: FontWeight.w500,
               color: AppColors.textDark,
             ),
           ),
         ),
         if (profile.parameters > 0) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           Text(
             '${profile.parameters}',
             style: const TextStyle(
-              fontSize: 13,
+              fontSize: 11.5,
               fontWeight: FontWeight.w600,
               color: AppColors.textMuted,
             ),
@@ -438,13 +438,13 @@ class _PriceRow extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Wrap(
-                spacing: 8,
+                spacing: 6,
                 crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
                   Text(
                     '₹${package.price}',
                     style: const TextStyle(
-                      fontSize: 20,
+                      fontSize: 17,
                       fontWeight: FontWeight.w800,
                       color: AppColors.textDark,
                     ),
@@ -452,20 +452,20 @@ class _PriceRow extends StatelessWidget {
                   Text(
                     '₹${package.mrp}',
                     style: const TextStyle(
-                      fontSize: 14,
+                      fontSize: 12.5,
                       color: AppColors.textMuted,
                       decoration: TextDecoration.lineThrough,
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               Text(
                 package.savedLabel,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 12.5,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w600,
                   color: AppColors.brandGreenDark,
                 ),
@@ -473,7 +473,7 @@ class _PriceRow extends StatelessWidget {
             ],
           ),
         ),
-        const SizedBox(width: 10),
+        const SizedBox(width: 8),
         OutlinedButton(
           // Books nothing directly: the patient count has to be chosen, and
           // the detail screen is where that decision is made.
@@ -485,14 +485,16 @@ class _PriceRow extends StatelessWidget {
           style: OutlinedButton.styleFrom(
             foregroundColor: AppColors.brandBlue,
             side: const BorderSide(color: AppColors.brandBlue),
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 7),
+            minimumSize: Size.zero,
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(6),
             ),
           ),
           child: const Text(
             'Book',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
           ),
         ),
       ],

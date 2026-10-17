@@ -6,6 +6,7 @@ import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import '../registration/registration_gate.dart';
 import 'lab_patient_picker_sheet.dart';
+import 'lab_test_detail_screen.dart';
 
 /// Package detail — what "Book" opens.
 ///
@@ -97,6 +98,10 @@ class LabPackageScreen extends StatelessWidget {
           ],
           _PriceBlock(package: package, onAdd: () => _add(context)),
           const SizedBox(height: 10),
+          if (package.profiles.isNotEmpty) ...[
+            _IncludedTestsBlock(profiles: package.profiles),
+            const SizedBox(height: 10),
+          ],
           const _CouponCard(),
           const SizedBox(height: 10),
           _AboutBlock(package: package),
@@ -209,6 +214,8 @@ class _FactStrip extends StatelessWidget {
     final facts = [
       _Fact(Icons.biotech_outlined, 'CONTAINS', '${package.testCount} Tests'),
       _Fact(Icons.restaurant_outlined, 'PREPARATION', package.preparation),
+      if (package.fasting.isNotEmpty)
+        _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
       _Fact(Icons.science_outlined, 'SAMPLE', package.sample),
       _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
     ];
@@ -470,6 +477,107 @@ class _PriceBlock extends StatelessWidget {
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// "Included In The Package" — each included test's alias and name, with a
+/// chevron that opens its own full detail page when it carries a real
+/// [LabProfile.testId] (migration 0106).
+class _IncludedTestsBlock extends StatelessWidget {
+  final List<LabProfile> profiles;
+
+  const _IncludedTestsBlock({required this.profiles});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 18, 16, 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Included In The Package',
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight: FontWeight.w700,
+              color: AppColors.textDark,
+            ),
+          ),
+          const SizedBox(height: 4),
+          for (final profile in profiles) _IncludedTestRow(profile: profile),
+        ],
+      ),
+    );
+  }
+}
+
+class _IncludedTestRow extends StatelessWidget {
+  final LabProfile profile;
+
+  const _IncludedTestRow({required this.profile});
+
+  @override
+  Widget build(BuildContext context) {
+    final tappable = profile.testId != null;
+    final displayName = profile.shortName.isNotEmpty
+        ? '${profile.name} (${profile.shortName})'
+        : profile.name;
+
+    return InkWell(
+      onTap: tappable
+          ? () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => LabTestDetailScreen(testId: profile.testId!),
+              ),
+            )
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        child: Row(
+          children: [
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.offerTint,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              padding: const EdgeInsets.symmetric(
+                horizontal: 8,
+                vertical: 4,
+              ),
+              child: Text(
+                profile.parameters > 1
+                    ? '${profile.parameters} TESTS'
+                    : '1 TEST',
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.brandBlue,
+                ),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                displayName,
+                style: const TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textDark,
+                ),
+              ),
+            ),
+            if (tappable)
+              const Icon(
+                Icons.chevron_right_rounded,
+                size: 22,
+                color: AppColors.textMuted,
+              ),
+          ],
+        ),
       ),
     );
   }

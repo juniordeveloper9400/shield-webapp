@@ -165,14 +165,14 @@ class _LabTestScreenState extends State<LabTestScreen> {
                 )
               else
                 SizedBox(
-                  height: 470,
+                  height: 280,
                   child: ListView.separated(
                     scrollDirection: Axis.horizontal,
                     padding: const EdgeInsets.symmetric(horizontal: 16),
                     itemCount: topPackages.length,
                     separatorBuilder: (_, _) => const SizedBox(width: 12),
                     itemBuilder: (context, index) => SizedBox(
-                      width: 330,
+                      width: 265,
                       child: PackageCard(
                         package: topPackages[index],
                         onViewAll: widget.onSeeAllPackages,

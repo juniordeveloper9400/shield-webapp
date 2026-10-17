@@ -79,6 +79,7 @@ class CareRepository {
             forWhom: _str(row['forWhom']),
             ageRange: _str(row['ageRange']),
             preparation: _str(row['preparation']),
+            fasting: _str(row['fasting']),
             sample: _str(row['sample']),
             organs: _stringList(row['organs']),
             about: _str(row['about']),
@@ -212,8 +213,42 @@ class CareRepository {
             _str(row['emoji']),
             _str(row['name']),
             _int(row['parameters']),
+            testId: _orNull(row['testId']),
+            shortName: _str(row['shortName']),
           ),
     ];
+  }
+
+  /// One test's full detail for the Test Details page (`GET
+  /// /v1/public/care/lab-tests/:id` — `CareService.getLabTestDetail`). Null
+  /// on a 404 (inactive/deleted test) or when the backend isn't reachable.
+  Future<LabTestDetail?> fetchLabTestDetail(String id) async {
+    if (!BackendHttp.isConfigured) {
+      return null;
+    }
+    try {
+      final row =
+          await BackendHttp.instance.request(
+                'GET',
+                '/v1/public/care/lab-tests/$id',
+                auth: false,
+              )
+              as Map<String, dynamic>;
+      return LabTestDetail(
+        id: row['id'].toString(),
+        name: _str(row['name']),
+        shortName: _str(row['shortName']),
+        testType: _str(row['testType']),
+        sample: _str(row['sample']),
+        reportingTime: _str(row['reportingTime']),
+        fasting: _str(row['fasting']),
+        about: _str(row['about']),
+        whyThisTest: _str(row['whyThisTest']),
+      );
+    } catch (error) {
+      BackendHttp.log('CareRepository.fetchLabTestDetail failed', error: error);
+      return null;
+    }
   }
 
   /// "Dr. Anjali Menon" → "AM" — the first letter of the first two words,
