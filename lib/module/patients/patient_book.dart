@@ -57,6 +57,10 @@ class Patient {
   /// unreachable. Carried so a later edit or removal updates the same row.
   final String? remoteId;
 
+  /// A booking-only slot whose personal details were skipped.
+  final bool detailsPending;
+  static int _nextLabGuestId = 0;
+
   const Patient({
     required this.id,
     required this.name,
@@ -67,13 +71,26 @@ class Patient {
     required this.relation,
     this.abhaId = '',
     this.remoteId,
+    this.detailsPending = false,
   });
+
+  factory Patient.labGuest(int number) => Patient(
+    id: 'lab-guest-${++_nextLabGuestId}',
+    name: 'Patient $number',
+    phone: '',
+    dob: DateTime(2000),
+    gender: PatientGender.other,
+    relation: PatientRelation.other,
+    detailsPending: true,
+  );
 
   /// Whole years today, derived rather than stored.
   int get age => ageInYears(dob);
 
   /// "32 yrs · Female · Spouse" — the line every list row shows.
-  String get summary => '$ageLine · ${gender.label} · ${relation.label}';
+  String get summary => detailsPending
+      ? 'Details not provided'
+      : '$ageLine · ${gender.label} · ${relation.label}';
 
   /// "32 yrs" — the same wording the form's date field prints back.
   String get ageLine => ageLabel(dob);
@@ -121,6 +138,7 @@ class Patient {
       abhaId: abhaId ?? this.abhaId,
       relation: relation ?? this.relation,
       remoteId: remoteId ?? this.remoteId,
+      detailsPending: detailsPending,
     );
   }
 }
@@ -236,9 +254,11 @@ class PatientBook extends ChangeNotifier {
     }
 
     final keptLocal = _patients
-        .where((local) =>
-            local.remoteId == null &&
-            !deduped.any((r) => samePerson(local, r)))
+        .where(
+          (local) =>
+              local.remoteId == null &&
+              !deduped.any((r) => samePerson(local, r)),
+        )
         .toList();
 
     _patients

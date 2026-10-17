@@ -20,6 +20,12 @@ class LabStore {
   final String city;
   final String pincode;
 
+  /// Null for a branch with no coordinates on record yet — the picker just
+  /// can't rank that one by distance, same as the app's own bundled
+  /// `ShieldStore` list already tolerates.
+  final double? latitude;
+  final double? longitude;
+
   const LabStore({
     required this.id,
     required this.code,
@@ -27,7 +33,11 @@ class LabStore {
     required this.area,
     required this.city,
     required this.pincode,
+    this.latitude,
+    this.longitude,
   });
+
+  bool get hasLocation => latitude != null && longitude != null;
 
   /// "Melattur, Malappuram · 679326"
   String get addressLine => '$area, $city · $pincode';

@@ -112,6 +112,26 @@ void main() {
 
   group('proceeding to checkout', () {
     testWidgets(
+      'places a booking with skipped patient details and no address',
+      (tester) async {
+        registerAndSignIn();
+        LabCartService.instance.book(
+          _activeLife,
+          patients: [Patient.labGuest(1), Patient.labGuest(2)],
+        );
+        await pump(tester, const LabCartScreen());
+
+        await tester.tap(find.text('Proceed to checkout'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Place lab test'));
+        await tester.pumpAndSettle();
+        expect(find.byType(LabBookingPlacedScreen), findsOneWidget);
+        expect(LabCartService.instance.isEmpty, isTrue);
+        expect(AddressBook.instance.deliverTo, isNull);
+      },
+    );
+
+    testWidgets(
       'signed in and registered, with a branch resolved, opens a real '
       'checkout screen — not a fake "choosing a slot" toast',
       (tester) async {
@@ -125,6 +145,7 @@ void main() {
 
         expect(find.byType(LabCheckoutScreen), findsOneWidget);
         expect(find.text('Booking summary'), findsOneWidget);
+        expect(find.text('Bill summary'), findsNothing);
         expect(find.text('Active Life'), findsOneWidget);
         expect(find.text('Place lab test'), findsOneWidget);
       },
@@ -170,7 +191,7 @@ void main() {
     );
 
     testWidgets(
-      'a collection address is required to place the booking, and the row '
+      'a collection address is optional when placing the booking, and the row '
       'picks up an address added elsewhere',
       (tester) async {
         registerAndSignIn();
@@ -179,9 +200,9 @@ void main() {
         await tester.tap(find.text('Proceed to checkout'));
         await tester.pumpAndSettle();
 
-        // Nothing on file yet: the row asks for one, same red-border guard
-        // the branch row already uses, and "Place lab test" is disabled —
-        // same as a missing branch already disables it.
+        // No address on file: the optional picker stays available while
+        // placing the booking is enabled —
+        // Branch selection remains required.
         expect(find.text('Choose a collection address'), findsOneWidget);
         expect(
           tester
@@ -189,7 +210,7 @@ void main() {
                 find.widgetWithText(FilledButton, 'Place lab test'),
               )
               .onPressed,
-          isNull,
+          isNotNull,
         );
 
         // Added straight on AddressBook — the same singleton

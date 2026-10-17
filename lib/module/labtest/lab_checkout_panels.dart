@@ -162,7 +162,7 @@ class _LabPatientAddressRow extends StatelessWidget {
             border: Border.all(
               // A missing address blocks checkout — same red the branch
               // row below uses when nothing is chosen yet.
-              color: address == null ? AppColors.danger : AppColors.border,
+              color: AppColors.border,
             ),
           ),
           padding: const EdgeInsets.all(14),

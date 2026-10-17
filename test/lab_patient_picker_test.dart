@@ -1,3 +1,4 @@
+import 'package:shield/data/backend/order_repository.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shield/module/labtest/lab_cart_service.dart';
@@ -57,7 +58,55 @@ void main() {
     expect(LabCartService.instance.bookings.single.patients.length, 2);
     expect(LabCartService.instance.payable, 2598);
   });
+  test('skipped details send only a label, without invented demographics', () {
+    final guest = Patient.labGuest(1);
+    expect(LabBookingPatientInput(patient: guest).toJson(), {
+      'name': 'Patient 1',
+    });
+    expect(guest.copyWith(name: 'Patient 1').detailsPending, isTrue);
+  });
+
   group('the patient sheet', () {
+    testWidgets(
+      'Skip keeps the patient count without saving fake patient details',
+      (tester) async {
+        await pump(
+          tester,
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                child: const Text('open skip flow'),
+                onPressed: () async {
+                  final chosen = await LabPatientPickerSheet.show(
+                    context,
+                    _activeLife,
+                  );
+                  if (chosen != null) {
+                    LabCartService.instance.book(_activeLife, patients: chosen);
+                  }
+                },
+              ),
+            ),
+          ),
+        );
+        await tester.tap(find.text('open skip flow'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('2 patients'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Skip patient details'));
+        await tester.pumpAndSettle();
+        expect(find.text('Confirm patients'), findsOneWidget);
+        expect(find.text('Patient 1'), findsOneWidget);
+        expect(find.text('Patient 2'), findsOneWidget);
+        expect(find.text('Details not provided'), findsNWidgets(2));
+        await tester.tap(find.text('Add \u00b7 \u20b92,598'));
+        await tester.pumpAndSettle();
+        expect(LabCartService.instance.patientCount, 2);
+        expect(LabCartService.instance.payable, 2598);
+        expect(PatientBook.instance.isEmpty, isTrue);
+      },
+    );
+
     testWidgets('Back cancels adding another patient and keeps the review', (
       tester,
     ) async {
@@ -144,6 +193,68 @@ void main() {
       );
       expect(PatientBook.instance.patients.length, 2);
     });
+
+    testWidgets(
+      'new patient details can be saved with the address left blank',
+      (tester) async {
+        final saved = somePatients(1).single;
+        await pump(
+          tester,
+          Scaffold(
+            body: Builder(
+              builder: (context) => TextButton(
+                child: const Text('Add'),
+                onPressed: () async {
+                  final chosen = await LabPatientPickerSheet.show(
+                    context,
+                    _activeLife,
+                  );
+                  if (chosen != null) {
+                    LabCartService.instance.book(_activeLife, patients: chosen);
+                  }
+                },
+              ),
+            ),
+          ),
+          size: const Size(400, 1800),
+        );
+        await tester.tap(find.text('Add'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('2 patients'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text(saved.name));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Add a new patient'));
+        await tester.pumpAndSettle();
+        Future<void> fill(String label, String value) async {
+          final field = find.widgetWithText(TextFormField, label);
+          await tester.ensureVisible(field);
+          await tester.enterText(field, value);
+        }
+
+        await fill('Full name', 'New Family Patient');
+        await fill('Mobile number', '9000012345');
+        await tester.tap(find.widgetWithText(TextFormField, 'Date of birth'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('OK'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Save patient'));
+        await tester.tap(find.text('Save patient'));
+        await tester.pumpAndSettle();
+        expect(find.text('Confirm patients'), findsOneWidget);
+        expect(find.text(saved.name), findsOneWidget);
+        expect(find.text('New Family Patient'), findsOneWidget);
+        await tester.tap(find.text('Add · ₹2,598'));
+        await tester.pumpAndSettle();
+        expect(
+          LabCartService.instance.bookings.single.patients.map((p) => p.name),
+          [saved.name, 'New Family Patient'],
+        );
+        expect(PatientBook.instance.patients.length, 2);
+        final added = PatientBook.instance.patients.last;
+        expect(AddressBook.instance.forPatient(added.id), isNull);
+      },
+    );
 
     testWidgets('count picker scrolls on a short landscape screen', (
       tester,

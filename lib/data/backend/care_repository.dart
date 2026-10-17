@@ -157,6 +157,8 @@ class CareRepository {
             area: _str(row['area']),
             city: _str(row['city']),
             pincode: _str(row['pincode']),
+            latitude: _doubleOrNull(row['latitude']),
+            longitude: _doubleOrNull(row['longitude']),
           ),
       ];
     } catch (error) {
@@ -256,6 +258,14 @@ class CareRepository {
   static int _amount(Object? v) {
     final parsed = double.tryParse(v?.toString() ?? '');
     return parsed == null ? 0 : parsed.round();
+  }
+
+  /// A `numeric` column that can be null (not every branch has coordinates
+  /// on record) — unlike [_amount], which always has a real figure to fall
+  /// back to.
+  static double? _doubleOrNull(Object? v) {
+    if (v == null) return null;
+    return double.tryParse(v.toString());
   }
 
   static bool _bool(Object? v) => v == true;

@@ -21,11 +21,20 @@ import 'patient_book.dart';
 class PatientFormSheet extends StatefulWidget {
   /// Null when adding.
   final Patient? existing;
+  final bool addressOptional;
 
-  const PatientFormSheet({super.key, this.existing});
+  const PatientFormSheet({
+    super.key,
+    this.existing,
+    this.addressOptional = false,
+  });
 
   /// Returns the saved patient, or null when dismissed.
-  static Future<Patient?> show(BuildContext context, {Patient? existing}) {
+  static Future<Patient?> show(
+    BuildContext context, {
+    Patient? existing,
+    bool addressOptional = false,
+  }) {
     return showModalBottomSheet<Patient>(
       context: context,
       backgroundColor: AppColors.white,
@@ -33,7 +42,10 @@ class PatientFormSheet extends StatefulWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      builder: (_) => PatientFormSheet(existing: existing),
+      builder: (_) => PatientFormSheet(
+        existing: existing,
+        addressOptional: addressOptional,
+      ),
     );
   }
 
@@ -89,7 +101,8 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
   late final TextEditingController _landmark = TextEditingController(
     text: _existingAddress?.landmark ?? '',
   );
-  late AddressLabel _addressLabel = _existingAddress?.label ?? AddressLabel.home;
+  late AddressLabel _addressLabel =
+      _existingAddress?.label ?? AddressLabel.home;
 
   // ---- Receiver details — who actually takes the delivery, which is not
   // always the patient themselves (a child's parent, say). ----
@@ -113,6 +126,18 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
   /// its own — reports alongside the fields that do.
   bool _submitted = false;
   bool _locating = false;
+
+  bool get _skipAddress =>
+      widget.addressOptional &&
+      [
+        _pincode,
+        _house,
+        _area,
+        _landmark,
+        _receiverFirst,
+        _receiverLast,
+        _receiverPhone,
+      ].every((field) => field.text.trim().isEmpty);
 
   @override
   void dispose() {
@@ -179,13 +204,13 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
           content: Text(DeviceLocation.message(result.outcome)),
           action: switch (result.outcome) {
             DeviceLocationOutcome.deniedForever => SnackBarAction(
-                label: 'Settings',
-                onPressed: Geolocator.openAppSettings,
-              ),
+              label: 'Settings',
+              onPressed: Geolocator.openAppSettings,
+            ),
             DeviceLocationOutcome.serviceOff => SnackBarAction(
-                label: 'Settings',
-                onPressed: Geolocator.openLocationSettings,
-              ),
+              label: 'Settings',
+              onPressed: Geolocator.openLocationSettings,
+            ),
             _ => null,
           },
         ),
@@ -242,7 +267,7 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
       label: _addressLabel,
       patientId: patientId,
     );
-    final addressSummary = addressFor('').summary;
+    final addressSummary = _skipAddress ? '' : addressFor('').summary;
 
     final saved = existing == null
         ? book.add(
@@ -270,7 +295,9 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
     // The address section is the same information under a different id now
     // that [saved] exists — replaces whatever this patient had on file
     // rather than adding a second entry for them.
-    AddressBook.instance.upsertForPatient(saved.id, addressFor(saved.id));
+    if (!_skipAddress) {
+      AddressBook.instance.upsertForPatient(saved.id, addressFor(saved.id));
+    }
 
     // Write the patient through to `app.patient` on the backend. Fire and
     // forget: [PatientBook] is what the app reads, the call no-ops when the
@@ -448,10 +475,12 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                   child: Divider(height: 1, color: AppColors.border),
                 ),
                 const SizedBox(height: 16),
-                const Padding(
+                Padding(
                   padding: EdgeInsets.fromLTRB(20, 0, 20, 0),
                   child: Text(
-                    'Address details',
+                    widget.addressOptional
+                        ? 'Address details (optional - leave blank to skip)'
+                        : 'Address details',
                     style: TextStyle(
                       fontSize: 15,
                       fontWeight: FontWeight.w700,
@@ -476,6 +505,7 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                             LengthLimitingTextInputFormatter(6),
                           ],
                           validator: (value) {
+                            if (_skipAddress) return null;
                             final text = value?.trim() ?? '';
                             if (text.length != 6) {
                               return 'Enter a 6-digit pincode';
@@ -500,7 +530,9 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                   child: AddressLineField(
                     hint: 'House no / Floor / Building',
                     controller: _house,
-                    validator: (value) => (value == null || value.trim().isEmpty)
+                    validator: (value) => _skipAddress
+                        ? null
+                        : (value == null || value.trim().isEmpty)
                         ? 'Required'
                         : null,
                   ),
@@ -511,7 +543,9 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                   child: AddressLineField(
                     hint: 'Area / Locality',
                     controller: _area,
-                    validator: (value) => (value == null || value.trim().isEmpty)
+                    validator: (value) => _skipAddress
+                        ? null
+                        : (value == null || value.trim().isEmpty)
                         ? 'Required'
                         : null,
                   ),
@@ -560,8 +594,11 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                           controller: _receiverFirst,
                           textCapitalization: TextCapitalization.words,
                           decoration: _decoration('First name'),
-                          validator: (value) =>
-                              (value ?? '').trim().isEmpty ? 'Required' : null,
+                          validator: (value) => _skipAddress
+                              ? null
+                              : (value ?? '').trim().isEmpty
+                              ? 'Required'
+                              : null,
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -587,6 +624,7 @@ class _PatientFormSheetState extends State<PatientFormSheet> {
                     ],
                     decoration: _decoration('Mobile Number'),
                     validator: (value) {
+                      if (_skipAddress) return null;
                       final text = (value ?? '').trim();
                       return text.length == 10
                           ? null

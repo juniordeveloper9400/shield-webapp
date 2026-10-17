@@ -13,7 +13,7 @@ import 'lab_checkout_panels.dart';
 import 'lab_package.dart';
 
 /// The lab basket's checkout: a read-only review of what's booked, the
-/// branch and the bill (see [LabBranchRow] / [LabBillCard], shared with the
+/// branch (see [LabBranchRow], shared with the
 /// cart itself), and the one button that actually places it — "Place lab
 /// test", the same weight "Place order" carries on the medicine checkout.
 ///
@@ -51,37 +51,19 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
     return result;
   }
 
-  /// A patient with none of their own falls back to the basket's shared
-  /// address — so every patient has one once that shared default is set,
-  /// same as before this was per-patient at all.
-  bool get _everyPatientHasAddress {
-    if (AddressBook.instance.deliverTo != null) return true;
-    return _uniquePatients.every(
-      (p) => LabCartService.instance.addressFor(p) != null,
-    );
-  }
-
   bool get _canPlace =>
       !_placing &&
       !LabCartService.instance.isEmpty &&
-      LabCartService.instance.store != null &&
-      (!_needsAddress || _everyPatientHasAddress);
+      LabCartService.instance.store != null;
 
   Future<void> _placeLabTest() async {
     final cart = LabCartService.instance;
     final user = AuthService.instance.currentUser.value;
     final needsAddress = _needsAddress;
-    final hasAddress = _everyPatientHasAddress;
     if (!_canPlace || user == null) {
       setState(() {
-        _error = cart.store == null && needsAddress && !hasAddress
-            ? 'Choose a branch and a collection address above before placing '
-                  'this booking.'
-            : cart.store == null
+        _error = cart.store == null
             ? 'Choose a branch above before placing this booking.'
-            : needsAddress && !hasAddress
-            ? 'Choose a collection address for every patient above before '
-                  'placing this booking.'
             : null;
       });
       return;
@@ -110,7 +92,7 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
                 // Only when this patient actually has one of their own —
                 // omitted falls back to the booking's shared address
                 // server-side, the same precedence this screen's own
-                // _everyPatientHasAddress already follows.
+                // collection addresses follow.
                 address: cart.addressFor(patient),
               ),
           ],
@@ -198,20 +180,24 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
               // LabBranchRow below.
               LabFulfillmentRow(),
               const SizedBox(height: 12),
-              // Only home collection needs a collection address — a store
+              // Home collection can include an optional collection address — a store
               // visit's "branch" (LabBranchRow below) is where the member
               // goes themselves, so there's nothing to deliver to. One row
               // per distinct patient across the basket, not one for the
               // whole thing — each can have their own.
               if (_needsAddress) ...[
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
+                  child: Text(
+                    'Collection address is optional. You can place your booking without adding one.',
+                  ),
+                ),
                 LabPatientAddressList(patients: _uniquePatients),
                 const SizedBox(height: 12),
               ],
               const LabBranchRow(),
               const SizedBox(height: 12),
               const LabScheduleRow(),
-              const SizedBox(height: 12),
-              const LabBillCard(),
               const SizedBox(height: 12),
               const _NoPaymentNote(),
               if (_error != null) ...[

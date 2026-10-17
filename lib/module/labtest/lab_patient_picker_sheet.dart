@@ -77,8 +77,17 @@ class _LabPatientPickerSheetState extends State<LabPatientPickerSheet> {
     });
   }
 
+  void _skipDetails() {
+    setState(() {
+      while (_chosen.length < _target) {
+        _chosen.add(Patient.labGuest(_chosen.length + 1));
+      }
+      _step = _Step.review;
+    });
+  }
+
   Future<void> _addNew() async {
-    final saved = await PatientFormSheet.show(context);
+    final saved = await PatientFormSheet.show(context, addressOptional: true);
     if (saved != null && mounted) _useSaved(saved);
   }
 
@@ -161,6 +170,7 @@ class _LabPatientPickerSheetState extends State<LabPatientPickerSheet> {
                       '$_target ${_target == 1 ? 'patient' : 'patients'} × ₹${formatRupees(widget.package.priceValue)} = ₹${formatRupees(widget.package.priceValue * _target)}',
                   onUseSaved: _useSaved,
                   onAddNew: _addNew,
+                  onSkip: _skipDetails,
                   excludeIds: _chosen.map((p) => p.id).toSet(),
                   header: _header(
                     'Patient ${_chosen.length + 1} of $_target',
@@ -257,6 +267,7 @@ class _CollectingStep extends StatelessWidget {
   final String priceSummary;
   final ValueChanged<Patient> onUseSaved;
   final VoidCallback onAddNew;
+  final VoidCallback onSkip;
   final Set<String> excludeIds;
   final Widget header;
 
@@ -264,6 +275,7 @@ class _CollectingStep extends StatelessWidget {
     required this.priceSummary,
     required this.onUseSaved,
     required this.onAddNew,
+    required this.onSkip,
     required this.excludeIds,
     required this.header,
   });
@@ -326,6 +338,10 @@ class _CollectingStep extends StatelessWidget {
                   ),
                 ),
               ),
+            ),
+            TextButton(
+              onPressed: onSkip,
+              child: const Text('Skip patient details'),
             ),
             if (saved.isNotEmpty) ...[
               const Padding(
