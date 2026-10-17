@@ -28,43 +28,58 @@ class PackageCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: AppColors.border),
-      ),
+    return Material(
+      color: AppColors.white,
+      borderRadius: BorderRadius.circular(12),
       clipBehavior: Clip.antiAlias,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: _Headline(package: package),
+      child: InkWell(
+        // The whole card opens the detail screen, not just the "Book" button
+        // further down — a category's single-test rows are easy to miss
+        // tapping the small button on, so the row itself has to work too.
+        onTap: () => Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => LabPackageScreen(package: package)),
+        ),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: AppColors.border),
           ),
-          _ProfileStrip(package: package, onViewAll: onViewAll),
-          if (fillHeight)
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-                child: package.inheritsFrom == null
-                    ? _ProfileGrid(profiles: package.profiles)
-                    : _InheritedBlock(package: package),
+          clipBehavior: Clip.antiAlias,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: _Headline(package: package),
               ),
-            )
-          else
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
-              child: package.inheritsFrom == null
-                  ? _ProfileGrid(profiles: package.profiles)
-                  : _InheritedBlock(package: package),
-            ),
-          const Divider(height: 1, color: AppColors.border),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: _PriceRow(package: package),
+              _ProfileStrip(package: package, onViewAll: onViewAll),
+              if (fillHeight)
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                    child: package.inheritsFrom == null
+                        ? _ProfileGrid(profiles: package.profiles)
+                        : _InheritedBlock(package: package),
+                  ),
+                )
+              else
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+                  child: package.inheritsFrom == null
+                      ? _ProfileGrid(profiles: package.profiles)
+                      : _InheritedBlock(package: package),
+                ),
+              const Divider(height: 1, color: AppColors.border),
+              Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 10,
+                ),
+                child: _PriceRow(package: package),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
