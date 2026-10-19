@@ -122,8 +122,6 @@ class LabPackageScreen extends StatelessWidget {
             _OrgansBlock(package: package),
             const SizedBox(height: 10),
           ],
-          const _CouponCard(),
-          const SizedBox(height: 10),
           _AboutBlock(package: package),
           if (package.whyThisTest.isNotEmpty) ...[
             const SizedBox(height: 10),
@@ -172,105 +170,87 @@ class _BottomBar extends StatelessWidget {
       builder: (context, _) {
         final cart = LabCartService.instance;
         final patients = cart.patientsFor(package);
+        final cartHasBookings = !cart.isEmpty;
         // Defaults to 1 so this package's own running total is visible
         // right away, before anyone has picked a patient count at all.
-        final patientCount = patients?.length ?? 1;
-        final previewTotal = package.priceValue * patientCount;
+        final previewTotal = package.priceValue * (patients?.length ?? 1);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
+            child: Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Text(
-                        'Total for $patientCount patient${patientCount == 1 ? '' : 's'}',
-                        style: const TextStyle(
-                          fontSize: 12.5,
-                          color: AppColors.textMuted,
-                        ),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: onAdd,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.brandBlue,
+                      side: const BorderSide(color: AppColors.searchBorder),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
                       ),
-                      const Spacer(),
-                      Text(
-                        '₹$previewTotal',
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.textDark,
-                        ),
+                    ),
+                    icon: const Icon(Icons.expand_more_rounded, size: 18),
+                    label: Text(
+                      patients == null
+                          ? 'Add'
+                          : patients.length == 1
+                          ? '1 Patient'
+                          : '${patients.length} Patients',
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
+                    ),
                   ),
                 ),
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: onAdd,
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: AppColors.brandBlue,
-                          side: const BorderSide(color: AppColors.searchBorder),
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(28),
+                const SizedBox(width: 10),
+                Expanded(
+                  flex: 2,
+                  // Always shown, not only once the basket holds something —
+                  // this package's own preview total (price × the patient
+                  // count currently chosen) is visible before it is ever
+                  // added. Tappable only once there is an actual basket to
+                  // open; before that it is a preview, not a dead button
+                  // that looks live.
+                  child: ElevatedButton(
+                    onPressed: cartHasBookings
+                        ? () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const LabCartScreen()),
+                          )
+                        : null,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.brandBlue,
+                      disabledBackgroundColor: AppColors.brandBlue,
+                      foregroundColor: AppColors.white,
+                      disabledForegroundColor: AppColors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(28),
+                      ),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          cartHasBookings
+                              ? '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}'
+                              : '₹$previewTotal',
+                          style: const TextStyle(
+                            fontSize: 11.5,
+                            color: Color(0xFFC9D8F0),
                           ),
                         ),
-                        icon: const Icon(Icons.expand_more_rounded, size: 18),
-                        label: Text(
-                          patients == null
-                              ? 'Add'
-                              : patients.length == 1
-                              ? '1 Patient'
-                              : '${patients.length} Patients',
-                          style: const TextStyle(
+                        const Text(
+                          'View Cart',
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                      ),
+                      ],
                     ),
-                    if (!cart.isEmpty) ...[
-                      const SizedBox(width: 10),
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton(
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const LabCartScreen()),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.brandBlue,
-                            foregroundColor: AppColors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 10),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(28),
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Text(
-                                '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}',
-                                style: const TextStyle(
-                                  fontSize: 11.5,
-                                  color: Color(0xFFC9D8F0),
-                                ),
-                              ),
-                              const Text(
-                                'View Cart',
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -302,136 +282,145 @@ class _TopCard extends StatelessWidget {
     ];
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: AppColors.panelBlue,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // The reference shows a lifestyle photograph here. There is no
-              // artwork for the packages in this project, so the tile carries
-              // the section's own mark rather than a stand-in photo.
-              Container(
-                width: 74,
-                height: 74,
-                decoration: BoxDecoration(
-                  color: AppColors.white,
-                  borderRadius: BorderRadius.circular(14),
+      width: double.infinity,
+      // White on either side of the tinted card below — the scaffold's own
+      // pageTint would otherwise show through there and read as more of the
+      // same blue wash rather than a clear gutter around it.
+      color: AppColors.white,
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+      child: Container(
+        decoration: BoxDecoration(
+          color: AppColors.panelBlue,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // The reference shows a lifestyle photograph here. There is
+                // no artwork for the packages in this project, so the tile
+                // carries the section's own mark rather than a stand-in
+                // photo.
+                Container(
+                  width: 74,
+                  height: 74,
+                  decoration: BoxDecoration(
+                    color: AppColors.white,
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.biotech_outlined,
+                    size: 36,
+                    color: AppColors.brandBlue,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.biotech_outlined,
-                  size: 36,
-                  color: AppColors.brandBlue,
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 4),
-                  child: Text(
-                    'Sahakar 360 ${package.name} Package',
-                    style: const TextStyle(
-                      fontSize: 21,
-                      height: 1.25,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.textDark,
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Sahakar 360 ${package.name} Package',
+                      style: const TextStyle(
+                        fontSize: 21,
+                        height: 1.25,
+                        fontWeight: FontWeight.w800,
+                        color: AppColors.textDark,
+                      ),
                     ),
                   ),
                 ),
+              ],
+            ),
+            if (package.shortName.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              const Text(
+                'Also referred as',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final alias in package.shortName.split(','))
+                    if (alias.trim().isNotEmpty)
+                      _AliasChip(label: alias.trim()),
+                ],
               ),
             ],
-          ),
-          if (package.shortName.isNotEmpty) ...[
-            const SizedBox(height: 14),
-            const Text(
-              'Also referred as',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 16),
             Wrap(
-              spacing: 8,
+              spacing: 16,
               runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
-                for (final alias in package.shortName.split(','))
-                  if (alias.trim().isNotEmpty) _AliasChip(label: alias.trim()),
+                _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
+                _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
+              ],
+            ),
+            const SizedBox(height: 16),
+            // Scrolls sideways rather than wrapping: four/five tiles do not
+            // fit at 320px, and a 2×2 grid would break the strip the
+            // reference reads as one row.
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final fact in facts) ...[
+                    _FactTile(fact: fact),
+                    const SizedBox(width: 10),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                Text(
+                  '₹${package.price}',
+                  style: const TextStyle(
+                    fontSize: 26,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                Text(
+                  '₹${package.mrp}',
+                  style: const TextStyle(
+                    fontSize: 15,
+                    color: AppColors.textMuted,
+                    decoration: TextDecoration.lineThrough,
+                  ),
+                ),
+                if (package.discountLabel.isNotEmpty)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.greenTint,
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    child: Text(
+                      package.discountLabel,
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.brandGreenDark,
+                      ),
+                    ),
+                  ),
               ],
             ),
           ],
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
-              _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
-            ],
-          ),
-          const SizedBox(height: 16),
-          // Scrolls sideways rather than wrapping: four/five tiles do not fit
-          // at 320px, and a 2×2 grid would break the strip the reference
-          // reads as one row.
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                for (final fact in facts) ...[
-                  _FactTile(fact: fact),
-                  const SizedBox(width: 10),
-                ],
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 10,
-            runSpacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              Text(
-                '₹${package.price}',
-                style: const TextStyle(
-                  fontSize: 26,
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.textDark,
-                ),
-              ),
-              Text(
-                '₹${package.mrp}',
-                style: const TextStyle(
-                  fontSize: 15,
-                  color: AppColors.textMuted,
-                  decoration: TextDecoration.lineThrough,
-                ),
-              ),
-              if (package.discountLabel.isNotEmpty)
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppColors.greenTint,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  child: Text(
-                    package.discountLabel,
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.brandGreenDark,
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -774,74 +763,6 @@ class _IncludedTestRow extends StatelessWidget {
                 size: 22,
                 color: AppColors.textMuted,
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _CouponCard extends StatelessWidget {
-  const _CouponCard();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      color: AppColors.white,
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: AppColors.offerTint,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        padding: const EdgeInsets.all(14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: AppColors.white,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: const Icon(
-                Icons.local_offer_outlined,
-                size: 20,
-                color: AppColors.brandBlue,
-              ),
-            ),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'AVAILABLE COUPON',
-                    style: TextStyle(
-                      fontSize: 11,
-                      letterSpacing: 0.4,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textMuted,
-                    ),
-                  ),
-                  SizedBox(height: 3),
-                  Text(
-                    'Flat 25% off on all tests',
-                    style: TextStyle(
-                      fontSize: 15.5,
-                      fontWeight: FontWeight.w700,
-                      color: AppColors.brandBlue,
-                    ),
-                  ),
-                  SizedBox(height: 2),
-                  Text(
-                    'Applicable on all bookings above ₹700',
-                    style: TextStyle(fontSize: 13, color: AppColors.textBody),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),
