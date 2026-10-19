@@ -126,7 +126,7 @@ class LabPackageScreen extends StatelessWidget {
           if (package.whyThisTest.isNotEmpty) ...[
             const SizedBox(height: 10),
             _DetailTextBlock(
-              title: 'Why is this done',
+              title: 'Why this test',
               body: package.whyThisTest,
             ),
           ],
@@ -360,19 +360,21 @@ class _TopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Only what the admin actually entered: how soon the report is ready,
-    // any fasting needed, and the home-collected sample. A blank value is
-    // left out rather than shown as an empty tile.
+    final effectiveReportOn = package.reportOn.isNotEmpty
+        ? package.reportOn
+        : package.reportIn;
     final facts = [
-      if (package.reportIn.isNotEmpty)
-        _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
-      if (package.fasting.isNotEmpty)
-        _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
       _Fact(
         Icons.science_outlined,
         'HOME SAMPLE',
         package.sample.isNotEmpty ? package.sample : 'Collected at home',
       ),
+      if (effectiveReportOn.isNotEmpty)
+        _Fact(Icons.schedule_outlined, 'REPORT ON', effectiveReportOn),
+      if (package.testMode.isNotEmpty)
+        _Fact(Icons.biotech_outlined, 'TEST MODE', package.testMode),
+      if (package.fasting.isNotEmpty)
+        _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
     ];
 
     return Container(
@@ -445,30 +447,28 @@ class _TopCard extends StatelessWidget {
                 ],
               ),
             ],
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 16,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
-                _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Scrolls sideways rather than wrapping: four/five tiles do not
-            // fit at 320px, and a 2×2 grid would break the strip the
-            // reference reads as one row.
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
+            if (package.forWhom.isNotEmpty || package.ageRange.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 16,
+                runSpacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
                 children: [
-                  for (final fact in facts) ...[
-                    _FactTile(fact: fact),
-                    const SizedBox(width: 10),
-                  ],
+                  if (package.forWhom.isNotEmpty)
+                    _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
+                  if (package.ageRange.isNotEmpty)
+                    _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
                 ],
               ),
+            ],
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final fact in facts)
+                  _FactTile(fact: fact),
+              ],
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -901,7 +901,7 @@ class _AboutBlock extends StatelessWidget {
   }
 }
 
-/// A plain title + body text block — "Why is this done" (`package.
+/// A plain title + body text block — "Why this test" (`package.
 /// whyThisTest`), staff-entered on the Test Master's "Why this test" tab.
 class _DetailTextBlock extends StatelessWidget {
   final String title;

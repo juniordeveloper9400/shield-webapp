@@ -162,11 +162,16 @@ class _DetailFactStrip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final effectiveReportOn = test.reportOn.isNotEmpty
+        ? test.reportOn
+        : test.reportingTime;
     final facts = [
       if (test.sample.isNotEmpty)
         _Fact(Icons.science_outlined, 'SAMPLE', test.sample),
-      if (test.reportingTime.isNotEmpty)
-        _Fact(Icons.description_outlined, 'REPORT IN', test.reportingTime),
+      if (effectiveReportOn.isNotEmpty)
+        _Fact(Icons.schedule_outlined, 'REPORT ON', effectiveReportOn),
+      if (test.testMode.isNotEmpty)
+        _Fact(Icons.biotech_outlined, 'TEST MODE', test.testMode),
       if (test.fasting.isNotEmpty)
         _Fact(Icons.no_food_outlined, 'FASTING', test.fasting),
     ];
@@ -176,17 +181,14 @@ class _DetailFactStrip extends StatelessWidget {
 
     return Container(
       color: AppColors.white,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final fact in facts) ...[
-              _FactTile(fact: fact),
-              const SizedBox(width: 10),
-            ],
-          ],
-        ),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          for (final fact in facts)
+            _FactTile(fact: fact),
+        ],
       ),
     );
   }

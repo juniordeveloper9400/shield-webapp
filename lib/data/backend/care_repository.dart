@@ -69,6 +69,10 @@ class CareRepository {
             rating: _str(row['rating']),
             booked: _str(row['booked']),
             reportIn: _str(row['reportIn']),
+            reportOn: _str(row['reportOn']).isNotEmpty
+                ? _str(row['reportOn'])
+                : _str(row['reportIn']),
+            testMode: _str(row['testMode']),
             price: formatRupees(_amount(row['price'])),
             mrp: formatRupees(_amount(row['mrp'])),
             saved: _amount(row['saved']) > 0
@@ -247,6 +251,10 @@ class CareRepository {
         testType: _str(row['testType']),
         sample: _str(row['sample']),
         reportingTime: _str(row['reportingTime']),
+        reportOn: _str(row['reportOn']).isNotEmpty
+            ? _str(row['reportOn'])
+            : _str(row['reportingTime']),
+        testMode: _str(row['testMode']),
         fasting: _str(row['fasting']),
         symptoms: _stringList(row['symptoms']),
         about: _str(row['about']),

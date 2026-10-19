@@ -140,13 +140,19 @@ class LabPackage {
   final String shortName;
 
   /// `app.lab_test.specification_2` ("Why this test" on the Test Master
-  /// form), synced the same way — shown as its own "Why is this done"
+  /// form), synced the same way — shown as its own "Why this test"
   /// section.
   final String whyThisTest;
 
   /// `app.lab_test.symptoms`, synced the same way — chips for "Symptoms
   /// that may indicate this test".
   final List<String> symptoms;
+
+  /// Test Mode entered by staff in Test Master, e.g. 'Automated'.
+  final String testMode;
+
+  /// How soon the report is ready, e.g. '5 Minutes' or 'Same Day'.
+  final String reportOn;
 
   const LabPackage({
     required this.id,
@@ -179,6 +185,8 @@ class LabPackage {
     this.shortName = '',
     this.whyThisTest = '',
     this.symptoms = const [],
+    this.testMode = '',
+    this.reportOn = '',
   });
 
   /// [price] and [mrp] are written pre-grouped for display; these are the
@@ -219,6 +227,8 @@ class LabTestDetail {
   final List<String> symptoms;
   final String about;
   final String whyThisTest;
+  final String testMode;
+  final String reportOn;
 
   const LabTestDetail({
     required this.id,
@@ -231,5 +241,7 @@ class LabTestDetail {
     this.symptoms = const [],
     this.about = '',
     this.whyThisTest = '',
+    this.testMode = '',
+    this.reportOn = '',
   });
 }
