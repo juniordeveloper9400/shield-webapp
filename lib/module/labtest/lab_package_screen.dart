@@ -11,7 +11,7 @@ import 'lab_cart_service.dart';
 import 'lab_package.dart';
 import '../registration/registration_gate.dart';
 import 'lab_patient_picker_sheet.dart';
-import 'lab_test_detail_screen.dart';
+import 'lab_included_tests_sheet.dart';
 
 /// Package detail — what "Book" opens.
 ///
@@ -704,12 +704,14 @@ class _IncludedTestsBlock extends StatelessWidget {
         children: [
           Row(
             children: [
-              const Text(
-                'Includes these tests',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.textDark,
+              const Flexible(
+                child: Text(
+                  'Included in this package',
+                  style: TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textDark,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
@@ -778,11 +780,7 @@ class _IncludedTestRow extends StatelessWidget {
 
     return InkWell(
       onTap: tappable
-          ? () => Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => LabTestDetailScreen(testId: profile.testId!),
-              ),
-            )
+          ? () => LabIncludedTestsSheet.show(context, profile)
           : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12),

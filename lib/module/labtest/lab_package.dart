@@ -230,6 +230,11 @@ class LabTestDetail {
   final String testMode;
   final String reportOn;
 
+  /// For a group test or package, the tests it is made of — what the
+  /// "Included in this package" sheet lists with ticks. Empty for a plain
+  /// test, which is then listed as itself.
+  final List<LabIncludedTest> includedTests;
+
   const LabTestDetail({
     required this.id,
     required this.name,
@@ -243,5 +248,14 @@ class LabTestDetail {
     this.whyThisTest = '',
     this.testMode = '',
     this.reportOn = '',
+    this.includedTests = const [],
   });
+}
+
+/// One line in a group test's make-up; a sub-heading groups the lines under it.
+class LabIncludedTest {
+  final String name;
+  final bool isSubhead;
+
+  const LabIncludedTest(this.name, {this.isSubhead = false});
 }

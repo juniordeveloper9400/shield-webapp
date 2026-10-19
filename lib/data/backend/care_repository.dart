@@ -23,6 +23,9 @@ class CareRepository {
   /// in `tearDown`.
   @visibleForTesting
   static Future<List<LabPackage>?> Function()? labPackagesOverride;
+
+  /// Test seam for [fetchLabTestDetail], same idea as the overrides above.
+  static Future<LabTestDetail?> Function(String id)? labTestDetailOverride;
   @visibleForTesting
   static Future<List<LabCategory>?> Function()? labCategoriesOverride;
   @visibleForTesting
@@ -233,6 +236,10 @@ class CareRepository {
   /// /v1/public/care/lab-tests/:id` — `CareService.getLabTestDetail`). Null
   /// on a 404 (inactive/deleted test) or when the backend isn't reachable.
   Future<LabTestDetail?> fetchLabTestDetail(String id) async {
+    final override = labTestDetailOverride;
+    if (override != null) {
+      return override(id);
+    }
     if (!BackendHttp.isConfigured) {
       return null;
     }
@@ -259,6 +266,14 @@ class CareRepository {
         symptoms: _stringList(row['symptoms']),
         about: _str(row['about']),
         whyThisTest: _str(row['whyThisTest']),
+        includedTests: [
+          for (final item in (row['includedTests'] as List<dynamic>? ?? const []))
+            if (item is Map<String, dynamic> && _str(item['name']).isNotEmpty)
+              LabIncludedTest(
+                _str(item['name']),
+                isSubhead: item['isSubhead'] == true,
+              ),
+        ],
       );
     } catch (error) {
       BackendHttp.log('CareRepository.fetchLabTestDetail failed', error: error);
