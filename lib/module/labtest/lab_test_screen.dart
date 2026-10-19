@@ -265,11 +265,7 @@ class _LabTestScreenState extends State<LabTestScreen> {
               packageCount: packages?.length,
               branchCount: _branchCount,
             ),
-            const SizedBox(height: 18),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 0, 16, 24),
-              child: _CouponBanner(),
-            ),
+            const SizedBox(height: 24),
           ],
         ),
       ),
@@ -910,70 +906,6 @@ class _ShortcutTile extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _CouponBanner extends StatelessWidget {
-  const _CouponBanner();
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.offerTint,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      padding: const EdgeInsets.all(14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(9),
-            ),
-            child: const Icon(
-              Icons.local_offer_outlined,
-              size: 20,
-              color: AppColors.brandBlue,
-            ),
-          ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AVAILABLE COUPON',
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    letterSpacing: 0.5,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textMuted,
-                  ),
-                ),
-                SizedBox(height: 3),
-                Text(
-                  'Flat 25% off on all tests',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.brandBlue,
-                  ),
-                ),
-                SizedBox(height: 2),
-                Text(
-                  'Applicable on all bookings above ₹700',
-                  style: TextStyle(fontSize: 12.5, color: AppColors.textBody),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
