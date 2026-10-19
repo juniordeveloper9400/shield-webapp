@@ -352,14 +352,15 @@ class _CheckoutBar extends StatelessWidget {
   }
 }
 
-/// The member's activated Health Pass, shown as an applied coupon: which plan,
-/// when it was activated, and the home-care charge it gives them — the line a
-/// lab home-collection booking draws on. Nothing here is hardcoded: the
-/// home-care line is picked out of [PrivilegeLoad.benefits], the same list the
-/// Health Pass purchase screen reads, so Silver/Gold/Platinum's different
-/// charge can only ever match what that plan was sold on. The rest of the
-/// plan's benefits sit behind "View all benefits". Shown nothing when the
-/// account holds no plan that is drawable today.
+/// The member's activated Health Pass, shown as a coupon with an "Apply"
+/// button: which plan, when it was activated, and the home-care charge it
+/// gives them — the line a lab home-collection booking draws on. Nothing
+/// here is hardcoded: the home-care line is picked out of [PrivilegeLoad.
+/// benefits], the same list the Health Pass purchase screen reads, so
+/// Silver/Gold/Platinum's different charge can only ever match what that
+/// plan was sold on. The rest of the plan's benefits sit behind "View all
+/// benefits". Shown nothing when the account holds no plan that is drawable
+/// today.
 class _HealthPassCouponCard extends StatefulWidget {
   const _HealthPassCouponCard();
 
@@ -369,6 +370,12 @@ class _HealthPassCouponCard extends StatefulWidget {
 
 class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
   bool _showAll = false;
+  // A visual confirmation only — the lab quotes the final bill itself (see
+  // _LabBillNote), so there is no price on this screen for "Apply" to
+  // change. Tapping it just tells the member their Health Pass is in effect
+  // for this booking's home collection, the same way a coupon chip flips to
+  // "Applied" without the cart screen doing its own maths.
+  bool _applied = false;
 
   /// `16 Aug 2026, 05:24 PM`, or just the date when the activation carries no
   /// time of day (a plain date reads as midnight).
@@ -429,7 +436,9 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Health Pass applied · ${tier.name}',
+                            _applied
+                                ? 'Health Pass applied · ${tier.name}'
+                                : 'Health Pass available · ${tier.name}',
                             style: const TextStyle(
                               fontSize: 14.5,
                               fontWeight: FontWeight.w800,
@@ -448,6 +457,61 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
                         ],
                       ),
                     ),
+                    const SizedBox(width: 10),
+                    if (_applied)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.greenTint,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.check_rounded,
+                              size: 15,
+                              color: AppColors.brandGreenDark,
+                            ),
+                            SizedBox(width: 3),
+                            Text(
+                              'Applied',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.brandGreenDark,
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    else
+                      OutlinedButton(
+                        onPressed: () => setState(() => _applied = true),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: tier.accent,
+                          side: BorderSide(color: tier.accent),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 8,
+                          ),
+                          minimumSize: Size.zero,
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        child: const Text(
+                          'Apply',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ),
