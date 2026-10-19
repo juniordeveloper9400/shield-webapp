@@ -136,6 +136,28 @@ class LabCartService extends ChangeNotifier {
     }
   }
 
+  /// Whether the member tapped "Apply" on their Health Pass coupon — set
+  /// from the cart's and checkout's own `_HealthPassCouponCard`, carried
+  /// through to the booking request so the lab/admin can see it was
+  /// invoked. A visual confirmation, not something [payable] is computed
+  /// from — the lab quotes the final bill itself.
+  bool _healthPassApplied = false;
+
+  bool get healthPassApplied => _healthPassApplied;
+
+  /// Which plan was applied (e.g. "Silver Shield"), sent alongside
+  /// [healthPassApplied] — null while nothing has been applied.
+  String? _healthPassTier;
+
+  String? get healthPassTier => _healthPassTier;
+
+  /// Records (or clears, passing false) the member's own "Apply" tap.
+  void setHealthPassApplied(bool applied, {String? tier}) {
+    _healthPassApplied = applied;
+    _healthPassTier = applied ? tier : null;
+    notifyListeners();
+  }
+
   List<LabBooking> get bookings => List.unmodifiable(_bookings);
 
   bool get isEmpty => _bookings.isEmpty;
@@ -219,6 +241,8 @@ class LabCartService extends ChangeNotifier {
     _chosenStore = null;
     _fulfillmentType = LabFulfillmentType.homeCollection;
     _scheduledFor = null;
+    _healthPassApplied = false;
+    _healthPassTier = null;
     notifyListeners();
   }
 

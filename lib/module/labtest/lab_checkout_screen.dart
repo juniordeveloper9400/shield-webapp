@@ -8,6 +8,7 @@ import '../auth/auth_service.dart';
 import '../location/address_book.dart';
 import '../patients/patient_book.dart';
 import 'lab_booking_placed_screen.dart';
+import 'lab_cart_screen.dart' show HealthPassCouponCard;
 import 'lab_cart_service.dart';
 import 'lab_checkout_panels.dart';
 import 'lab_package.dart';
@@ -122,6 +123,8 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
         fulfillmentType: cart.fulfillmentType,
         scheduledFor: cart.scheduledFor,
         bookings: bookings,
+        healthPassApplied: cart.healthPassApplied,
+        healthPassTier: cart.healthPassTier,
       ),
     );
 
@@ -172,6 +175,12 @@ class _LabCheckoutScreenState extends State<LabCheckoutScreen> {
             padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
             children: [
               _ReviewCard(bookings: cart.bookings),
+              const SizedBox(height: 12),
+              // Hidden unless the member holds a live Health Pass — same
+              // widget the cart screen shows, reading and writing the same
+              // LabCartService "applied" flag so Apply sticks whichever
+              // screen it was tapped on.
+              const HealthPassCouponCard(),
               const SizedBox(height: 12),
               // Not const — its build() reads LabCartService.instance
               // .fulfillmentType directly rather than a constructor field,

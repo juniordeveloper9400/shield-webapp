@@ -415,6 +415,8 @@ class OrderRepository {
     int? storeId,
     LabFulfillmentType fulfillmentType = LabFulfillmentType.homeCollection,
     DateTime? scheduledFor,
+    bool healthPassApplied = false,
+    String? healthPassTier,
   }) async {
     if (!BackendHttp.isConfigured || bookings.isEmpty) {
       return;
@@ -454,6 +456,8 @@ class OrderRepository {
             if (storeId != null) 'storeId': storeId,
             'fulfillmentType': fulfillmentType.apiValue,
             if (scheduledFor != null) 'scheduledFor': scheduledFor.toUtc().toIso8601String(),
+            'healthPassApplied': healthPassApplied,
+            if (healthPassApplied && healthPassTier != null) 'healthPassTier': healthPassTier,
           },
         );
       } catch (error) {

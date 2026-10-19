@@ -63,7 +63,7 @@ class LabCartScreen extends StatelessWidget {
                     LabBranchRow(),
                     const SizedBox(height: 12),
                     // Hidden unless the member holds a live Health Pass.
-                    const _HealthPassCouponCard(),
+                    const HealthPassCouponCard(),
                     const SizedBox(height: 12),
                     // The lab quotes the final bill itself, so the cart shows
                     // a note here instead of a bill summary.
@@ -361,21 +361,20 @@ class _CheckoutBar extends StatelessWidget {
 /// plan was sold on. The rest of the plan's benefits sit behind "View all
 /// benefits". Shown nothing when the account holds no plan that is drawable
 /// today.
-class _HealthPassCouponCard extends StatefulWidget {
-  const _HealthPassCouponCard();
+///
+/// "Applied" lives on [LabCartService], not local widget state — shown here
+/// and again on [LabCheckoutScreen], it has to read back the same whether
+/// the member tapped Apply on the basket or at checkout, and carries through
+/// to the booking request itself so the lab/admin can see it was invoked.
+class HealthPassCouponCard extends StatefulWidget {
+  const HealthPassCouponCard({super.key});
 
   @override
-  State<_HealthPassCouponCard> createState() => _HealthPassCouponCardState();
+  State<HealthPassCouponCard> createState() => _HealthPassCouponCardState();
 }
 
-class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
+class _HealthPassCouponCardState extends State<HealthPassCouponCard> {
   bool _showAll = false;
-  // A visual confirmation only — the lab quotes the final bill itself (see
-  // _LabBillNote), so there is no price on this screen for "Apply" to
-  // change. Tapping it just tells the member their Health Pass is in effect
-  // for this booking's home collection, the same way a coupon chip flips to
-  // "Applied" without the cart screen doing its own maths.
-  bool _applied = false;
 
   /// `16 Aug 2026, 05:24 PM`, or just the date when the activation carries no
   /// time of day (a plain date reads as midnight).
@@ -388,7 +387,7 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: WalletService.instance,
+      listenable: Listenable.merge([WalletService.instance, LabCartService.instance]),
       builder: (context, _) {
         final active = WalletService.instance.activeCardsOn(DateTime.now());
         if (active.isEmpty) {
@@ -403,6 +402,7 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
           final lower = line.toLowerCase();
           return lower.contains('home') && lower.contains('care');
         }, orElse: () => '');
+        final applied = LabCartService.instance.healthPassApplied;
 
         return Container(
           width: double.infinity,
@@ -436,7 +436,7 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            _applied
+                            applied
                                 ? 'Health Pass applied · ${tier.name}'
                                 : 'Health Pass available · ${tier.name}',
                             style: const TextStyle(
@@ -458,7 +458,7 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
                       ),
                     ),
                     const SizedBox(width: 10),
-                    if (_applied)
+                    if (applied)
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
@@ -490,7 +490,8 @@ class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
                       )
                     else
                       OutlinedButton(
-                        onPressed: () => setState(() => _applied = true),
+                        onPressed: () => LabCartService.instance
+                            .setHealthPassApplied(true, tier: tier.name),
                         style: OutlinedButton.styleFrom(
                           foregroundColor: tier.accent,
                           side: BorderSide(color: tier.accent),
