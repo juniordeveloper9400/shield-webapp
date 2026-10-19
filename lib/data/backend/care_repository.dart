@@ -59,7 +59,10 @@ class CareRepository {
                 ? ''
                 : row['categoryId'].toString(),
             extraCategoryIds: _stringList(row['extraCategoryIds']),
-            isProfile: row['sourceTestId'] != null,
+            // A Test Master row of type Package is a real package, not a profile.
+            isProfile:
+                row['sourceTestId'] != null &&
+                row['sourceTestType'] != 'PACKAGE',
             isMostCommon: row['isMostCommon'] == true,
             testCount: _int(row['testCount']),
             profileCount: _int(row['profileCount']),
