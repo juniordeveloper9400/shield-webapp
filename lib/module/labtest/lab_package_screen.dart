@@ -364,11 +364,8 @@ class _TopCard extends StatelessWidget {
         ? package.reportOn
         : package.reportIn;
     final facts = [
-      _Fact(
-        Icons.science_outlined,
-        'HOME SAMPLE',
-        package.sample.isNotEmpty ? package.sample : 'Collected at home',
-      ),
+      if (package.sample.isNotEmpty)
+        _Fact(Icons.science_outlined, 'SAMPLE', package.sample),
       if (effectiveReportOn.isNotEmpty)
         _Fact(Icons.schedule_outlined, 'REPORT ON', effectiveReportOn),
       if (package.testMode.isNotEmpty)
@@ -448,13 +445,18 @@ class _TopCard extends StatelessWidget {
               ),
             ],
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
-              children: [
-                for (final fact in facts)
-                  _FactTile(fact: fact),
-              ],
+            // One compact row — the tiles share the card's width instead of
+            // wrapping onto a second line.
+            IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  for (var i = 0; i < facts.length; i++) ...[
+                    if (i > 0) const SizedBox(width: 6),
+                    Expanded(child: _FactTile(fact: facts[i])),
+                  ],
+                ],
+              ),
             ),
             const SizedBox(height: 16),
             Wrap(
@@ -551,32 +553,35 @@ class _FactTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 132,
       decoration: BoxDecoration(
         color: AppColors.white,
         borderRadius: BorderRadius.circular(10),
       ),
-      padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(9, 9, 9, 9),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(fact.icon, size: 24, color: AppColors.textBody),
-          const SizedBox(height: 12),
+          Icon(fact.icon, size: 18, color: AppColors.textBody),
+          const SizedBox(height: 6),
           Text(
             fact.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 11,
-              letterSpacing: 0.4,
+              fontSize: 9.5,
+              letterSpacing: 0.3,
               fontWeight: FontWeight.w600,
               color: AppColors.textMuted,
             ),
           ),
-          const SizedBox(height: 3),
+          const SizedBox(height: 2),
           Text(
             fact.value,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 12,
               fontWeight: FontWeight.w700,
               color: AppColors.textDark,
             ),
