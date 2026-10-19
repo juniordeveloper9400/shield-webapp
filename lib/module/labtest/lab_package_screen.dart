@@ -116,16 +116,12 @@ class LabPackageScreen extends StatelessWidget {
       body: ListView(
         padding: const EdgeInsets.only(bottom: 16),
         children: [
-          _Header(package: package),
-          const SizedBox(height: 10),
-          _FactStrip(package: package),
+          _TopCard(package: package),
           const SizedBox(height: 10),
           if (package.organs.isNotEmpty) ...[
             _OrgansBlock(package: package),
             const SizedBox(height: 10),
           ],
-          _PriceBlock(package: package),
-          const SizedBox(height: 10),
           const _CouponCard(),
           const SizedBox(height: 10),
           _AboutBlock(package: package),
@@ -176,74 +172,106 @@ class _BottomBar extends StatelessWidget {
       builder: (context, _) {
         final cart = LabCartService.instance;
         final patients = cart.patientsFor(package);
+        // Defaults to 1 so this package's own running total is visible
+        // right away, before anyone has picked a patient count at all.
+        final patientCount = patients?.length ?? 1;
+        final previewTotal = package.priceValue * patientCount;
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onAdd,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandBlue,
-                      side: const BorderSide(color: AppColors.searchBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    icon: const Icon(Icons.expand_more_rounded, size: 18),
-                    label: Text(
-                      patients == null
-                          ? 'Add'
-                          : patients.length == 1
-                          ? '1 Patient'
-                          : '${patients.length} Patients',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-                if (!cart.isEmpty) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    flex: 2,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const LabCartScreen()),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.brandBlue,
-                        foregroundColor: AppColors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(28),
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      Text(
+                        'Total for $patientCount patient${patientCount == 1 ? '' : 's'}',
+                        style: const TextStyle(
+                          fontSize: 12.5,
+                          color: AppColors.textMuted,
                         ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: Color(0xFFC9D8F0),
-                            ),
+                      const Spacer(),
+                      Text(
+                        '₹$previewTotal',
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: onAdd,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.brandBlue,
+                          side: const BorderSide(color: AppColors.searchBorder),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(28),
                           ),
-                          const Text(
-                            'View Cart',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w700,
-                            ),
+                        ),
+                        icon: const Icon(Icons.expand_more_rounded, size: 18),
+                        label: Text(
+                          patients == null
+                              ? 'Add'
+                              : patients.length == 1
+                              ? '1 Patient'
+                              : '${patients.length} Patients',
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w700,
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                    if (!cart.isEmpty) ...[
+                      const SizedBox(width: 10),
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const LabCartScreen()),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.brandBlue,
+                            foregroundColor: AppColors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(28),
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}',
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  color: Color(0xFFC9D8F0),
+                                ),
+                              ),
+                              const Text(
+                                'View Cart',
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
               ],
             ),
           ),
@@ -253,15 +281,32 @@ class _BottomBar extends StatelessWidget {
   }
 }
 
-class _Header extends StatelessWidget {
+/// The package name, the facts a patient needs before booking, and the
+/// price — one tinted card instead of three separate white sections, so the
+/// whole "what is this and what does it cost" picture reads as a single
+/// unit at the top of the page.
+class _TopCard extends StatelessWidget {
   final LabPackage package;
 
-  const _Header({required this.package});
+  const _TopCard({required this.package});
 
   @override
   Widget build(BuildContext context) {
+    final facts = [
+      _Fact(Icons.biotech_outlined, 'CONTAINS', '${package.testCount} Tests'),
+      _Fact(Icons.restaurant_outlined, 'PREPARATION', package.preparation),
+      if (package.fasting.isNotEmpty)
+        _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
+      _Fact(Icons.science_outlined, 'SAMPLE', package.sample),
+      _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
+    ];
+
     return Container(
-      color: AppColors.white,
+      margin: const EdgeInsets.symmetric(horizontal: 16),
+      decoration: BoxDecoration(
+        color: AppColors.panelBlue,
+        borderRadius: BorderRadius.circular(16),
+      ),
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 18),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,7 +321,7 @@ class _Header extends StatelessWidget {
                 width: 74,
                 height: 74,
                 decoration: BoxDecoration(
-                  color: AppColors.offerTint,
+                  color: AppColors.white,
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(
@@ -326,6 +371,64 @@ class _Header extends StatelessWidget {
             children: [
               _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
               _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
+            ],
+          ),
+          const SizedBox(height: 16),
+          // Scrolls sideways rather than wrapping: four/five tiles do not fit
+          // at 320px, and a 2×2 grid would break the strip the reference
+          // reads as one row.
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                for (final fact in facts) ...[
+                  _FactTile(fact: fact),
+                  const SizedBox(width: 10),
+                ],
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 10,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              Text(
+                '₹${package.price}',
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+              Text(
+                '₹${package.mrp}',
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: AppColors.textMuted,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
+              if (package.discountLabel.isNotEmpty)
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.greenTint,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 4,
+                  ),
+                  child: Text(
+                    package.discountLabel,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandGreenDark,
+                    ),
+                  ),
+                ),
             ],
           ),
         ],
@@ -385,43 +488,6 @@ class _MetaChip extends StatelessWidget {
   }
 }
 
-/// The four facts a patient needs before booking.
-class _FactStrip extends StatelessWidget {
-  final LabPackage package;
-
-  const _FactStrip({required this.package});
-
-  @override
-  Widget build(BuildContext context) {
-    final facts = [
-      _Fact(Icons.biotech_outlined, 'CONTAINS', '${package.testCount} Tests'),
-      _Fact(Icons.restaurant_outlined, 'PREPARATION', package.preparation),
-      if (package.fasting.isNotEmpty)
-        _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
-      _Fact(Icons.science_outlined, 'SAMPLE', package.sample),
-      _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
-    ];
-
-    return Container(
-      color: AppColors.white,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
-      // Scrolls sideways rather than wrapping: four tiles do not fit at 320px,
-      // and a 2×2 grid would break the strip the reference reads as one row.
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
-          children: [
-            for (final fact in facts) ...[
-              _FactTile(fact: fact),
-              const SizedBox(width: 10),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _Fact {
   final IconData icon;
   final String label;
@@ -430,6 +496,8 @@ class _Fact {
   const _Fact(this.icon, this.label, this.value);
 }
 
+/// One fact inside [_TopCard] — white against that card's own tint, the
+/// same "card within a card" contrast the reference uses.
 class _FactTile extends StatelessWidget {
   final _Fact fact;
 
@@ -440,7 +508,7 @@ class _FactTile extends StatelessWidget {
     return Container(
       width: 132,
       decoration: BoxDecoration(
-        color: AppColors.pageTint,
+        color: AppColors.white,
         borderRadius: BorderRadius.circular(10),
       ),
       padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
@@ -561,63 +629,6 @@ class _OrganChip extends StatelessWidget {
           fontWeight: FontWeight.w500,
           color: AppColors.textDark,
         ),
-      ),
-    );
-  }
-}
-
-class _PriceBlock extends StatelessWidget {
-  final LabPackage package;
-
-  const _PriceBlock({required this.package});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.white,
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 18),
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 6,
-        crossAxisAlignment: WrapCrossAlignment.center,
-        children: [
-          Text(
-            '₹${package.price}',
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textDark,
-            ),
-          ),
-          Text(
-            '₹${package.mrp}',
-            style: const TextStyle(
-              fontSize: 15,
-              color: AppColors.textMuted,
-              decoration: TextDecoration.lineThrough,
-            ),
-          ),
-          if (package.discountLabel.isNotEmpty)
-            Container(
-              decoration: BoxDecoration(
-                color: AppColors.greenTint,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              padding: const EdgeInsets.symmetric(
-                horizontal: 8,
-                vertical: 4,
-              ),
-              child: Text(
-                package.discountLabel,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.brandGreenDark,
-                ),
-              ),
-            ),
-        ],
       ),
     );
   }
