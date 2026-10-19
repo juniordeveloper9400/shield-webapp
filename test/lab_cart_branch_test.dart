@@ -170,8 +170,8 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(LabCartService.instance.bookings.single.patients.length, 4);
-      expect(find.text('- ₹7,796'), findsOneWidget);
-      expect(find.text('For 4 patients'), findsOneWidget);
+      expect(find.text('₹5,196'), findsWidgets);
+      expect(find.text('Bill summary'), findsNothing);
     },
   );
 }
