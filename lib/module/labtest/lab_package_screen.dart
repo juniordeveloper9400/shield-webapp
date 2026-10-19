@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart' show FaIcon, FontAwesomeIcons;
 
 import '../../data/backend/contact_repository.dart';
 import '../../phone.dart';
@@ -110,7 +111,7 @@ class LabPackageScreen extends StatelessWidget {
         onPressed: () => _openWhatsApp(context),
         backgroundColor: AppColors.brandGreenDeep,
         tooltip: 'Chat on WhatsApp',
-        child: const Icon(Icons.chat_rounded, color: AppColors.white),
+        child: const FaIcon(FontAwesomeIcons.whatsapp, color: AppColors.white),
       ),
       bottomNavigationBar: _BottomBar(package: package, onAdd: () => _add(context)),
       body: ListView(
