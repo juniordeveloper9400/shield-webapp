@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
+import '../wallet/wallet_service.dart';
 import 'lab_cart_service.dart';
 import 'lab_checkout_panels.dart';
 import 'lab_checkout_screen.dart';
@@ -36,30 +37,42 @@ class LabCartScreen extends StatelessWidget {
           child: Divider(height: 1, color: AppColors.border),
         ),
       ),
-      body: ListenableBuilder(
-        listenable: LabCartService.instance,
-        builder: (context, _) {
-          final cart = LabCartService.instance;
-          if (cart.isEmpty) {
-            return const _EmptyState();
-          }
+      body: Column(
+        children: [
+          const _HealthPassBenefitsCard(),
+          Expanded(
+            child: ListenableBuilder(
+              listenable: LabCartService.instance,
+              builder: (context, _) {
+                final cart = LabCartService.instance;
+                if (cart.isEmpty) {
+                  return const _EmptyState();
+                }
 
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-            children: [
-              for (var index = 0; index < cart.bookings.length; index++) ...[
-                _BookingCard(index: index, booking: cart.bookings[index]),
-                const SizedBox(height: 12),
-              ],
-              LabBranchRow(),
-              const SizedBox(height: 12),
-              // Not const — see root's identical note: a canonicalized const
-              // instance here would be skipped on a same-length rebuild
-              // (Flutter's identical-widget fast path) and show a stale bill.
-              LabBillCard(),
-            ],
-          );
-        },
+                return ListView(
+                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                  children: [
+                    for (
+                      var index = 0;
+                      index < cart.bookings.length;
+                      index++
+                    ) ...[
+                      _BookingCard(index: index, booking: cart.bookings[index]),
+                      const SizedBox(height: 12),
+                    ],
+                    LabBranchRow(),
+                    const SizedBox(height: 12),
+                    // Not const — see root's identical note: a canonicalized
+                    // const instance here would be skipped on a
+                    // same-length rebuild (Flutter's identical-widget fast
+                    // path) and show a stale bill.
+                    LabBillCard(),
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
       bottomNavigationBar: ListenableBuilder(
         listenable: LabCartService.instance,
@@ -298,6 +311,98 @@ class _CheckoutBar extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// A reminder of what the member's own activated plan already covers — shown
+/// here because the home-care visit benefit it lists is exactly what a lab
+/// home-collection booking draws on. Nothing here is hardcoded: every line
+/// comes straight off [PrivilegeLoad.benefits], the same list the HealthPass
+/// purchase screen itself reads, so Silver/Gold/Platinum's different home-care
+/// charge is never restated — it can only ever match what that plan was sold
+/// on. Shown nothing when the account holds no plan that is drawable today.
+class _HealthPassBenefitsCard extends StatelessWidget {
+  const _HealthPassBenefitsCard();
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: WalletService.instance,
+      builder: (context, _) {
+        final active = WalletService.instance.activeCardsOn(DateTime.now());
+        if (active.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        // The most recently issued plan that is drawable today — the same
+        // "last" rule WalletService's own [card] getter uses to pick one
+        // plan to speak for the account when more than one is active.
+        final load = active.last.load;
+        final tier = load.tier;
+
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+          child: Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: AppColors.white,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: tier.accent.withValues(alpha: 0.3)),
+            ),
+            padding: const EdgeInsets.fromLTRB(14, 13, 14, 7),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.verified_rounded, size: 16, color: tier.accent),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'What ${load.amountLabel} on ${tier.name} includes',
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 0.2,
+                          color: tier.accent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                for (final line in load.benefits)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.only(top: 1, right: 8),
+                          child: Icon(
+                            Icons.check_circle_rounded,
+                            size: 15,
+                            color: tier.accent,
+                          ),
+                        ),
+                        Expanded(
+                          child: Text(
+                            line,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              height: 1.35,
+                              color: AppColors.textBody,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

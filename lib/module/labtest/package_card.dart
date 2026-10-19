@@ -307,7 +307,11 @@ class _ProfileRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(profile.emoji, style: const TextStyle(fontSize: 12)),
+        const Icon(
+          Icons.check_circle_rounded,
+          size: 13,
+          color: AppColors.brandGreenDeep,
+        ),
         const SizedBox(width: 4),
         Expanded(
           child: Text(
