@@ -157,6 +157,13 @@ class LabPackageScreen extends StatelessWidget {
 /// this test is booked for (tap to choose or change), and — once the basket
 /// holds at least one booking — the running total with a shortcut straight
 /// to the cart.
+///
+/// Two distinct layouts, not one bar with parts disabled: before this
+/// package has been added, there is nothing to pick a patient count for yet,
+/// so the bar is just the price and a plain "Add" button — the same shape
+/// every other product-style price footer in the app uses. Only once it is
+/// actually in the basket does the bar switch to the patient count (tap to
+/// change it) and a "View Cart" button.
 class _BottomBar extends StatelessWidget {
   final LabPackage package;
   final VoidCallback onAdd;
@@ -170,93 +177,174 @@ class _BottomBar extends StatelessWidget {
       builder: (context, _) {
         final cart = LabCartService.instance;
         final patients = cart.patientsFor(package);
-        final cartHasBookings = !cart.isEmpty;
-        // Defaults to 1 so this package's own running total is visible
-        // right away, before anyone has picked a patient count at all.
-        final previewTotal = package.priceValue * (patients?.length ?? 1);
         return SafeArea(
           child: Padding(
             padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: onAdd,
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.brandBlue,
-                      side: const BorderSide(color: AppColors.searchBorder),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    icon: const Icon(Icons.expand_more_rounded, size: 18),
-                    label: Text(
-                      patients == null
-                          ? 'Add'
-                          : patients.length == 1
-                          ? '1 Patient'
-                          : '${patients.length} Patients',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
+            child: patients == null
+                ? _NotAddedBar(package: package, onAdd: onAdd)
+                : _AddedBar(
+                    package: package,
+                    patients: patients.length,
+                    cart: cart,
+                    onChangePatients: onAdd,
+                  ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Not yet booked: the package's own price, and a plain "Add" button that
+/// opens the patient picker.
+class _NotAddedBar extends StatelessWidget {
+  final LabPackage package;
+  final VoidCallback onAdd;
+
+  const _NotAddedBar({required this.package, required this.onAdd});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 2,
+            children: [
+              Text(
+                '₹${package.price}',
+                style: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textDark,
+                ),
+              ),
+              Text(
+                '₹${package.mrp}',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  color: AppColors.textMuted,
+                  decoration: TextDecoration.lineThrough,
+                ),
+              ),
+              if (package.discountLabel.isNotEmpty)
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppColors.greenTint,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 7,
+                    vertical: 3,
+                  ),
+                  child: Text(
+                    package.discountLabel,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.brandGreenDark,
                     ),
                   ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  flex: 2,
-                  // Always shown, not only once the basket holds something —
-                  // this package's own preview total (price × the patient
-                  // count currently chosen) is visible before it is ever
-                  // added. Tappable only once there is an actual basket to
-                  // open; before that it is a preview, not a dead button
-                  // that looks live.
-                  child: ElevatedButton(
-                    onPressed: cartHasBookings
-                        ? () => Navigator.of(context).push(
-                            MaterialPageRoute(builder: (_) => const LabCartScreen()),
-                          )
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.brandBlue,
-                      disabledBackgroundColor: AppColors.brandBlue,
-                      foregroundColor: AppColors.white,
-                      disabledForegroundColor: AppColors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(28),
-                      ),
-                    ),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          cartHasBookings
-                              ? '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}'
-                              : '₹$previewTotal',
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            color: Color(0xFFC9D8F0),
-                          ),
-                        ),
-                        const Text(
-                          'View Cart',
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        SizedBox(
+          width: 150,
+          child: ElevatedButton(
+            onPressed: onAdd,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandBlue,
+              foregroundColor: AppColors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            child: const Text(
+              'Add',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Already booked: how many patients (tap to change), and the running
+/// basket total with a shortcut straight to the cart.
+class _AddedBar extends StatelessWidget {
+  final LabPackage package;
+  final int patients;
+  final LabCartService cart;
+  final VoidCallback onChangePatients;
+
+  const _AddedBar({
+    required this.package,
+    required this.patients,
+    required this.cart,
+    required this.onChangePatients,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: OutlinedButton.icon(
+            onPressed: onChangePatients,
+            style: OutlinedButton.styleFrom(
+              foregroundColor: AppColors.brandBlue,
+              side: const BorderSide(color: AppColors.searchBorder),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            icon: const Icon(Icons.expand_more_rounded, size: 18),
+            label: Text(
+              patients == 1 ? '1 Patient' : '$patients Patients',
+              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          flex: 2,
+          child: ElevatedButton(
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const LabCartScreen())),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.brandBlue,
+              foregroundColor: AppColors.white,
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(28),
+              ),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  '₹${cart.payable} · ${cart.bookingCount} ${cart.bookingCount == 1 ? 'Item' : 'Items'}',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    color: Color(0xFFC9D8F0),
                   ),
+                ),
+                const Text(
+                  'View Cart',
+                  style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
                 ),
               ],
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
