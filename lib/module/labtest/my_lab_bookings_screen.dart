@@ -14,7 +14,7 @@ import 'lab_report_screen.dart';
 /// process, when it is scheduled, any note from the lab, and, once the lab has
 /// attached it, the report.
 ///
-/// Opened from Account → My Lab Bookings.
+/// Opened from the Lab Orders tab.
 class MyLabBookingsScreen extends StatefulWidget {
   /// Where bookings and reports come from. Defaults to the live database; a
   /// test passes its own.
@@ -114,7 +114,7 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
         surfaceTintColor: AppColors.white,
         elevation: 0,
         title: const Text(
-          'My Lab Bookings',
+          'Lab Orders',
           style: TextStyle(
             fontSize: 20,
             fontWeight: FontWeight.w700,
@@ -133,7 +133,7 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
           : bookings == null
           ? _Notice(
               icon: Icons.cloud_off_rounded,
-              title: 'Could not load your bookings',
+              title: 'Could not load your orders',
               body: 'Check your connection and try again.',
               actionLabel: 'Try again',
               onAction: _reload,
@@ -141,7 +141,7 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
           : bookings.isEmpty
           ? const _Notice(
               icon: Icons.biotech_outlined,
-              title: 'No lab bookings yet',
+              title: 'No lab orders yet',
               body:
                   'Tests you book from Health & Labs appear here, with their '
                   'status and your report.',
@@ -163,10 +163,10 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
 
 /// One row of the list — a compact summary, the same shape My Orders' own
 /// cards use (id, status, a one-line subtitle, action buttons). Everything
-/// that used to sit inline here — the stage graph, schedule, lab note —
-/// now lives on [LabBookingDetailScreen], a tap away behind "Track
-/// booking", instead of making every row in the list as tall as the one
-/// booking a member actually came to check on.
+/// that used to sit inline here — the stage graph, schedule, lab note, bill
+/// breakdown — now lives on [LabBookingDetailScreen], a tap away behind
+/// "View order", instead of making every row in the list as tall as the
+/// one booking a member actually came to check on.
 class _BookingCard extends StatelessWidget {
   final LabBookingRecord booking;
   final LabBookingSource source;
@@ -222,9 +222,9 @@ class _BookingCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  icon: const Icon(Icons.timeline_outlined, size: 18),
+                  icon: const Icon(Icons.receipt_long_outlined, size: 18),
                   label: const Text(
-                    'Track booking',
+                    'View order',
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                   ),
                   style: OutlinedButton.styleFrom(
@@ -415,3 +415,47 @@ class _Notice extends StatelessWidget {
     );
   }
 }
+
+/// One line of a bill breakdown — shared by [LabBookingDetailScreen]'s own
+/// bill summary.
+class LabBillRow extends StatelessWidget {
+  final String label;
+  final String amount;
+  final bool isTotal;
+
+  const LabBillRow({
+    super.key,
+    required this.label,
+    required this.amount,
+    this.isTotal = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: isTotal ? 13.5 : 12.5,
+              fontWeight: isTotal ? FontWeight.w700 : FontWeight.w500,
+              color: isTotal ? AppColors.textDark : AppColors.textMuted,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          amount,
+          style: TextStyle(
+            fontSize: isTotal ? 15 : 12.5,
+            fontWeight: isTotal ? FontWeight.w800 : FontWeight.w600,
+            color: isTotal ? AppColors.brandBlue : AppColors.textDark,
+          ),
+        ),
+      ],
+    );
+  }
+}
+

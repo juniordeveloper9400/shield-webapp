@@ -60,7 +60,7 @@ class LabBookingPlacedScreen extends StatelessWidget {
               const SizedBox(height: 10),
               const Text(
                 'The lab will contact you to confirm your sample collection. '
-                'Track it any time from My Lab Bookings.',
+                'Track it any time from Lab Orders.',
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 13.5,

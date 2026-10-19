@@ -110,7 +110,7 @@ void main() {
     testWidgets('says so when there are no bookings', (tester) async {
       await pump(tester, MyLabBookingsScreen(source: source(bookings: [])));
 
-      expect(find.text('No lab bookings yet'), findsOneWidget);
+      expect(find.text('No lab orders yet'), findsOneWidget);
     });
 
     testWidgets('a failed load says so and can be retried', (tester) async {
@@ -121,7 +121,7 @@ void main() {
       );
       await pump(tester, MyLabBookingsScreen(source: retrying));
 
-      expect(find.text('Could not load your bookings'), findsOneWidget);
+      expect(find.text('Could not load your orders'), findsOneWidget);
 
       await tester.tap(find.text('Try again'));
       await tester.pumpAndSettle();
@@ -157,13 +157,13 @@ void main() {
         expect(find.textContaining('Scheduled'), findsNothing);
         expect(find.text('Please come fasting for 10 hours.'), findsNothing);
 
-        await tester.tap(find.text('Track booking'));
+        await tester.tap(find.text('View order'));
         await tester.pumpAndSettle();
 
         expect(find.byType(LabBookingDetailScreen), findsOneWidget);
         // The chip and the progress bar both name the stage.
         expect(find.text('Confirmed'), findsNWidgets(2));
-        expect(find.text('SCHEDULED'), findsOneWidget);
+        expect(find.text('Scheduled'), findsOneWidget);
         expect(find.text('25 Sep 2026, 09:30 AM'), findsOneWidget);
         expect(find.text('Please come fasting for 10 hours.'), findsOneWidget);
       },
@@ -188,7 +188,7 @@ void main() {
 
       expect(find.text('Cancelled'), findsOneWidget);
 
-      await tester.tap(find.text('Track booking'));
+      await tester.tap(find.text('View order'));
       await tester.pumpAndSettle();
 
       expect(find.text('Sample collected'), findsNothing);

@@ -17,7 +17,7 @@ import '../labtest/top_packages_screen.dart';
 /// are the same errand, one tap apart, not two separate destinations.
 enum HealthSubTab {
   labsTests(label: 'Labs Tests', icon: Icons.colorize_rounded),
-  myBookings(label: 'Lab Bookings', icon: Icons.assignment_turned_in_rounded),
+  myBookings(label: 'Lab Orders', icon: Icons.assignment_turned_in_rounded),
   topPackages(label: 'Top Packages', icon: Icons.grid_view_rounded),
   dietitian(label: 'Dietitian', icon: Icons.restaurant_menu_rounded);
 
