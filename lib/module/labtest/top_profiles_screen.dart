@@ -92,9 +92,13 @@ class _TopProfilesScreenState extends State<TopProfilesScreen> {
                 ),
               ),
             )
-          : ListView(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-              children: [LabProfileList(profiles: profiles, images: _images)],
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                children: [LabProfileList(profiles: profiles, images: _images)],
+              ),
             ),
     );
   }

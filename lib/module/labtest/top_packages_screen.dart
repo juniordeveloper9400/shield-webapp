@@ -94,12 +94,16 @@ class _TopPackagesScreenState extends State<TopPackagesScreen> {
           ? const Center(child: CircularProgressIndicator())
           : packages.isEmpty
           ? const _NoPackages()
-          : ListView.separated(
-              padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
-              itemCount: packages.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 14),
-              itemBuilder: (context, index) =>
-                  PackageCard(package: packages[index]),
+          : RefreshIndicator(
+              onRefresh: _load,
+              child: ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(14, 14, 14, 24),
+                itemCount: packages.length,
+                separatorBuilder: (_, _) => const SizedBox(height: 14),
+                itemBuilder: (context, index) =>
+                    PackageCard(package: packages[index]),
+              ),
             ),
     );
   }
