@@ -360,13 +360,19 @@ class _TopCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Only what the admin actually entered: how soon the report is ready,
+    // any fasting needed, and the home-collected sample. A blank value is
+    // left out rather than shown as an empty tile.
     final facts = [
-      _Fact(Icons.biotech_outlined, 'CONTAINS', '${package.testCount} Tests'),
-      _Fact(Icons.restaurant_outlined, 'PREPARATION', package.preparation),
+      if (package.reportIn.isNotEmpty)
+        _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
       if (package.fasting.isNotEmpty)
         _Fact(Icons.no_food_outlined, 'FASTING', package.fasting),
-      _Fact(Icons.science_outlined, 'SAMPLE', package.sample),
-      _Fact(Icons.description_outlined, 'REPORT IN', package.reportIn),
+      _Fact(
+        Icons.science_outlined,
+        'HOME SAMPLE',
+        package.sample.isNotEmpty ? package.sample : 'Collected at home',
+      ),
     ];
 
     return Container(
