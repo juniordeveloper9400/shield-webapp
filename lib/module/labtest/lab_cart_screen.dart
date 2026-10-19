@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
 import '../wallet/wallet_service.dart';
@@ -39,7 +40,6 @@ class LabCartScreen extends StatelessWidget {
       ),
       body: Column(
         children: [
-          const _HealthPassBenefitsCard(),
           Expanded(
             child: ListenableBuilder(
               listenable: LabCartService.instance,
@@ -62,11 +62,12 @@ class LabCartScreen extends StatelessWidget {
                     ],
                     LabBranchRow(),
                     const SizedBox(height: 12),
-                    // Not const — see root's identical note: a canonicalized
-                    // const instance here would be skipped on a
-                    // same-length rebuild (Flutter's identical-widget fast
-                    // path) and show a stale bill.
-                    LabBillCard(),
+                    // Hidden unless the member holds a live Health Pass.
+                    const _HealthPassCouponCard(),
+                    const SizedBox(height: 12),
+                    // The lab quotes the final bill itself, so the cart shows
+                    // a note here instead of a bill summary.
+                    const _LabBillNote(),
                   ],
                 );
               },
@@ -82,6 +83,42 @@ class LabCartScreen extends StatelessWidget {
           }
           return const _CheckoutBar();
         },
+      ),
+    );
+  }
+}
+
+/// Stands in for a bill summary on the lab cart: the lab, not the app, tells
+/// the member the final total.
+class _LabBillNote extends StatelessWidget {
+  const _LabBillNote();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: const Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.info_outline_rounded, size: 18, color: AppColors.brandBlue),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'The total bill for your lab tests will be shown by the lab.',
+              style: TextStyle(
+                fontSize: 13.5,
+                height: 1.4,
+                color: AppColors.textBody,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -315,15 +352,31 @@ class _CheckoutBar extends StatelessWidget {
   }
 }
 
-/// A reminder of what the member's own activated plan already covers — shown
-/// here because the home-care visit benefit it lists is exactly what a lab
-/// home-collection booking draws on. Nothing here is hardcoded: every line
-/// comes straight off [PrivilegeLoad.benefits], the same list the HealthPass
-/// purchase screen itself reads, so Silver/Gold/Platinum's different home-care
-/// charge is never restated — it can only ever match what that plan was sold
-/// on. Shown nothing when the account holds no plan that is drawable today.
-class _HealthPassBenefitsCard extends StatelessWidget {
-  const _HealthPassBenefitsCard();
+/// The member's activated Health Pass, shown as an applied coupon: which plan,
+/// when it was activated, and the home-care charge it gives them — the line a
+/// lab home-collection booking draws on. Nothing here is hardcoded: the
+/// home-care line is picked out of [PrivilegeLoad.benefits], the same list the
+/// Health Pass purchase screen reads, so Silver/Gold/Platinum's different
+/// charge can only ever match what that plan was sold on. The rest of the
+/// plan's benefits sit behind "View all benefits". Shown nothing when the
+/// account holds no plan that is drawable today.
+class _HealthPassCouponCard extends StatefulWidget {
+  const _HealthPassCouponCard();
+
+  @override
+  State<_HealthPassCouponCard> createState() => _HealthPassCouponCardState();
+}
+
+class _HealthPassCouponCardState extends State<_HealthPassCouponCard> {
+  bool _showAll = false;
+
+  /// `16 Aug 2026, 05:24 PM`, or just the date when the activation carries no
+  /// time of day (a plain date reads as midnight).
+  static String _activatedLabel(DateTime at) {
+    final local = at.toLocal();
+    final hasTime = local.hour != 0 || local.minute != 0;
+    return hasTime ? formatDateTime12h(local) : formatDate(local);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -335,71 +388,164 @@ class _HealthPassBenefitsCard extends StatelessWidget {
           return const SizedBox.shrink();
         }
         // The most recently issued plan that is drawable today — the same
-        // "last" rule WalletService's own [card] getter uses to pick one
-        // plan to speak for the account when more than one is active.
-        final load = active.last.load;
+        // "last" rule WalletService's own [card] getter uses.
+        final card = active.last;
+        final load = card.load;
         final tier = load.tier;
+        final homeCare = load.benefits.firstWhere((line) {
+          final lower = line.toLowerCase();
+          return lower.contains('home') && lower.contains('care');
+        }, orElse: () => '');
 
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: AppColors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: tier.accent.withValues(alpha: 0.3)),
-            ),
-            padding: const EdgeInsets.fromLTRB(14, 13, 14, 7),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+        return Container(
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: AppColors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: tier.accent.withValues(alpha: 0.4)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+                child: Row(
                   children: [
-                    Icon(Icons.verified_rounded, size: 16, color: tier.accent),
-                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: tier.accent.withValues(alpha: 0.12),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.local_offer_rounded,
+                        size: 18,
+                        color: tier.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Expanded(
-                      child: Text(
-                        'What ${load.amountLabel} on ${tier.name} includes',
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.2,
-                          color: tier.accent,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Health Pass applied · ${tier.name}',
+                            style: const TextStyle(
+                              fontSize: 14.5,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textDark,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${load.amountLabel} plan · activated '
+                            '${_activatedLabel(card.issuedOn)}',
+                            style: const TextStyle(
+                              fontSize: 12.5,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 10),
-                for (final line in load.benefits)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 8),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 1, right: 8),
-                          child: Icon(
-                            Icons.check_circle_rounded,
-                            size: 15,
+              ),
+              if (homeCare.isNotEmpty) ...[
+                Divider(height: 1, color: tier.accent.withValues(alpha: 0.25)),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 11, 14, 11),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.check_circle_rounded,
+                        size: 16,
+                        color: AppColors.brandGreenDark,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          homeCare,
+                          style: const TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.brandGreenDark,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Divider(height: 1, color: tier.accent.withValues(alpha: 0.25)),
+              InkWell(
+                borderRadius: const BorderRadius.vertical(
+                  bottom: Radius.circular(12),
+                ),
+                onTap: () => setState(() => _showAll = !_showAll),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _showAll ? 'Hide benefits' : 'View all benefits',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
                             color: tier.accent,
                           ),
                         ),
-                        Expanded(
-                          child: Text(
-                            line,
-                            style: const TextStyle(
-                              fontSize: 13,
-                              height: 1.35,
-                              color: AppColors.textBody,
-                            ),
+                      ),
+                      Icon(
+                        _showAll
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: tier.accent,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              if (_showAll)
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(14, 0, 14, 6),
+                  child: Column(
+                    children: [
+                      for (final line in load.benefits)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.only(top: 1, right: 8),
+                                child: Icon(
+                                  Icons.check_circle_rounded,
+                                  size: 15,
+                                  color: tier.accent,
+                                ),
+                              ),
+                              Expanded(
+                                child: Text(
+                                  line,
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    height: 1.35,
+                                    color: AppColors.textBody,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      ],
-                    ),
+                    ],
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
         );
       },
