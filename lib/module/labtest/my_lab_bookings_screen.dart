@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
-import '../../dates.dart';
 import '../../data/backend/lab_booking_repository.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_service.dart';
+import 'lab_booking_detail_screen.dart';
 import 'lab_booking_record.dart';
 import 'lab_report_screen.dart';
 
@@ -161,6 +161,12 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
   }
 }
 
+/// One row of the list — a compact summary, the same shape My Orders' own
+/// cards use (id, status, a one-line subtitle, action buttons). Everything
+/// that used to sit inline here — the stage graph, schedule, lab note —
+/// now lives on [LabBookingDetailScreen], a tap away behind "Track
+/// booking", instead of making every row in the list as tall as the one
+/// booking a member actually came to check on.
 class _BookingCard extends StatelessWidget {
   final LabBookingRecord booking;
   final LabBookingSource source;
@@ -169,7 +175,6 @@ class _BookingCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final scheduled = booking.scheduledFor;
     return Container(
       decoration: BoxDecoration(
         color: AppColors.white,
@@ -194,7 +199,7 @@ class _BookingCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              _StageChip(stage: booking.stage),
+              LabStageChip(stage: booking.stage),
             ],
           ),
           const SizedBox(height: 4),
@@ -204,98 +209,78 @@ class _BookingCard extends StatelessWidget {
             '₹${formatRupees(booking.total.round())}',
             style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
           ),
-          if (booking.stage != LabStage.cancelled) ...[
-            const SizedBox(height: 12),
-            _StageBar(stage: booking.stage),
-          ],
-          if (scheduled != null && booking.stage != LabStage.cancelled) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                const Icon(
-                  Icons.event_outlined,
-                  size: 17,
-                  color: AppColors.brandBlue,
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LabBookingDetailScreen(
+                        booking: booking,
+                        source: source,
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.timeline_outlined, size: 18),
+                  label: const Text(
+                    'Track booking',
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.brandBlue,
+                    side: const BorderSide(color: AppColors.brandBlue),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
                 ),
-                const SizedBox(width: 6),
+              ),
+              if (booking.reportAvailable) ...[
+                const SizedBox(width: 10),
                 Expanded(
-                  child: Text(
-                    'Scheduled ${formatDateTime12h(scheduled)}',
-                    style: const TextStyle(
-                      fontSize: 13.5,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textDark,
+                  child: FilledButton.icon(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            LabReportScreen(booking: booking, source: source),
+                      ),
+                    ),
+                    icon: const Icon(Icons.description_outlined, size: 18),
+                    label: Text(
+                      booking.reportPages == 1
+                          ? 'View report'
+                          : 'View report (${booking.reportPages} pages)',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.brandBlue,
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                     ),
                   ),
                 ),
               ],
-            ),
-          ],
-          if (booking.note.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: AppColors.pageTint,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(
-                    Icons.info_outline_rounded,
-                    size: 17,
-                    color: AppColors.brandBlue,
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      booking.note,
-                      style: const TextStyle(
-                        fontSize: 13.5,
-                        height: 1.35,
-                        color: AppColors.textDark,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-          if (booking.reportAvailable) ...[
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                onPressed: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        LabReportScreen(booking: booking, source: source),
-                  ),
-                ),
-                icon: const Icon(Icons.description_outlined, size: 18),
-                label: Text(
-                  booking.reportPages == 1
-                      ? 'View report'
-                      : 'View report (${booking.reportPages} pages)',
-                ),
-                style: FilledButton.styleFrom(
-                  backgroundColor: AppColors.brandBlue,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-class _StageChip extends StatelessWidget {
+/// The status pill a booking card and its detail screen both show — "Lab
+/// orders" read the same status language wherever a member sees them.
+class LabStageChip extends StatelessWidget {
   final LabStage stage;
 
-  const _StageChip({required this.stage});
+  const LabStageChip({super.key, required this.stage});
 
   @override
   Widget build(BuildContext context) {
@@ -319,11 +304,11 @@ class _StageChip extends StatelessWidget {
 }
 
 /// Requested → Confirmed → Sample collected → Completed, with everything up
-/// to the current stage filled in.
-class _StageBar extends StatelessWidget {
+/// to the current stage filled in. Shown on [LabBookingDetailScreen].
+class LabStageBar extends StatelessWidget {
   final LabStage stage;
 
-  const _StageBar({required this.stage});
+  const LabStageBar({super.key, required this.stage});
 
   static const _steps = [
     LabStage.requested,

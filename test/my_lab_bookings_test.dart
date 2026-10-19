@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:shield/module/account/account_screen.dart';
 import 'package:shield/module/auth/auth_service.dart';
+import 'package:shield/module/labtest/lab_booking_detail_screen.dart';
 import 'package:shield/module/labtest/lab_booking_record.dart';
 import 'package:shield/module/labtest/lab_report_screen.dart';
 import 'package:shield/module/labtest/my_lab_bookings_screen.dart';
@@ -128,32 +129,45 @@ void main() {
       expect(find.text('Full Body Checkup'), findsOneWidget);
     });
 
-    testWidgets('shows the booking, its status, schedule and the lab note', (
-      tester,
-    ) async {
-      await pump(
-        tester,
-        MyLabBookingsScreen(
-          source: source(
-            bookings: [
-              _booking(
-                stage: LabStage.confirmed,
-                note: 'Please come fasting for 10 hours.',
-                scheduledFor: DateTime(2026, 9, 25, 9, 30),
-              ),
-            ],
+    testWidgets(
+      'shows the booking summary on the list, with full detail behind Track booking',
+      (tester) async {
+        await pump(
+          tester,
+          MyLabBookingsScreen(
+            source: source(
+              bookings: [
+                _booking(
+                  stage: LabStage.confirmed,
+                  note: 'Please come fasting for 10 hours.',
+                  scheduledFor: DateTime(2026, 9, 25, 9, 30),
+                ),
+              ],
+            ),
           ),
-        ),
-      );
+        );
 
-      expect(find.text('Full Body Checkup'), findsOneWidget);
-      expect(find.textContaining('LB-0007 · 2 patients · ₹1,998'), findsOneWidget);
-      // The chip and the progress bar both name the stage.
-      expect(find.text('Confirmed'), findsNWidgets(2));
-      expect(find.text('Scheduled 25 Sep 2026, 09:30 AM'), findsOneWidget);
-      expect(find.text('Please come fasting for 10 hours.'), findsOneWidget);
-      expect(find.textContaining('View report'), findsNothing);
-    });
+        expect(find.text('Full Body Checkup'), findsOneWidget);
+        expect(
+          find.textContaining('LB-0007 · 2 patients · ₹1,998'),
+          findsOneWidget,
+        );
+        expect(find.text('Confirmed'), findsOneWidget);
+        expect(find.textContaining('View report'), findsNothing);
+        expect(find.textContaining('Scheduled'), findsNothing);
+        expect(find.text('Please come fasting for 10 hours.'), findsNothing);
+
+        await tester.tap(find.text('Track booking'));
+        await tester.pumpAndSettle();
+
+        expect(find.byType(LabBookingDetailScreen), findsOneWidget);
+        // The chip and the progress bar both name the stage.
+        expect(find.text('Confirmed'), findsNWidgets(2));
+        expect(find.text('SCHEDULED'), findsOneWidget);
+        expect(find.text('25 Sep 2026, 09:30 AM'), findsOneWidget);
+        expect(find.text('Please come fasting for 10 hours.'), findsOneWidget);
+      },
+    );
 
     testWidgets('a cancelled booking shows no progress or schedule', (
       tester,
@@ -173,6 +187,10 @@ void main() {
       );
 
       expect(find.text('Cancelled'), findsOneWidget);
+
+      await tester.tap(find.text('Track booking'));
+      await tester.pumpAndSettle();
+
       expect(find.text('Sample collected'), findsNothing);
       expect(find.textContaining('Scheduled'), findsNothing);
     });
@@ -236,11 +254,7 @@ void main() {
         );
 
         await pump(tester, MyLabBookingsScreen(source: live));
-        // The progress bar names every stage regardless of which is current
-        // (see the "both name the stage" test above) — the chip is the one
-        // place only the current stage's label doubles up.
-        expect(find.text('Requested'), findsNWidgets(2));
-        expect(find.text('Confirmed'), findsOneWidget);
+        expect(find.text('Requested'), findsOneWidget);
 
         // The lab confirms it from the console — nothing happens here. The
         // 15s timer only fires while the app is in the foreground; a widget
@@ -252,8 +266,8 @@ void main() {
         stage = LabStage.confirmed;
         await tester.pump(const Duration(seconds: 16));
         await tester.pumpAndSettle();
-        expect(find.text('Confirmed'), findsNWidgets(2));
-        expect(find.text('Requested'), findsOneWidget);
+        expect(find.text('Confirmed'), findsOneWidget);
+        expect(find.text('Requested'), findsNothing);
 
         // Leaving the screen stops the polling — advancing well past
         // another interval afterwards must not throw.
