@@ -447,20 +447,6 @@ class _TopCard extends StatelessWidget {
                 ],
               ),
             ],
-            if (package.forWhom.isNotEmpty || package.ageRange.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Wrap(
-                spacing: 16,
-                runSpacing: 8,
-                crossAxisAlignment: WrapCrossAlignment.center,
-                children: [
-                  if (package.forWhom.isNotEmpty)
-                    _MetaChip(icon: Icons.person_rounded, label: package.forWhom),
-                  if (package.ageRange.isNotEmpty)
-                    _MetaChip(icon: Icons.cake_outlined, label: package.ageRange),
-                ],
-              ),
-            ],
             const SizedBox(height: 16),
             Wrap(
               spacing: 10,
@@ -545,31 +531,7 @@ class _AliasChip extends StatelessWidget {
   }
 }
 
-class _MetaChip extends StatelessWidget {
-  final IconData icon;
-  final String label;
 
-  const _MetaChip({required this.icon, required this.label});
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 19, color: AppColors.textBody),
-        const SizedBox(width: 6),
-        Text(
-          label,
-          style: const TextStyle(
-            fontSize: 14.5,
-            fontWeight: FontWeight.w600,
-            color: AppColors.textDark,
-          ),
-        ),
-      ],
-    );
-  }
-}
 
 class _Fact {
   final IconData icon;
