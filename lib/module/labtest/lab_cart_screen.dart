@@ -385,7 +385,7 @@ class _HealthPassCouponCardState extends State<HealthPassCouponCard> {
     // A member who reaches the lab flow without visiting either first (a
     // deep link, or a fresh web-app load that lands straight here) would
     // then see this card stay hidden even with a genuinely active plan,
-    // since [WalletService.activeCardsOn] only ever reads what's already in
+    // since [WalletService.heldCardsOn] only ever reads what's already in
     // memory. Same refresh call WalletScreen's own initState makes, so this
     // card is correct the first time regardless of how the member arrived.
     final phone = AuthService.instance.currentUser.value?.phone;
@@ -407,7 +407,7 @@ class _HealthPassCouponCardState extends State<HealthPassCouponCard> {
     return ListenableBuilder(
       listenable: Listenable.merge([WalletService.instance, LabCartService.instance]),
       builder: (context, _) {
-        final active = WalletService.instance.activeCardsOn(DateTime.now());
+        final active = WalletService.instance.heldCardsOn(DateTime.now());
         if (active.isEmpty) {
           return const SizedBox.shrink();
         }

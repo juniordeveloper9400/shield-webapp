@@ -624,6 +624,25 @@ class WalletService extends ChangeNotifier {
       if (!card.isActiveOn(asOf)) card,
   ];
 
+  /// Every card the member holds whose year-long validity period (issue
+  /// date through [WalletCard.expiresOn]) covers [asOf] — whether or not
+  /// this month's instalment has actually come due yet.
+  ///
+  /// "I hold a live Health Pass plan" (what the lab checkout's coupon card
+  /// decides its own visibility on) is a different question from
+  /// [activeCardsOn]'s "this month's allowance has released, so the wallet
+  /// can pay it out right now": a plan grants its benefits (the home-
+  /// collection charge waiver, say) for its whole year, not only from
+  /// whichever day of the month it happens to have been issued on. Using
+  /// [activeCardsOn] for that card hid it on every day before the issue
+  /// day's date came round again each month, even though the plan — and
+  /// the member's wallet, per the Wallet screen's own [card] getter — was
+  /// genuinely active the whole time.
+  List<WalletCard> heldCardsOn(DateTime asOf) => [
+    for (final card in _cards)
+      if (!asOf.isBefore(card.issuedOn) && !asOf.isAfter(card.expiresOn)) card,
+  ];
+
   /// What the programme has added on top of what was paid in: the 10% bonus
   /// on every plan the account holds.
   ///
