@@ -1,30 +1,33 @@
-/// Where a lab booking is in the lab's process — the console's Lab Orders
-/// pipeline (`app.lab_booking_status`).
+/// Where a lab order is, as the member reads it: Requested → Verified →
+/// Billed → Completed (or Cancelled). `backend/api` works the stage out from
+/// what the admin has actually done — verified the bill, converted it to a
+/// bill, collected the payment — and sends it as `stage`.
 enum LabStage {
   requested('Requested'),
-  confirmed('Confirmed'),
-  sampleCollected('Sample collected'),
-  // Still the DB's REPORT_READY underneath (see parse/fromJson below) — the
-  // member-facing label just reads "Completed" instead, since this is the
-  // last step either way and nothing moves a booking past it.
-  reportReady('Completed'),
+  verified('Verified'),
+  billed('Billed'),
+  completed('Completed'),
   cancelled('Cancelled');
 
   const LabStage(this.label);
 
   final String label;
 
-  /// Reads an `app.lab_booking_status` value (`SAMPLE_COLLECTED`, …). An
-  /// unknown value reads as [requested] rather than throwing on a screen that
-  /// only wants to list bookings.
+  /// Reads the backend's `stage`, or — from a backend that does not send one
+  /// yet — the older `app.lab_booking_status`. An unknown value reads as
+  /// [requested] rather than throwing on a screen that only wants to list
+  /// orders.
   static LabStage parse(Object? value) {
     switch ((value ?? '').toString().trim().toUpperCase()) {
+      case 'VERIFIED':
       case 'CONFIRMED':
-        return LabStage.confirmed;
       case 'SAMPLE_COLLECTED':
-        return LabStage.sampleCollected;
+        return LabStage.verified;
+      case 'BILLED':
+        return LabStage.billed;
+      case 'COMPLETED':
       case 'REPORT_READY':
-        return LabStage.reportReady;
+        return LabStage.completed;
       case 'CANCELLED':
         return LabStage.cancelled;
       default:
@@ -110,7 +113,7 @@ class LabBookingRecord {
   String get code => 'LB-${id.toString().padLeft(4, '0')}';
 
   /// The report can be opened: the lab marked it ready and attached pages.
-  bool get reportAvailable => stage == LabStage.reportReady && reportPages > 0;
+  bool get reportAvailable => stage == LabStage.completed && reportPages > 0;
 
   /// Reads one booking from `backend/api`'s `GET /v1/member/lab-bookings`.
   factory LabBookingRecord.fromJson(Map<String, dynamic> json) {
@@ -132,7 +135,7 @@ class LabBookingRecord {
       packageName: _text(json['packageName'], fallback: 'Lab test'),
       patients: _int(json['patientsCount'], fallback: 1),
       total: _num(json['totalPrice']),
-      stage: LabStage.parse(json['status']),
+      stage: LabStage.parse(json['stage'] ?? json['status']),
       scheduledFor: _date(json['scheduledFor']),
       note: cleanNote,
       reportPages: _int(json['reportPages']),

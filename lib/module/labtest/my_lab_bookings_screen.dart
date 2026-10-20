@@ -285,7 +285,7 @@ class LabStageChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final (Color fg, Color bg) = switch (stage) {
-      LabStage.reportReady => (AppColors.brandGreenDark, AppColors.greenTint),
+      LabStage.completed => (AppColors.brandGreenDark, AppColors.greenTint),
       LabStage.cancelled => (AppColors.danger, AppColors.dangerTint),
       _ => (AppColors.brandBlue, AppColors.chipBlueTint),
     };
@@ -303,7 +303,7 @@ class LabStageChip extends StatelessWidget {
   }
 }
 
-/// Requested → Confirmed → Sample collected → Completed, with everything up
+/// Requested → Verified → Billed → Completed, with everything up
 /// to the current stage filled in. Shown on [LabBookingDetailScreen].
 class LabStageBar extends StatelessWidget {
   final LabStage stage;
@@ -312,9 +312,9 @@ class LabStageBar extends StatelessWidget {
 
   static const _steps = [
     LabStage.requested,
-    LabStage.confirmed,
-    LabStage.sampleCollected,
-    LabStage.reportReady,
+    LabStage.verified,
+    LabStage.billed,
+    LabStage.completed,
   ];
 
   @override
