@@ -111,6 +111,13 @@ void main() {
       expect(find.text('Safety information'), findsNothing);
     });
 
+    test('every FAQ question reads as a question', () {
+      expect(const ProductFaq('Use', 'a').displayQuestion, 'Use?');
+      expect(const ProductFaq('  How to take it  ', 'a').displayQuestion, 'How to take it?');
+      expect(const ProductFaq('Is it safe?', 'a').displayQuestion, 'Is it safe?');
+      expect(const ProductFaq('', 'a').displayQuestion, '');
+    });
+
     testWidgets('a FAQ row opens its answer', (tester) async {
       ProductRepository.detailOverride = (_) async => adminContent;
 

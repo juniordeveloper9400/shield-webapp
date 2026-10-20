@@ -916,7 +916,7 @@ class _FaqRowState extends State<_FaqRow> {
                   children: [
                     Expanded(
                       child: Text(
-                        widget.faq.question,
+                        widget.faq.displayQuestion,
                         style: const TextStyle(
                           fontSize: 17,
                           height: 1.4,

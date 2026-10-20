@@ -10,6 +10,15 @@ class ProductFaq {
   final String answer;
 
   const ProductFaq(this.question, this.answer);
+
+  /// The question as the member reads it: trimmed, and always ending in a
+  /// question mark — admins often type just "Use" or "How to take it", and
+  /// every FAQ should read as a question.
+  String get displayQuestion {
+    final text = question.trim();
+    if (text.isEmpty) return text;
+    return text.endsWith('?') ? text : '$text?';
+  }
 }
 
 /// Admin-entered detail content for one product, read from `app.product_detail`
