@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../dates.dart';
 import '../../theme/app_colors.dart';
 import '../auth/auth_flow.dart';
+import '../auth/auth_service.dart';
 import '../wallet/wallet_service.dart';
 import 'lab_cart_service.dart';
 import 'lab_checkout_panels.dart';
@@ -375,6 +376,23 @@ class HealthPassCouponCard extends StatefulWidget {
 
 class _HealthPassCouponCardState extends State<HealthPassCouponCard> {
   bool _showAll = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Lab cart/checkout never otherwise refreshes WalletService itself — it
+    // relies on Home/Wallet having already populated the active card list.
+    // A member who reaches the lab flow without visiting either first (a
+    // deep link, or a fresh web-app load that lands straight here) would
+    // then see this card stay hidden even with a genuinely active plan,
+    // since [WalletService.activeCardsOn] only ever reads what's already in
+    // memory. Same refresh call WalletScreen's own initState makes, so this
+    // card is correct the first time regardless of how the member arrived.
+    final phone = AuthService.instance.currentUser.value?.phone;
+    if (phone != null) {
+      WalletService.instance.refreshFromDatabase(phone);
+    }
+  }
 
   /// `16 Aug 2026, 05:24 PM`, or just the date when the activation carries no
   /// time of day (a plain date reads as midnight).
