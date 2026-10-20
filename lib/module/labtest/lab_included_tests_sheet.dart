@@ -3,13 +3,11 @@ import 'package:flutter/material.dart';
 import '../../data/backend/care_repository.dart';
 import '../../theme/app_colors.dart';
 import 'lab_package.dart';
-import 'lab_test_detail_screen.dart';
 
 /// The bottom sheet an included test opens from a package's "Included in this
 /// package" list: how many tests it is, its name, and every test inside it
 /// with a tick. A group test lists its members (the admin's "Set Grouptest"
-/// tab); a plain test lists itself. "View full details" still reaches the
-/// About / Why this test / Symptoms page.
+/// tab); a plain test lists itself.
 class LabIncludedTestsSheet extends StatefulWidget {
   final LabProfile profile;
 
@@ -206,27 +204,7 @@ class _LabIncludedTestsSheetState extends State<LabIncludedTestsSheet> {
                         ],
                       ),
               ),
-              if (widget.profile.testId != null)
-                SafeArea(
-                  top: false,
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 4, 20, 12),
-                    child: TextButton(
-                      onPressed: () {
-                        final navigator = Navigator.of(context);
-                        navigator.pop();
-                        navigator.push(
-                          MaterialPageRoute(
-                            builder: (_) => LabTestDetailScreen(
-                              testId: widget.profile.testId!,
-                            ),
-                          ),
-                        );
-                      },
-                      child: const Text('View full details'),
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 8),
             ],
           );
         },
