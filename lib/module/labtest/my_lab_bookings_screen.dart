@@ -48,6 +48,7 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
         bookingId: id,
         phone: phone(),
       ),
+      loadBill: (id) => LabBookingRepository.instance.fetchBillImage(bookingId: id),
     );
   }
 

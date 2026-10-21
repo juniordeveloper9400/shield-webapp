@@ -181,6 +181,11 @@ class Purchase {
   /// `sentAt`. Null until fetched, same as [billImage].
   final DateTime? billedAt;
 
+  /// The counter's own number for the paper bill, typed in by the admin —
+  /// from the same lazy bill fetch as [billImage]. Null until it lands or
+  /// when none was entered.
+  final String? billNumber;
+
   /// When staff first contacted the member about this order — the
   /// `storeContactedAt` on each `GET /v1/member/orders` row. Null until the
   /// store has (or for an order that predates it and skipped straight to a
@@ -219,6 +224,7 @@ class Purchase {
     this.billImage,
     this.billInvoice,
     this.billedAt,
+    this.billNumber,
     this.storeContactedAt,
     this.reviewedAt,
     this.convertedToBillAt,
@@ -267,6 +273,7 @@ class Purchase {
     String? billImage,
     BillInvoice? billInvoice,
     DateTime? billedAt,
+    String? billNumber,
     OrderStatus? status,
   }) => Purchase(
     id: id,
@@ -285,6 +292,7 @@ class Purchase {
     billImage: billImage ?? this.billImage,
     billInvoice: billInvoice ?? this.billInvoice,
     billedAt: billedAt ?? this.billedAt,
+    billNumber: billNumber ?? this.billNumber,
     storeContactedAt: storeContactedAt,
     reviewedAt: reviewedAt,
     convertedToBillAt: convertedToBillAt,
@@ -606,6 +614,7 @@ class PurchaseService extends ChangeNotifier {
       billImage: bill.image,
       billInvoice: bill.invoice,
       billedAt: bill.sentAt,
+      billNumber: bill.billNumber,
     );
     notifyListeners();
   }

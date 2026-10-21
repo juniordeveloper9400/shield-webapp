@@ -20,6 +20,10 @@ class OrderBillDetail {
   final String? image;
   final DateTime? sentAt;
 
+  /// The counter's number for the paper bill, typed in by the admin; null
+  /// until one is entered.
+  final String? billNumber;
+
   /// The itemised invoice — items, prices, store, customer, totals — or null
   /// when the backend predates it and sent only the bill row.
   final BillInvoice? invoice;
@@ -27,6 +31,7 @@ class OrderBillDetail {
   const OrderBillDetail({
     required this.image,
     required this.sentAt,
+    this.billNumber,
     this.invoice,
   });
 }
@@ -489,9 +494,11 @@ class OrderRepository {
               as Map<String, dynamic>;
       final image = (body['image'] as String?)?.trim();
       final sentAt = DateTime.tryParse((body['sentAt'] ?? '').toString());
+      final billNumber = (body['billNumber'] as String?)?.trim();
       return OrderBillDetail(
         image: image == null || image.isEmpty ? null : image,
         sentAt: sentAt,
+        billNumber: billNumber == null || billNumber.isEmpty ? null : billNumber,
         invoice: invoiceFromBill(body, sentAt: sentAt),
       );
     } on BackendHttpException catch (error) {

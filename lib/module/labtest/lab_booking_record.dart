@@ -88,6 +88,14 @@ class LabBookingRecord {
   /// Who the booking is for, as named on the order.
   final List<LabPatientLine> patientList;
 
+  /// The counter's number for the paper bill the admin attached on Lab Bills;
+  /// '' until one is entered.
+  final String billNumber;
+
+  /// Whether the admin attached a picture of that bill. The picture itself is
+  /// fetched when the order is opened (see [LabBookingSource.loadBill]).
+  final bool hasBillImage;
+
   const LabBookingRecord({
     required this.id,
     required this.packageName,
@@ -107,6 +115,8 @@ class LabBookingRecord {
     this.collectorName = '',
     this.address = '',
     this.patientList = const [],
+    this.billNumber = '',
+    this.hasBillImage = false,
   });
 
   /// The label the console shows for the same booking — `LB-0007`.
@@ -149,6 +159,8 @@ class LabBookingRecord {
       storeName: _text(json['storeName']),
       collectorName: _text(json['collectorName']),
       address: _text(json['address']),
+      billNumber: _text(json['billNumber']),
+      hasBillImage: json['hasBillImage'] == true,
       patientList: [
         for (final row in (json['patientList'] as List<dynamic>? ?? const []))
           if (row is Map<String, dynamic>)
@@ -187,8 +199,13 @@ class LabBookingSource {
   /// they could not be loaded.
   final Future<List<String>?> Function(int bookingId) loadReportPages;
 
+  /// The picture of one booking's bill (a `data:` URI), when the admin
+  /// attached one; null when there is none or it could not be loaded.
+  final Future<String?> Function(int bookingId)? loadBill;
+
   const LabBookingSource({
     required this.loadBookings,
     required this.loadReportPages,
+    this.loadBill,
   });
 }

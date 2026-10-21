@@ -996,6 +996,17 @@ class StoreInvoiceCard extends StatelessWidget {
             const SizedBox(height: 2),
             Text('Sent ${formatDate(billedAt)}', style: _mutedStyle),
           ],
+          if (order.billNumber != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Bill number: ${order.billNumber}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,

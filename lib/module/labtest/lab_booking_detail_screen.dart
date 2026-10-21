@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../dates.dart';
 import '../../money.dart';
 import '../../theme/app_colors.dart';
+import '../../widgets/full_screen_image_view.dart';
 import 'lab_booking_record.dart';
 import 'lab_report_screen.dart';
 import 'my_lab_bookings_screen.dart' show LabBillRow, LabStageBar, LabStageChip;
@@ -104,6 +105,10 @@ class LabBookingDetailScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _OrderSummaryCard(booking: booking),
+          if (booking.billNumber.isNotEmpty || booking.hasBillImage) ...[
+            const SizedBox(height: 12),
+            _BillFromLabCard(booking: booking, source: source),
+          ],
           const SizedBox(height: 12),
           _CollectionCard(booking: booking, scheduled: scheduled),
           if (booking.note.isNotEmpty) ...[
@@ -191,6 +196,108 @@ class _InfoCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The paper bill the admin attached on Lab Bills: its number, and the picture
+/// (opened full screen on tap, fetched only when asked for).
+class _BillFromLabCard extends StatefulWidget {
+  final LabBookingRecord booking;
+  final LabBookingSource source;
+
+  const _BillFromLabCard({required this.booking, required this.source});
+
+  @override
+  State<_BillFromLabCard> createState() => _BillFromLabCardState();
+}
+
+class _BillFromLabCardState extends State<_BillFromLabCard> {
+  bool _loading = false;
+
+  Future<void> _open() async {
+    final load = widget.source.loadBill;
+    if (load == null || _loading) return;
+    setState(() => _loading = true);
+    final image = await load(widget.booking.id);
+    if (!mounted) return;
+    setState(() => _loading = false);
+    if (image == null) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(content: Text('Could not load the bill. Try again.')),
+        );
+      return;
+    }
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => FullScreenImageView(
+          image: image,
+          title: 'Bill · ${widget.booking.code}',
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final booking = widget.booking;
+    return Container(
+      width: double.infinity,
+      decoration: _cardDecoration(),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _SectionTitle(
+            icon: Icons.description_outlined,
+            title: 'Bill from the lab',
+          ),
+          if (booking.billNumber.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                const SizedBox(
+                  width: 96,
+                  child: Text(
+                    'Bill number',
+                    style: TextStyle(fontSize: 12.5, color: AppColors.textMuted),
+                  ),
+                ),
+                Expanded(
+                  child: Text(
+                    booking.billNumber,
+                    style: const TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textDark,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+          if (booking.hasBillImage) ...[
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: _loading ? null : _open,
+              icon: _loading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.visibility_outlined, size: 18),
+              label: const Text('View bill'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: AppColors.brandBlue,
+                side: const BorderSide(color: AppColors.brandBlue),
+              ),
+            ),
+          ],
         ],
       ),
     );

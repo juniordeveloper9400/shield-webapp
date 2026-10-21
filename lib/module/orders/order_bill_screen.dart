@@ -235,6 +235,17 @@ class _BillPictureCard extends StatelessWidget {
                 : 'Placed on ${order.placedOn}',
             style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
           ),
+          if (order.billNumber != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              'Bill number: ${order.billNumber}',
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w700,
+                color: AppColors.textDark,
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           GestureDetector(
             onTap: () => _open(context),
