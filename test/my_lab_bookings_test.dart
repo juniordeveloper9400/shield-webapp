@@ -18,15 +18,20 @@ LabBookingRecord _booking({
   String note = '',
   int reportPages = 0,
   DateTime? scheduledFor,
+  String packageName = 'Full Body Checkup',
+  int patients = 2,
+  double total = 1998,
+  String? orderGroupId,
 }) => LabBookingRecord(
   id: id,
-  packageName: 'Full Body Checkup',
-  patients: 2,
-  total: 1998,
+  packageName: packageName,
+  patients: patients,
+  total: total,
   stage: stage,
   note: note,
   reportPages: reportPages,
   scheduledFor: scheduledFor,
+  orderGroupId: orderGroupId,
 );
 
 void main() {
@@ -170,6 +175,69 @@ void main() {
         expect(find.text('Scheduled'), findsOneWidget);
         expect(find.text('25 Sep 2026, 09:30 AM'), findsOneWidget);
         expect(find.text('Please come fasting for 10 hours.'), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'two or more tests placed in one checkout show as a single order',
+      (tester) async {
+        await pump(
+          tester,
+          MyLabBookingsScreen(
+            source: source(
+              bookings: [
+                _booking(
+                  id: 9,
+                  packageName: 'Thyroid Profile',
+                  patients: 1,
+                  total: 450,
+                  stage: LabStage.verified,
+                  orderGroupId: 'order-abc',
+                ),
+                _booking(
+                  id: 8,
+                  packageName: 'Full Body Checkup',
+                  patients: 2,
+                  total: 1998,
+                  stage: LabStage.requested,
+                  orderGroupId: 'order-abc',
+                ),
+              ],
+            ),
+          ),
+        );
+
+        // One card for the order — its code names the earliest test in it,
+        // not the one that happens to list first.
+        expect(find.text('Order LB-0008'), findsOneWidget);
+        expect(find.text('2 tests'), findsOneWidget);
+        // Every test it covers is named, each with its own status.
+        expect(find.text('Full Body Checkup'), findsOneWidget);
+        expect(find.text('Thyroid Profile'), findsOneWidget);
+        expect(find.text('Requested'), findsOneWidget);
+        expect(find.text('Verified'), findsOneWidget);
+
+        await tester.tap(find.text('Thyroid Profile'));
+        await tester.pumpAndSettle();
+
+        // Tapping one test opens exactly that test's own detail screen.
+        expect(find.byType(LabBookingDetailScreen), findsOneWidget);
+        expect(find.text('Thyroid Profile'), findsWidgets);
+        expect(find.text('Full Body Checkup'), findsNothing);
+      },
+    );
+
+    testWidgets(
+      'a lone test still shows its own card, no order grouping needed',
+      (tester) async {
+        await pump(
+          tester,
+          MyLabBookingsScreen(
+            source: source(bookings: [_booking(id: 5, orderGroupId: null)]),
+          ),
+        );
+
+        expect(find.text('Order LB-0005'), findsNothing);
       },
     );
 

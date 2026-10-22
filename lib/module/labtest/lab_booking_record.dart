@@ -96,6 +96,12 @@ class LabBookingRecord {
   /// fetched when the order is opened (see [LabBookingSource.loadBill]).
   final bool hasBillImage;
 
+  /// Shared by every test placed in the same "Place lab test" checkout, when
+  /// there was more than one — null for a lone test, or one booked before
+  /// this existed. My Lab Bookings groups records carrying the same id into
+  /// a single order card; see BookingService.bookLabTest's own doc.
+  final String? orderGroupId;
+
   const LabBookingRecord({
     required this.id,
     required this.packageName,
@@ -117,6 +123,7 @@ class LabBookingRecord {
     this.patientList = const [],
     this.billNumber = '',
     this.hasBillImage = false,
+    this.orderGroupId,
   });
 
   /// The label the console shows for the same booking — `LB-0007`.
@@ -161,6 +168,7 @@ class LabBookingRecord {
       address: _text(json['address']),
       billNumber: _text(json['billNumber']),
       hasBillImage: json['hasBillImage'] == true,
+      orderGroupId: json['orderGroupId'] == null ? null : _text(json['orderGroupId']),
       patientList: [
         for (final row in (json['patientList'] as List<dynamic>? ?? const []))
           if (row is Map<String, dynamic>)

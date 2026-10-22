@@ -149,16 +149,50 @@ class _MyLabBookingsScreenState extends State<MyLabBookingsScreen>
             )
           : RefreshIndicator(
               onRefresh: _load,
-              child: ListView.separated(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
-                itemCount: bookings.length,
-                separatorBuilder: (_, _) => const SizedBox(height: 12),
-                itemBuilder: (context, i) =>
-                    _BookingCard(booking: bookings[i], source: _source),
+              child: Builder(
+                builder: (context) {
+                  final groups = _groupByOrder(bookings);
+                  return ListView.separated(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 24),
+                    itemCount: groups.length,
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
+                    itemBuilder: (context, i) {
+                      final group = groups[i];
+                      return group.length == 1
+                          ? _BookingCard(booking: group.first, source: _source)
+                          : _OrderGroupCard(bookings: group, source: _source);
+                    },
+                  );
+                },
               ),
             ),
     );
+  }
+
+  /// Folds every test sharing a non-null [LabBookingRecord.orderGroupId]
+  /// into one entry — two or more tests placed in the same checkout read as
+  /// a single order — while a lone test (or one placed before order
+  /// grouping existed) stays its own one-item entry. [bookings] is already
+  /// newest first; each group keeps that position, at the point its first
+  /// member appears.
+  static List<List<LabBookingRecord>> _groupByOrder(
+    List<LabBookingRecord> bookings,
+  ) {
+    final groups = <List<LabBookingRecord>>[];
+    final emitted = <String>{};
+    for (final booking in bookings) {
+      final groupId = booking.orderGroupId;
+      if (groupId == null) {
+        groups.add([booking]);
+        continue;
+      }
+      if (!emitted.add(groupId)) {
+        continue;
+      }
+      groups.add(bookings.where((b) => b.orderGroupId == groupId).toList());
+    }
+    return groups;
   }
 }
 
@@ -269,6 +303,161 @@ class _BookingCard extends StatelessWidget {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Two or more tests the member placed in one checkout, read as a single
+/// order — one card, one order id, every test it covers listed underneath
+/// with its own status. Each test still opens its own
+/// [LabBookingDetailScreen]: grouping is display only, nothing about how a
+/// test is tracked, reported or billed changes.
+class _OrderGroupCard extends StatelessWidget {
+  final List<LabBookingRecord> bookings;
+  final LabBookingSource source;
+
+  const _OrderGroupCard({required this.bookings, required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    // The lowest id is the first test placed in this checkout — reads as
+    // the order's own code, the same way the admin console's Lab Orders
+    // screen would name the group after its earliest row.
+    final sorted = [...bookings]..sort((a, b) => a.id.compareTo(b.id));
+    final totalAmount = bookings.fold<double>(0, (sum, b) => sum + b.total);
+    final totalPatients = bookings.fold<int>(0, (sum, b) => sum + b.patients);
+
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.border),
+      ),
+      padding: const EdgeInsets.all(14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order ${sorted.first.code}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textDark,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$totalPatients ${totalPatients == 1 ? 'patient' : 'patients'} · '
+                      '₹${formatRupees(totalAmount.round())}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: AppColors.textMuted,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 9,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.chipBlueTint,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  '${bookings.length} tests',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.brandBlue,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: AppColors.border),
+          const SizedBox(height: 10),
+          for (var i = 0; i < sorted.length; i++) ...[
+            _OrderGroupTestRow(booking: sorted[i], source: source),
+            if (i != sorted.length - 1) ...[
+              const SizedBox(height: 8),
+              const Divider(height: 1, color: AppColors.border),
+              const SizedBox(height: 8),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// One test's line within an [_OrderGroupCard] — its name, patients, price
+/// and own status, tapping through to that test's own
+/// [LabBookingDetailScreen] exactly as a plain [_BookingCard] would.
+class _OrderGroupTestRow extends StatelessWidget {
+  final LabBookingRecord booking;
+  final LabBookingSource source;
+
+  const _OrderGroupTestRow({required this.booking, required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) =>
+              LabBookingDetailScreen(booking: booking, source: source),
+        ),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  booking.packageName,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${booking.code} · ${booking.patients} '
+                  '${booking.patients == 1 ? 'patient' : 'patients'} · '
+                  '₹${formatRupees(booking.total.round())}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          LabStageChip(stage: booking.stage),
+          const SizedBox(width: 2),
+          const Icon(
+            Icons.chevron_right_rounded,
+            size: 18,
+            color: AppColors.textMuted,
           ),
         ],
       ),

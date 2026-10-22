@@ -426,6 +426,13 @@ class OrderRepository {
     if (!BackendHttp.isConfigured || bookings.isEmpty) {
       return;
     }
+    // Two or more tests placed in this one basket get tagged with the same
+    // id, so My Lab Bookings / the admin's Lab Orders can show them as a
+    // single order ("2 tests") while each still books, and is tracked, as
+    // its own app.lab_booking row underneath — see BookingService.
+    // bookLabTest's own doc on orderGroupId. A lone test needs no order id
+    // of its own: it already reads as an order of one.
+    final orderGroupId = bookings.length > 1 ? _newIdempotencyKey() : null;
     final addressId =
         address == null ? null : await AddressRepository.instance.create(address);
     final packages = await CareRepository.instance.fetchLabPackages() ?? const [];
@@ -463,6 +470,7 @@ class OrderRepository {
             if (scheduledFor != null) 'scheduledFor': scheduledFor.toUtc().toIso8601String(),
             'healthPassApplied': healthPassApplied,
             if (healthPassApplied && healthPassTier != null) 'healthPassTier': healthPassTier,
+            if (orderGroupId != null) 'orderGroupId': orderGroupId,
           },
         );
       } catch (error) {
