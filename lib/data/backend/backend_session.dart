@@ -2,15 +2,10 @@ import 'package:flutter/foundation.dart';
 
 import 'backend_http.dart';
 
-/// The Firebase→backend session bridge: after the app finishes its own
-/// Firebase phone-auth flow, this exchanges the resulting ID token for a
-/// backend-issued session, registering a first-time identity when needed.
-///
-/// This is additive alongside the existing phone-keyed Neon writes
-/// (`MemberRepository.instance.upsertOnSignIn`) — see `auth_service.dart`'s
-/// `_afterSignIn`. Nothing about the pre-existing sign-in path is removed;
-/// a backend outage here degrades to "agent/investor screens don't load"
-/// rather than blocking sign-in entirely.
+/// The member session bridge to `backend/api`: restores, adopts, and
+/// revokes the backend-issued access/refresh token pair. Sign-in itself is
+/// the MSG91-backed OTP flow in `auth_service.dart`, which returns tokens
+/// that [setTokens] adopts.
 class BackendSession {
   BackendSession._({BackendHttp? http}) : _http = http ?? BackendHttp.instance;
 
@@ -18,8 +13,7 @@ class BackendSession {
 
   /// Test-only: an instance wired to an injected [BackendHttp] (typically
   /// [BackendHttp.test] around a `MockClient`) instead of the real
-  /// singleton, so this class's own orchestration — the register-on-404
-  /// fallback — can be exercised without a live backend.
+  /// singleton, so this class can be exercised without a live backend.
   @visibleForTesting
   factory BackendSession.test({required BackendHttp http}) =>
       BackendSession._(http: http);
@@ -28,70 +22,11 @@ class BackendSession {
 
   bool get isSignedIn => _http.isSignedIn;
 
-  /// Exchanges [idToken] for a backend session. Tries `POST
-  /// /v1/member/auth/session` first (existing member); on a 404 (no
-  /// `app.users` row for this identity yet — see `auth.service.ts`'s
-  /// `exchangeMemberToken`) falls back to `POST /v1/member/auth/register`
-  /// with [name], which creates or backfills the row and returns tokens
-  /// directly. Never throws: a backend outage or a stale token just leaves
-  /// the caller signed out of the backend (agent/investor screens will show
-  /// their empty/unavailable state), matching every Neon repository's
-  /// best-effort contract.
-  Future<bool> signInWithFirebaseToken(
-    String idToken, {
-    required String name,
-  }) async {
-    try {
-      final tokens = await _exchangeSession(idToken);
-      await _http.setSession(
-        accessToken: tokens['accessToken'] as String,
-        refreshToken: tokens['refreshToken'] as String,
-      );
-      return true;
-    } on BackendHttpException catch (error) {
-      if (!error.isNotFound) {
-        BackendHttp.log('signInWithFirebaseToken failed', error: error);
-        return false;
-      }
-      // No app.users row for this identity yet — register it.
-      try {
-        final tokens = await _http.request(
-          'POST',
-          '/v1/member/auth/register',
-          body: {'idToken': idToken, 'name': name},
-          auth: false,
-        ) as Map<String, dynamic>;
-        await _http.setSession(
-          accessToken: tokens['accessToken'] as String,
-          refreshToken: tokens['refreshToken'] as String,
-        );
-        return true;
-      } catch (registerError) {
-        BackendHttp.log('register failed', error: registerError);
-        return false;
-      }
-    } catch (error) {
-      BackendHttp.log('signInWithFirebaseToken failed', error: error);
-      return false;
-    }
-  }
-
-  Future<Map<String, dynamic>> _exchangeSession(String idToken) async {
-    final result = await _http.request(
-      'POST',
-      '/v1/member/auth/session',
-      body: {'idToken': idToken},
-      auth: false,
-    );
-    return result as Map<String, dynamic>;
-  }
-
   /// Restores a session from a refresh token persisted on an earlier run —
   /// call once at app launch, alongside `MemberRepository`'s own
   /// phone-based `restoreSession`. Returns whether a session was actually
-  /// restored, so a caller can fall back to re-bridging from a fresh
-  /// Firebase token when there was no persisted one to restore (a member
-  /// who has never successfully reached backend/api before — see
+  /// restored, so a caller can send the member back through OTP sign-in
+  /// when there was no persisted one to restore (see
   /// `AuthService.restoreSession`'s doc). Never throws.
   Future<bool> restore() async {
     try {
@@ -105,8 +40,7 @@ class BackendSession {
   /// Adopts a token pair the caller already minted some other way — the
   /// MSG91-backed member OTP flow's `/otp/verify` and `/otp/register` return
   /// a session directly in the same call that confirms the code, so there
-  /// is no separate exchange step to run the way [signInWithFirebaseToken]
-  /// needs one. See `AuthService`'s `BackendMemberOtpTransport`.
+  /// is no separate exchange step. See `AuthService`'s `BackendMemberOtpTransport`.
   Future<void> setTokens({required String accessToken, required String refreshToken}) {
     return _http.setSession(accessToken: accessToken, refreshToken: refreshToken);
   }

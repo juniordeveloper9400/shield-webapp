@@ -1,11 +1,9 @@
 import 'dart:async';
 
-import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'data/backend/backend_http.dart';
-import 'firebase_options.dart';
 import 'module/auth/auth_service.dart';
 import 'module/agent/agent_geo.dart';
 import 'module/catalogue/catalogue_service.dart';
@@ -25,7 +23,7 @@ Future<void> main() async {
   // Crash and error reporting. Safe to call unconditionally — the SDK's own
   // documented behavior is to stay disabled when `dsn` is empty, the same
   // "no-op until configured" contract every other optional integration in
-  // this app already follows (BackendHttp, NeonHttp, Firebase). Build with
+  // this app already follows (BackendHttp, NeonHttp). Build with
   // --dart-define=SENTRY_DSN=... to turn it on; see docs/sentry.md.
   await SentryFlutter.init((options) {
     options.dsn = const String.fromEnvironment('SENTRY_DSN');
@@ -38,21 +36,6 @@ Future<void> main() async {
     // plan's event quota from error events.
     options.tracesSampleRate = 0;
   });
-
-  // Member sign-in is Firebase Phone Auth with no demo or offline fallback.
-  // Bring Firebase up before the app starts; if the current platform has no
-  // configured options (only Android is wired today — see FIREBASE_SETUP.md)
-  // the app still starts so the UI is reachable, and the sign-in step reports
-  // that verification is unavailable instead of white-screening here.
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (error, stack) {
-    debugPrint('Firebase init failed — member sign-in will be unavailable: '
-        '$error');
-    debugPrintStack(stackTrace: stack);
-  }
 
   // Bring back a member who has signed in before, so they land in the app
   // rather than on the login screen. Best-effort — a failure here must not
